@@ -58,25 +58,61 @@ export default function HomePage() {
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-gray-400">
-                <li><Link href="#features" className="hover:text-white transition">Features</Link></li>
-                <li><Link href="#pricing" className="hover:text-white transition">Pricing</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Documentation</Link></li>
+                <li>
+                  <Link href="#features" className="hover:text-white transition">
+                    Features
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#pricing" className="hover:text-white transition">
+                    Pricing
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white transition">
+                    Documentation
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Company</h4>
               <ul className="space-y-2 text-gray-400">
-                <li><Link href="#about" className="hover:text-white transition">About</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Careers</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Contact</Link></li>
+                <li>
+                  <Link href="#about" className="hover:text-white transition">
+                    About
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white transition">
+                    Careers
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white transition">
+                    Contact
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-gray-400">
-                <li><Link href="#" className="hover:text-white transition">Privacy</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Terms</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Security</Link></li>
+                <li>
+                  <Link href="#" className="hover:text-white transition">
+                    Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white transition">
+                    Terms
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#" className="hover:text-white transition">
+                    Security
+                  </Link>
+                </li>
               </ul>
             </div>
           </div>

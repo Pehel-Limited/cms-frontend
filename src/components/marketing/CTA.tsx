@@ -5,9 +5,7 @@ export function CTA() {
     <section className="py-20 bg-gradient-to-r from-primary-600 to-secondary-600">
       <div className="container-custom">
         <div className="text-center text-white">
-          <h2 className="text-4xl font-bold mb-4">
-            Ready to transform your credit management?
-          </h2>
+          <h2 className="text-4xl font-bold mb-4">Ready to transform your credit management?</h2>
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
             Join leading banks and financial institutions using CMS Banking Platform to streamline
             their operations.

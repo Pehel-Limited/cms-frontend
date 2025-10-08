@@ -65,14 +65,11 @@ module.exports = {
         },
       },
       boxShadow: {
-        'soft': '0 2px 15px 0 rgba(0, 0, 0, 0.05)',
-        'medium': '0 4px 20px 0 rgba(0, 0, 0, 0.08)',
-        'strong': '0 8px 30px 0 rgba(0, 0, 0, 0.12)',
+        soft: '0 2px 15px 0 rgba(0, 0, 0, 0.05)',
+        medium: '0 4px 20px 0 rgba(0, 0, 0, 0.08)',
+        strong: '0 8px 30px 0 rgba(0, 0, 0, 0.12)',
       },
     },
   },
-  plugins: [
-    require('@tailwindcss/forms'),
-    require('@tailwindcss/typography'),
-  ],
+  plugins: [require('@tailwindcss/forms'), require('@tailwindcss/typography')],
 };

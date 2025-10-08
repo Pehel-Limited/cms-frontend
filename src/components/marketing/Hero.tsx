@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 
 export function Hero() {
@@ -61,7 +63,10 @@ export function Hero() {
             </div>
             {/* Decorative elements */}
             <div className="absolute -top-4 -right-4 w-72 h-72 bg-primary-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" />
-            <div className="absolute -bottom-8 -left-8 w-72 h-72 bg-secondary-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '1s' }} />
+            <div
+              className="absolute -bottom-8 -left-8 w-72 h-72 bg-secondary-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"
+              style={{ animationDelay: '1s' }}
+            />
           </div>
         </div>
       </div>

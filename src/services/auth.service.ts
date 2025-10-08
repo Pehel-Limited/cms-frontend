@@ -10,7 +10,7 @@ import config from '@/config';
 
 export const authService = {
   async login(credentials: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
-    const response = await apiClient.post('/api/auth/login', credentials);
+    const response = await apiClient.post('/api/v1/auth/login', credentials);
     const { user, accessToken, refreshToken, expiresIn } = response.data;
 
     // Store tokens
@@ -25,17 +25,17 @@ export const authService = {
   },
 
   async registerBankUser(data: RegisterBankUserRequest): Promise<User> {
-    const response = await apiClient.post('/api/auth/register/bank-user', data);
+    const response = await apiClient.post('/api/v1/auth/register/bank-user', data);
     return response.data;
   },
 
   async registerCustomer(data: RegisterCustomerRequest): Promise<User> {
-    const response = await apiClient.post('/api/auth/register/customer', data);
+    const response = await apiClient.post('/api/v1/auth/register/customer', data);
     return response.data;
   },
 
   async refreshToken(refreshToken: string): Promise<AuthTokens> {
-    const response = await apiClient.post('/api/auth/refresh', { refreshToken });
+    const response = await apiClient.post('/api/v1/auth/refresh', { refreshToken });
     const { accessToken, refreshToken: newRefreshToken, expiresIn } = response.data;
 
     localStorage.setItem(config.auth.tokenKey, accessToken);
@@ -45,7 +45,7 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<User> {
-    const response = await apiClient.get('/api/users/me');
+    const response = await apiClient.get('/api/v1/users/me');
     const user = response.data;
     localStorage.setItem(config.auth.userKey, JSON.stringify(user));
     return user;
@@ -53,7 +53,7 @@ export const authService = {
 
   async logout(): Promise<void> {
     try {
-      await apiClient.post('/api/auth/logout');
+      await apiClient.post('/api/v1/auth/logout');
     } finally {
       localStorage.removeItem(config.auth.tokenKey);
       localStorage.removeItem(config.auth.refreshTokenKey);
@@ -62,7 +62,7 @@ export const authService = {
   },
 
   async changePassword(oldPassword: string, newPassword: string): Promise<void> {
-    await apiClient.post('/api/users/change-password', {
+    await apiClient.post('/api/v1/users/change-password', {
       oldPassword,
       newPassword,
     });

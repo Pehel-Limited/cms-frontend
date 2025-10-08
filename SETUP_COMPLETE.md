@@ -5,6 +5,7 @@
 Your modern, responsive React + Next.js frontend is now fully set up with:
 
 ### Core Framework & Tools
+
 - ✅ **Next.js 14** with App Router (SSR, SSG support)
 - ✅ **React 18** with TypeScript
 - ✅ **Tailwind CSS** for styling
@@ -67,11 +68,13 @@ cms-frontend/
 ## 🚀 Quick Start
 
 ### 1. Navigate to Frontend
+
 ```bash
 cd /Users/rajat/Desktop/Code/project_cms/cms-frontend
 ```
 
 ### 2. Set Environment Variables
+
 ```bash
 # Copy example env file
 cp .env.local.example .env.local
@@ -82,6 +85,7 @@ cp .env.local.example .env.local
 ```
 
 ### 3. Start Development Server
+
 ```bash
 npm run dev
 ```
@@ -91,11 +95,13 @@ npm run dev
 ## 🎨 Features Implemented
 
 ### Public Pages (SSR for SEO)
+
 - ✅ **Homepage** (`/`) - Marketing site with hero, features, CTA
 - ✅ **Login** (`/login`) - Authentication with dual user types
 - ✅ **Register** (`/register`) - Role-based registration
 
 ### Authentication
+
 - ✅ **Bank User Login** - Employee number + credentials
 - ✅ **Customer Login** - Customer ID + credentials
 - ✅ **JWT Token Management** - Auto-refresh before expiry
@@ -103,6 +109,7 @@ npm run dev
 - ✅ **Error Handling** - User-friendly error messages
 
 ### UI/UX
+
 - ✅ **Responsive Design** - Mobile-first, works on all screen sizes
 - ✅ **Modern UI** - Glassmorphism, gradients, animations
 - ✅ **Loading States** - Spinners, skeleton screens
@@ -111,6 +118,7 @@ npm run dev
 - ✅ **Accessibility** - ARIA labels, keyboard navigation
 
 ### Progressive Web App
+
 - ✅ **Installable** - Add to home screen
 - ✅ **Offline Support** - Service worker caching
 - ✅ **App Shell** - Fast initial load
@@ -119,6 +127,7 @@ npm run dev
 ## 🔗 Backend Integration
 
 ### REST API Integration
+
 ```typescript
 // Automatic token injection
 import apiClient from '@/lib/api-client';
@@ -127,6 +136,7 @@ const response = await apiClient.get('/api/users/me');
 ```
 
 ### GraphQL Support
+
 ```typescript
 import { useQuery } from '@apollo/client';
 import { GET_CUSTOMERS } from '@/graphql/queries';
@@ -135,6 +145,7 @@ const { data, loading } = useQuery(GET_CUSTOMERS);
 ```
 
 ### Authentication Flow
+
 1. User logs in → POST `/api/auth/login`
 2. Receive JWT tokens (access + refresh)
 3. Store refresh token in localStorage
@@ -146,12 +157,14 @@ const { data, loading } = useQuery(GET_CUSTOMERS);
 ### 1. Test the Frontend
 
 **Start Backend (if not running)**:
+
 ```bash
 cd /Users/rajat/Desktop/Code/project_cms/cms-backend/services/identity-service
 ./gradlew bootRun
 ```
 
 **Start Frontend**:
+
 ```bash
 cd /Users/rajat/Desktop/Code/project_cms/cms-frontend
 npm run dev
@@ -162,12 +175,14 @@ npm run dev
 ### 2. Test User Registration
 
 **Bank User**:
+
 - Go to http://localhost:3000/register
 - Select "Bank Staff Account"
 - Fill in employee number, credentials
 - Submit → Should redirect to login
 
 **Customer**:
+
 - Select "Customer Account"
 - Fill in customer ID, credentials
 - Submit → Should redirect to login
@@ -175,6 +190,7 @@ npm run dev
 ### 3. Test Login
 
 **Login Credentials**:
+
 - Bank ID: `123e4567-e89b-12d3-a456-426614174000`
 - Username: `<your-registered-username>`
 - Password: `<your-password>`
@@ -184,6 +200,7 @@ npm run dev
 ### 4. Create Dashboard Pages
 
 Next, implement:
+
 - `/dashboard` - Main dashboard
 - `/dashboard/applications` - Loan applications
 - `/dashboard/customers` - Customer management
@@ -193,6 +210,7 @@ Next, implement:
 ### 5. Add Components
 
 Create reusable components:
+
 - `<Navbar>` - Top navigation
 - `<Sidebar>` - Left sidebar menu
 - `<DataTable>` - List view with pagination
@@ -202,6 +220,7 @@ Create reusable components:
 ## 📊 Architecture
 
 ### State Management
+
 ```
 Redux Store
 ├── auth (AuthSlice)
@@ -213,6 +232,7 @@ Redux Store
 ```
 
 ### API Layers
+
 ```
 Frontend → Axios/Apollo → Backend
            ↓
@@ -224,6 +244,7 @@ Frontend → Axios/Apollo → Backend
 ```
 
 ### Routing
+
 ```
 / (public)
 ├── /login (public)
@@ -238,6 +259,7 @@ Frontend → Axios/Apollo → Backend
 ## 🎨 Design System
 
 ### Colors
+
 ```css
 Primary:   #0ea5e9 (Sky Blue)
 Secondary: #a855f7 (Purple)
@@ -247,6 +269,7 @@ Error:     #ef4444 (Red)
 ```
 
 ### Components
+
 ```tsx
 // Buttons
 <button className="btn btn-primary">Primary</button>
@@ -268,7 +291,9 @@ Error:     #ef4444 (Red)
 ## 🐛 Troubleshooting
 
 ### TypeScript Errors
+
 All TypeScript errors shown during creation are EXPECTED and will resolve after running `npm install`. They occur because:
+
 - Dependencies not yet installed
 - Type definitions not available
 - VS Code caching old state
@@ -276,6 +301,7 @@ All TypeScript errors shown during creation are EXPECTED and will resolve after 
 **Solution**: Dependencies are now installed, restart VS Code: `Cmd+Shift+P` → "Reload Window"
 
 ### API Connection Failed
+
 ```bash
 # Check backend is running
 curl http://localhost:8081/actuator/health
@@ -284,6 +310,7 @@ curl http://localhost:8081/actuator/health
 ```
 
 ### Module Not Found
+
 ```bash
 # Clear and reinstall
 rm -rf node_modules package-lock.json
@@ -291,6 +318,7 @@ npm install
 ```
 
 ### Port Already in Use
+
 ```bash
 # Kill process on port 3000
 lsof -ti:3000 | xargs kill -9
@@ -302,6 +330,7 @@ PORT=3001 npm run dev
 ## 📚 Tech Stack Details
 
 ### Why Next.js 14?
+
 - ✅ Server-Side Rendering (SSR) for SEO
 - ✅ App Router for modern routing
 - ✅ API routes for BFF pattern
@@ -310,6 +339,7 @@ PORT=3001 npm run dev
 - ✅ Excellent performance
 
 ### Why Redux Toolkit?
+
 - ✅ Simple global state management
 - ✅ Built-in DevTools
 - ✅ Async thunk support
@@ -317,6 +347,7 @@ PORT=3001 npm run dev
 - ✅ TypeScript friendly
 
 ### Why Tailwind CSS?
+
 - ✅ Utility-first approach
 - ✅ No CSS files needed
 - ✅ Responsive by default
@@ -324,6 +355,7 @@ PORT=3001 npm run dev
 - ✅ Customizable design system
 
 ### Why PWA?
+
 - ✅ Installable like native app
 - ✅ Offline functionality
 - ✅ Push notifications
@@ -333,6 +365,7 @@ PORT=3001 npm run dev
 ## 📈 Performance
 
 ### Optimization Features
+
 - ✅ **Code Splitting** - Automatic route-based splitting
 - ✅ **Image Optimization** - Next.js Image component
 - ✅ **Font Optimization** - Google Fonts with next/font
@@ -340,6 +373,7 @@ PORT=3001 npm run dev
 - ✅ **Caching** - Service worker + HTTP cache
 
 ### Metrics to Track
+
 - **FCP** (First Contentful Paint): < 1.8s
 - **LCP** (Largest Contentful Paint): < 2.5s
 - **TTI** (Time to Interactive): < 3.8s
@@ -348,6 +382,7 @@ PORT=3001 npm run dev
 ## 🔒 Security
 
 ### Implemented
+
 - ✅ **HTTPS** in production
 - ✅ **JWT tokens** with refresh
 - ✅ **XSS protection** via React escaping
@@ -356,6 +391,7 @@ PORT=3001 npm run dev
 - ✅ **Input validation** with Zod
 
 ### Best Practices
+
 - Don't store sensitive data in localStorage
 - Use httpOnly cookies for tokens (recommended)
 - Implement rate limiting on backend
@@ -392,18 +428,21 @@ PORT=3001 npm run dev
 ## 🚢 Production Deployment
 
 ### Build for Production
+
 ```bash
 npm run build
 npm start
 ```
 
 ### Deploy to Vercel
+
 ```bash
 npm install -g vercel
 vercel
 ```
 
 ### Deploy to Docker
+
 ```bash
 docker build -t cms-frontend .
 docker run -p 3000:3000 cms-frontend

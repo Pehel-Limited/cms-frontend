@@ -22,16 +22,19 @@ Modern, responsive web application for the Credit Management System built with N
 ## 🛠️ Installation
 
 1. **Navigate to frontend directory**:
+
    ```bash
    cd /Users/rajat/Desktop/Code/project_cms/cms-frontend
    ```
 
 2. **Install dependencies**:
+
    ```bash
    npm install
    ```
 
 3. **Create environment file**:
+
    ```bash
    cp .env.local.example .env.local
    ```
@@ -231,9 +234,7 @@ Utility-first CSS framework with custom configuration:
 Dark mode support using Tailwind's `dark:` variant:
 
 ```tsx
-<div className="bg-white dark:bg-gray-900">
-  Content
-</div>
+<div className="bg-white dark:bg-gray-900">Content</div>
 ```
 
 ## 📊 State Management
@@ -338,15 +339,15 @@ Bank ID can be set via:
 
 ## 📝 Scripts
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Build for production |
-| `npm start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run format` | Format code with Prettier |
-| `npm run type-check` | TypeScript type checking |
-| `npm run analyze` | Analyze bundle size |
+| Script               | Description               |
+| -------------------- | ------------------------- |
+| `npm run dev`        | Start development server  |
+| `npm run build`      | Build for production      |
+| `npm start`          | Start production server   |
+| `npm run lint`       | Run ESLint                |
+| `npm run format`     | Format code with Prettier |
+| `npm run type-check` | TypeScript type checking  |
+| `npm run analyze`    | Analyze bundle size       |
 
 ## 🐛 Troubleshooting
 

@@ -139,9 +139,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
                 <input
                   type="text"
                   required
@@ -151,9 +149,7 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
                 <input
                   type="text"
                   required
@@ -165,9 +161,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer ID *
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Customer ID *</label>
               <input
                 type="text"
                 required
@@ -247,9 +241,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
                 <input
                   type="text"
                   required
@@ -259,9 +251,7 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
                 <input
                   type="text"
                   required

@@ -39,7 +39,7 @@ apiClient.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem(config.auth.refreshTokenKey);
         if (refreshToken) {
-          const response = await axios.post(`${config.api.baseUrl}/api/auth/refresh`, {
+          const response = await axios.post(`${config.api.baseUrl}/api/v1/auth/refresh`, {
             refreshToken,
           });
 

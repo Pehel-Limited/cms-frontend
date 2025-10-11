@@ -1,0 +1,143 @@
+<!doctype html>
+<html>
+  <head>
+    <title>JWT Token Decoder</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 50px auto;
+        padding: 20px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 150px;
+        margin: 10px 0;
+        font-family: monospace;
+      }
+      .decoded {
+        background: #f5f5f5;
+        padding: 20px;
+        border-radius: 5px;
+        margin: 10px 0;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      button {
+        background: #4caf50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        cursor: pointer;
+        margin: 5px;
+      }
+      button:hover {
+        background: #45a049;
+      }
+      .error {
+        color: red;
+      }
+      .success {
+        color: green;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>JWT Token Decoder & Role Checker</h1>
+
+    <h2>Your Current Token</h2>
+    <textarea
+      id="token"
+      placeholder="Paste your JWT token here, or click 'Load from localStorage'"
+    ></textarea>
+    <button onclick="loadFromStorage()">Load from localStorage</button>
+    <button onclick="decodeToken()">Decode Token</button>
+
+    <div id="result"></div>
+
+    <script>
+      function loadFromStorage() {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          document.getElementById('token').value = token;
+          document.getElementById('result').innerHTML =
+            '<p class="success">Token loaded from localStorage!</p>';
+          decodeToken();
+        } else {
+          document.getElementById('result').innerHTML =
+            '<p class="error">No token found in localStorage. Please login first.</p>';
+        }
+      }
+
+      function decodeToken() {
+        const token = document.getElementById('token').value.trim();
+        const resultDiv = document.getElementById('result');
+
+        if (!token) {
+          resultDiv.innerHTML = '<p class="error">Please enter a token</p>';
+          return;
+        }
+
+        try {
+          // Split the token
+          const parts = token.split('.');
+          if (parts.length !== 3) {
+            throw new Error('Invalid token format');
+          }
+
+          // Decode header and payload
+          const header = JSON.parse(atob(parts[0]));
+          const payload = JSON.parse(atob(parts[1]));
+
+          // Check roles
+          const roles = payload.roles || [];
+          const hasSystemAdmin = roles.includes('SYSTEM_ADMIN');
+          const hasBankAdmin = roles.includes('BANK_ADMIN');
+
+          let roleStatus = '';
+          if (hasBankAdmin || hasSystemAdmin) {
+            roleStatus = '<p class="success">✅ You have the required role!</p>';
+          } else {
+            roleStatus =
+              '<p class="error">❌ Missing required role (BANK_ADMIN or SYSTEM_ADMIN)</p>';
+          }
+
+          resultDiv.innerHTML = `
+                    <h3>Token Analysis</h3>
+                    ${roleStatus}
+                    
+                    <div class="decoded">
+                        <h4>Header</h4>
+                        <pre>${JSON.stringify(header, null, 2)}</pre>
+                    </div>
+                    
+                    <div class="decoded">
+                        <h4>Payload</h4>
+                        <pre>${JSON.stringify(payload, null, 2)}</pre>
+                    </div>
+                    
+                    <div class="decoded">
+                        <h4>Role Check</h4>
+                        <p><strong>Roles in token:</strong> ${JSON.stringify(roles)}</p>
+                        <p><strong>Has SYSTEM_ADMIN:</strong> ${hasSystemAdmin ? '✅' : '❌'}</p>
+                        <p><strong>Has BANK_ADMIN:</strong> ${hasBankAdmin ? '✅' : '❌'}</p>
+                        <p><strong>Username:</strong> ${payload.sub || 'N/A'}</p>
+                        <p><strong>User ID:</strong> ${payload.userId || 'N/A'}</p>
+                        <p><strong>Bank ID:</strong> ${payload.bankId || 'N/A'}</p>
+                        <p><strong>Expires:</strong> ${new Date(payload.exp * 1000).toLocaleString()}</p>
+                    </div>
+                `;
+        } catch (error) {
+          resultDiv.innerHTML = `<p class="error">Error decoding token: ${error.message}</p>`;
+        }
+      }
+
+      // Auto-load on page load
+      window.onload = function () {
+        loadFromStorage();
+      };
+    </script>
+  </body>
+</html>

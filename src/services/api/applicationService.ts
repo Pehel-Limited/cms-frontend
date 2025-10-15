@@ -333,6 +333,52 @@ export class ApplicationService {
       `/api/admin/applications/count?bankId=${bankId}&status=${status}`
     );
   }
+
+  /**
+   * Get dashboard statistics
+   */
+  async getDashboardStats(bankId: string): Promise<{
+    myApplications: number;
+    pendingReview: number;
+    approved: number;
+    rejected: number;
+    underReview: number;
+    draft: number;
+  }> {
+    try {
+      // Get counts for different statuses
+      const [myAssigned, pending, approved, rejected, underReview, draft] = await Promise.all([
+        this.getMyAssignedApplications({ size: 1 })
+          .then(r => r.totalElements)
+          .catch(() => 0),
+        this.getApplicationCount(bankId, 'SUBMITTED').catch(() => 0),
+        this.getApplicationCount(bankId, 'APPROVED').catch(() => 0),
+        this.getApplicationCount(bankId, 'REJECTED').catch(() => 0),
+        this.getApplicationCount(bankId, 'UNDER_REVIEW').catch(() => 0),
+        this.getApplicationCount(bankId, 'DRAFT').catch(() => 0),
+      ]);
+
+      return {
+        myApplications: myAssigned,
+        pendingReview: pending + underReview,
+        approved,
+        rejected,
+        underReview,
+        draft,
+      };
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error);
+      // Return default values if API fails
+      return {
+        myApplications: 0,
+        pendingReview: 0,
+        approved: 0,
+        rejected: 0,
+        underReview: 0,
+        draft: 0,
+      };
+    }
+  }
 }
 
 export const applicationService = new ApplicationService();

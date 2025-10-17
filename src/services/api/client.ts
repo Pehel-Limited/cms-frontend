@@ -16,9 +16,32 @@ export class ApiClient {
 
     // Get user ID from localStorage or auth context
     if (typeof window !== 'undefined') {
-      const userId = localStorage.getItem('userId');
+      let userId = localStorage.getItem('userId');
+
+      // If no userId in localStorage, try to get it from user data
+      if (!userId) {
+        const userDataStr = localStorage.getItem('user_data');
+        if (userDataStr) {
+          try {
+            const userData = JSON.parse(userDataStr);
+            userId = userData.userId;
+            // Store it for future use
+            if (userId) {
+              localStorage.setItem('userId', userId);
+            }
+          } catch (e) {
+            console.error('Failed to parse user data:', e);
+          }
+        }
+      }
+
+      // Use the userId if found, otherwise use a default for development
       if (userId) {
         headers['X-User-Id'] = userId;
+      } else {
+        // Fallback for development/testing - use admin user ID from seed data
+        console.warn('No userId found, using default admin user ID');
+        headers['X-User-Id'] = '11111111-1111-1111-1111-111111111111'; // Default admin user from seed data
       }
     }
 

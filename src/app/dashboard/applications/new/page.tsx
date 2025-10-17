@@ -1,579 +1,635 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { applicationService, CreateApplicationRequest } from '@/services/api/applicationService';
-
-const LOAN_PURPOSES = [
-  { value: 'HOME_PURCHASE', label: 'Home Purchase' },
-  { value: 'HOME_CONSTRUCTION', label: 'Home Construction' },
-  { value: 'HOME_RENOVATION', label: 'Home Renovation' },
-  { value: 'VEHICLE_PURCHASE', label: 'Vehicle Purchase' },
-  { value: 'BUSINESS_EXPANSION', label: 'Business Expansion' },
-  { value: 'WORKING_CAPITAL', label: 'Working Capital' },
-  { value: 'EQUIPMENT_PURCHASE', label: 'Equipment Purchase' },
-  { value: 'DEBT_CONSOLIDATION', label: 'Debt Consolidation' },
-  { value: 'EDUCATION', label: 'Education' },
-  { value: 'PERSONAL_USE', label: 'Personal Use' },
-  { value: 'OTHER', label: 'Other' },
-];
-
-const EMPLOYMENT_STATUSES = [
-  { value: 'EMPLOYED', label: 'Employed' },
-  { value: 'SELF_EMPLOYED', label: 'Self Employed' },
-  { value: 'BUSINESS_OWNER', label: 'Business Owner' },
-  { value: 'RETIRED', label: 'Retired' },
-  { value: 'UNEMPLOYED', label: 'Unemployed' },
-];
+import { productService, type Product } from '@/services/api/productService';
+import { customerService, type Customer } from '@/services/api/customerService';
+import config from '@/config';
 
 export default function NewApplicationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Get bankId and userId from localStorage (should come from auth context in production)
-  const bankId = typeof window !== 'undefined' ? localStorage.getItem('bankId') || '' : '';
-  const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') || '' : '';
+  const preselectedProductId = searchParams.get('productId');
+  const preselectedCustomerId = searchParams.get('customerId');
+  const bankId = config.bank?.defaultBankId || '123e4567-e89b-12d3-a456-426614174000';
 
-  // Form state
-  const [formData, setFormData] = useState<Partial<CreateApplicationRequest>>({
-    bankId,
-    channel: 'RELATIONSHIP_MANAGER',
-  });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
 
-  const updateFormData = (field: string, value: string | number | undefined) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const [loanAmount, setLoanAmount] = useState('');
+  const [loanTerm, setLoanTerm] = useState('');
+  const [interestRate, setInterestRate] = useState('');
+  const [loanPurpose, setLoanPurpose] = useState('');
+  const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (preselectedProductId && products.length > 0) {
+      const product = products.find(p => p.productId === preselectedProductId);
+      if (product) {
+        setSelectedProduct(product);
+        if (product.defaultLoanAmount) setLoanAmount(product.defaultLoanAmount.toString());
+        if (product.defaultTermMonths) setLoanTerm(product.defaultTermMonths.toString());
+        if (product.defaultInterestRate)
+          setInterestRate((product.defaultInterestRate * 100).toString());
+        // Automatically move to step 2 (customer selection) when product is preselected
+        setStep(2);
+      }
+    }
+  }, [preselectedProductId, products]);
+
+  useEffect(() => {
+    if (preselectedCustomerId) {
+      loadCustomerById(preselectedCustomerId);
+    }
+  }, [preselectedCustomerId]);
+
+  const loadProducts = async () => {
+    try {
+      const data = await productService.getAllProducts(bankId);
+      setProducts(data);
+    } catch (err) {
+      console.error('Failed to load products:', err);
+      setError('Failed to load products');
+    }
   };
 
+  const loadCustomerById = async (customerId: string) => {
+    try {
+      const customer = await customerService.getCustomerById(customerId);
+      setSelectedCustomer(customer);
+      setStep(3);
+    } catch (err) {
+      console.error('Failed to load customer:', err);
+    }
+  };
+
+  const searchCustomers = async (term: string) => {
+    if (!term.trim()) {
+      setCustomerSearchResults([]);
+      return;
+    }
+
+    try {
+      setSearchingCustomers(true);
+      console.log('Searching for customers with term:', term);
+      const results = await customerService.searchCustomers({ searchTerm: term });
+      console.log('Customer search results:', results);
+      setCustomerSearchResults(results);
+    } catch (err) {
+      console.error('Failed to search customers:', err);
+      setError('Failed to search customers. Please try again.');
+    } finally {
+      setSearchingCustomers(false);
+    }
+  };
+
+  useEffect(() => {
+    const delayDebounce = setTimeout(() => {
+      if (step === 2) {
+        searchCustomers(customerSearchTerm);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [customerSearchTerm, step]);
+
   const handleSubmit = async () => {
+    if (!selectedProduct || !selectedCustomer) {
+      setError('Please select both product and customer');
+      return;
+    }
+
+    if (!loanAmount || !loanTerm || !interestRate || !loanPurpose) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      // Validate required fields
-      if (!formData.customerId) {
-        setError('Please select a customer');
-        return;
-      }
-      if (!formData.productId) {
-        setError('Please select a product');
-        return;
-      }
-      if (!formData.requestedAmount || formData.requestedAmount <= 0) {
-        setError('Please enter a valid loan amount');
-        return;
-      }
-      if (!formData.requestedTermMonths || formData.requestedTermMonths <= 0) {
-        setError('Please enter a valid loan term');
-        return;
-      }
-      if (!formData.loanPurpose) {
-        setError('Please select a loan purpose');
-        return;
-      }
+      const request: CreateApplicationRequest = {
+        bankId,
+        productId: selectedProduct.productId,
+        customerId: selectedCustomer.customerId,
+        requestedAmount: parseFloat(loanAmount),
+        requestedTermMonths: parseInt(loanTerm),
+        proposedInterestRate: parseFloat(interestRate) / 100,
+        loanPurpose,
+        notes: notes || undefined,
+        channel: 'RELATIONSHIP_MANAGER',
+      };
 
-      // Create application
-      const response = await applicationService.createApplication(
-        formData as CreateApplicationRequest
-      );
-
-      // Navigate to application detail page
-      router.push(`/dashboard/applications/${response.applicationId}`);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create application');
-      console.error('Error creating application:', err);
+      const application = await applicationService.createApplication(request);
+      router.push(`/dashboard/applications/${application.applicationId}`);
+    } catch (err: any) {
+      console.error('Failed to create application:', err);
+      setError(err?.response?.data?.message || 'Failed to create application');
     } finally {
       setLoading(false);
     }
   };
 
-  const nextStep = () => {
-    setStep(prev => Math.min(4, prev + 1));
-  };
-
-  const prevStep = () => {
-    setStep(prev => Math.max(1, prev - 1));
-  };
-
-  return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      {/* Header */}
-      <div className="mb-8">
-        <button onClick={() => router.back()} className="text-blue-600 hover:text-blue-800 mb-4">
-          ← Back to Applications
-        </button>
-        <h1 className="text-3xl font-bold text-gray-900">New Loan Application</h1>
-        <p className="text-gray-600 mt-1">Create a new loan application on behalf of customer</p>
+  const renderProductSelection = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Select Loan Product</h2>
+        <p className="text-gray-600">Choose the loan product for this application</p>
       </div>
 
-      {/* Progress Bar */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="flex-1">
-              <div className="flex items-center">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                    step >= i ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
-                  }`}
-                >
-                  {i}
-                </div>
-                {i < 4 && (
-                  <div className={`flex-1 h-1 mx-2 ${step > i ? 'bg-blue-600' : 'bg-gray-200'}`} />
-                )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {products.map(product => (
+          <div
+            key={product.productId}
+            onClick={() => {
+              setSelectedProduct(product);
+              if (product.defaultLoanAmount) setLoanAmount(product.defaultLoanAmount.toString());
+              if (product.defaultTermMonths) setLoanTerm(product.defaultTermMonths.toString());
+              if (product.defaultInterestRate)
+                setInterestRate((product.defaultInterestRate * 100).toString());
+              setStep(2);
+            }}
+            className={`cursor-pointer border-2 rounded-lg p-6 transition-all hover:shadow-lg ${
+              selectedProduct?.productId === product.productId
+                ? 'border-primary-600 bg-primary-50'
+                : 'border-gray-200 hover:border-primary-300'
+            }`}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">{product.productName}</h3>
+              {product.isFeatured && (
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                  Featured
+                </span>
+              )}
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">{product.shortDescription}</p>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Interest Rate:</span>
+                <span className="font-medium">
+                  {productService.formatInterestRate(
+                    product.minInterestRate,
+                    product.maxInterestRate
+                  )}
+                </span>
               </div>
-              <div className="text-sm text-center mt-2">
-                {i === 1 && 'Customer & Product'}
-                {i === 2 && 'Loan Details'}
-                {i === 3 && 'Financial Info'}
-                {i === 4 && 'Review & Submit'}
+              <div className="flex justify-between">
+                <span className="text-gray-600">Loan Amount:</span>
+                <span className="font-medium">
+                  {productService.formatLoanAmount(product.minLoanAmount, product.maxLoanAmount)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Tenure:</span>
+                <span className="font-medium">
+                  {productService.formatTenure(product.minTermMonths, product.maxTermMonths)}
+                </span>
               </div>
             </div>
-          ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderCustomerSelection = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Select Customer</h2>
+          <p className="text-gray-600">Search and select an existing customer</p>
         </div>
+        <button onClick={() => setStep(1)} className="text-sm text-gray-600 hover:text-gray-900">
+          ← Back to Products
+        </button>
       </div>
 
-      {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
-          {error}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <div className="ml-3">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Form */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        {/* Step 1: Customer & Product */}
-        {step === 1 && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900">Customer & Product Selection</h2>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Customer ID *</label>
-              <input
-                type="text"
-                value={formData.customerId || ''}
-                onChange={e => updateFormData('customerId', e.target.value)}
-                placeholder="Enter customer UUID or search..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Enter the customer's UUID. In production, this would be a searchable dropdown.
-              </p>
+      {selectedProduct && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clipRule="evenodd"
+                />
+              </svg>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Product ID *</label>
-              <input
-                type="text"
-                value={formData.productId || ''}
-                onChange={e => updateFormData('productId', e.target.value)}
-                placeholder="Enter product UUID or select from list..."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Select the loan product. In production, this would show available products.
-              </p>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">
+                Selected Product: {selectedProduct.productName}
+              </h3>
+              <p className="mt-1 text-sm text-blue-700">{selectedProduct.shortDescription}</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search by name, email, phone, or customer number..."
+          value={customerSearchTerm}
+          onChange={e => setCustomerSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-lg"
+          autoFocus
+        />
+        <svg
+          className="absolute left-3 top-4 h-5 w-5 text-gray-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200">
+        {searchingCustomers && (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
         )}
 
-        {/* Step 2: Loan Details */}
-        {step === 2 && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900">Loan Details</h2>
+        {!searchingCustomers && customerSearchTerm && customerSearchResults.length === 0 && (
+          <div className="text-center py-12">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">No customers found</h3>
+            <p className="mt-1 text-sm text-gray-500">Try a different search term</p>
+          </div>
+        )}
 
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Requested Amount *
-                </label>
-                <input
-                  type="number"
-                  value={formData.requestedAmount || ''}
-                  onChange={e => updateFormData('requestedAmount', parseFloat(e.target.value))}
-                  placeholder="50000"
-                  min="0"
-                  step="1000"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
+        {!searchingCustomers && !customerSearchTerm && (
+          <div className="text-center py-12">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Search for a customer</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Enter a name, email, or phone number to begin
+            </p>
+          </div>
+        )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Term (Months) *
-                </label>
-                <input
-                  type="number"
-                  value={formData.requestedTermMonths || ''}
-                  onChange={e => updateFormData('requestedTermMonths', parseInt(e.target.value))}
-                  placeholder="60"
-                  min="1"
-                  max="360"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Loan Purpose *</label>
-              <select
-                value={formData.loanPurpose || ''}
-                onChange={e => updateFormData('loanPurpose', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
+        {!searchingCustomers && customerSearchResults.length > 0 && (
+          <div className="divide-y divide-gray-200">
+            {customerSearchResults.map(customer => (
+              <div
+                key={customer.customerId}
+                onClick={() => {
+                  setSelectedCustomer(customer);
+                  setStep(3);
+                }}
+                className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
               >
-                <option value="">Select purpose...</option>
-                {LOAN_PURPOSES.map(purpose => (
-                  <option key={purpose.value} value={purpose.value}>
-                    {purpose.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Purpose Description
-              </label>
-              <textarea
-                value={formData.loanPurposeDescription || ''}
-                onChange={e => updateFormData('loanPurposeDescription', e.target.value)}
-                placeholder="Additional details about the loan purpose..."
-                rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Property Information (conditional) */}
-            {(formData.loanPurpose === 'HOME_PURCHASE' ||
-              formData.loanPurpose === 'HOME_CONSTRUCTION' ||
-              formData.loanPurpose === 'HOME_RENOVATION') && (
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Property Information</h3>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Property Address
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.propertyAddress || ''}
-                      onChange={e => updateFormData('propertyAddress', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                      <input
-                        type="text"
-                        value={formData.propertyCity || ''}
-                        onChange={e => updateFormData('propertyCity', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center">
+                        <span className="text-primary-600 font-semibold text-lg">
+                          {customerService.getCustomerName(customer).charAt(0)}
+                        </span>
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
-                      <input
-                        type="text"
-                        value={formData.propertyState || ''}
-                        onChange={e => updateFormData('propertyState', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Postal Code
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.propertyPostalCode || ''}
-                        onChange={e => updateFormData('propertyPostalCode', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
+                      <h4 className="text-base font-medium text-gray-900">
+                        {customerService.getCustomerName(customer)}
+                      </h4>
+                      <p className="text-sm text-gray-500">
+                        {customer.customerNumber} •{' '}
+                        {customerService.formatCustomerType(customer.customerType)}
+                      </p>
+                      <div className="flex items-center space-x-4 mt-1">
+                        <span className="text-sm text-gray-600">{customer.primaryEmail}</span>
+                        <span className="text-sm text-gray-600">{customer.primaryPhone}</span>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Property Value
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.propertyValue || ''}
-                        onChange={e => updateFormData('propertyValue', parseFloat(e.target.value))}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Down Payment
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.downPaymentAmount || ''}
-                        onChange={e =>
-                          updateFormData('downPaymentAmount', parseFloat(e.target.value))
-                        }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Vehicle Information (conditional) */}
-            {formData.loanPurpose === 'VEHICLE_PURCHASE' && (
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Vehicle Information</h3>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Make</label>
-                    <input
-                      type="text"
-                      value={formData.vehicleMake || ''}
-                      onChange={e => updateFormData('vehicleMake', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Model</label>
-                    <input
-                      type="text"
-                      value={formData.vehicleModel || ''}
-                      onChange={e => updateFormData('vehicleModel', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-                    <input
-                      type="number"
-                      value={formData.vehicleYear || ''}
-                      onChange={e => updateFormData('vehicleYear', parseInt(e.target.value))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Condition
-                    </label>
-                    <select
-                      value={formData.vehicleCondition || ''}
-                      onChange={e => updateFormData('vehicleCondition', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  <div className="flex items-center space-x-2">
+                    {customer.riskRating && (
+                      <span
+                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-${customerService.getRiskRatingColor(
+                          customer.riskRating
+                        )}-100 text-${customerService.getRiskRatingColor(customer.riskRating)}-800`}
+                      >
+                        {customer.riskRating}
+                      </span>
+                    )}
+                    <svg
+                      className="h-5 w-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      <option value="">Select...</option>
-                      <option value="NEW">New</option>
-                      <option value="USED">Used</option>
-                    </select>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
                   </div>
                 </div>
               </div>
-            )}
+            ))}
           </div>
         )}
+      </div>
+    </div>
+  );
 
-        {/* Step 3: Financial Info */}
-        {step === 3 && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Financial & Employment Information
-            </h2>
+  const renderApplicationForm = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Application Details</h2>
+          <p className="text-gray-600">Complete the loan application information</p>
+        </div>
+        <button onClick={() => setStep(2)} className="text-sm text-gray-600 hover:text-gray-900">
+          ← Back to Customer Selection
+        </button>
+      </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Annual Income
-                </label>
-                <input
-                  type="number"
-                  value={formData.statedAnnualIncome || ''}
-                  onChange={e => updateFormData('statedAnnualIncome', parseFloat(e.target.value))}
-                  placeholder="80000"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Product</h3>
+          <p className="text-lg font-semibold text-gray-900">{selectedProduct?.productName}</p>
+          <p className="text-sm text-gray-600 mt-1">{selectedProduct?.productCode}</p>
+        </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Monthly Income
-                </label>
-                <input
-                  type="number"
-                  value={formData.statedMonthlyIncome || ''}
-                  onChange={e => updateFormData('statedMonthlyIncome', parseFloat(e.target.value))}
-                  placeholder="6667"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Monthly Expenses
-              </label>
-              <input
-                type="number"
-                value={formData.statedMonthlyExpenses || ''}
-                onChange={e => updateFormData('statedMonthlyExpenses', parseFloat(e.target.value))}
-                placeholder="3000"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="border-t pt-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Employment Details</h3>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Employment Status
-                </label>
-                <select
-                  value={formData.employmentStatus || ''}
-                  onChange={e => updateFormData('employmentStatus', e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select status...</option>
-                  {EMPLOYMENT_STATUSES.map(status => (
-                    <option key={status.value} value={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {formData.employmentStatus &&
-                formData.employmentStatus !== 'UNEMPLOYED' &&
-                formData.employmentStatus !== 'RETIRED' && (
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Employer Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.employerName || ''}
-                        onChange={e => updateFormData('employerName', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Years with Employer
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.yearsWithEmployer || ''}
-                        onChange={e =>
-                          updateFormData('yearsWithEmployer', parseInt(e.target.value))
-                        }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Review & Submit */}
-        {step === 4 && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900">Review & Submit</h2>
-
-            <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-              <div>
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Customer & Product</h3>
-                <p className="text-gray-900">Customer ID: {formData.customerId}</p>
-                <p className="text-gray-900">Product ID: {formData.productId}</p>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Loan Details</h3>
-                <p className="text-gray-900">
-                  Amount: ${formData.requestedAmount?.toLocaleString()}
-                </p>
-                <p className="text-gray-900">Term: {formData.requestedTermMonths} months</p>
-                <p className="text-gray-900">Purpose: {formData.loanPurpose?.replace(/_/g, ' ')}</p>
-              </div>
-
-              {formData.statedMonthlyIncome && (
-                <div className="border-t pt-4">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Financial Info</h3>
-                  <p className="text-gray-900">
-                    Monthly Income: ${formData.statedMonthlyIncome?.toLocaleString()}
-                  </p>
-                  {formData.statedMonthlyExpenses && (
-                    <p className="text-gray-900">
-                      Monthly Expenses: ${formData.statedMonthlyExpenses?.toLocaleString()}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {formData.employmentStatus && (
-                <div className="border-t pt-4">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Employment</h3>
-                  <p className="text-gray-900">Status: {formData.employmentStatus}</p>
-                  {formData.employerName && (
-                    <p className="text-gray-900">Employer: {formData.employerName}</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                <strong>Note:</strong> This application will be created as a DRAFT. You can review
-                and make changes before submitting it for approval.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Navigation Buttons */}
-        <div className="flex justify-between mt-8 pt-6 border-t">
-          <button
-            onClick={prevStep}
-            disabled={step === 1}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-
-          {step < 4 ? (
-            <button
-              onClick={nextStep}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Next
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loading && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              )}
-              {loading ? 'Creating...' : 'Create Application'}
-            </button>
-          )}
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Customer</h3>
+          <p className="text-lg font-semibold text-gray-900">
+            {selectedCustomer && customerService.getCustomerName(selectedCustomer)}
+          </p>
+          <p className="text-sm text-gray-600 mt-1">{selectedCustomer?.customerNumber}</p>
         </div>
       </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <div className="ml-3">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Loan Amount (₹) *
+            </label>
+            <input
+              type="number"
+              value={loanAmount}
+              onChange={e => setLoanAmount(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Enter loan amount"
+            />
+            {selectedProduct && (
+              <p className="mt-1 text-xs text-gray-500">
+                Range: ₹{selectedProduct.minLoanAmount?.toLocaleString()} - ₹
+                {selectedProduct.maxLoanAmount?.toLocaleString()}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Loan Term (months) *
+            </label>
+            <input
+              type="number"
+              value={loanTerm}
+              onChange={e => setLoanTerm(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Enter loan term"
+            />
+            {selectedProduct && (
+              <p className="mt-1 text-xs text-gray-500">
+                Range: {selectedProduct.minTermMonths} - {selectedProduct.maxTermMonths} months
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Interest Rate (%) *
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={interestRate}
+              onChange={e => setInterestRate(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Enter interest rate"
+            />
+            {selectedProduct && (
+              <p className="mt-1 text-xs text-gray-500">
+                Range: {(selectedProduct.minInterestRate * 100).toFixed(2)}% -{' '}
+                {(selectedProduct.maxInterestRate * 100).toFixed(2)}%
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Loan Purpose *</label>
+            <select
+              value={loanPurpose}
+              onChange={e => setLoanPurpose(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select purpose</option>
+              <option value="HOME_PURCHASE">Home Purchase</option>
+              <option value="HOME_CONSTRUCTION">Home Construction</option>
+              <option value="HOME_RENOVATION">Home Renovation</option>
+              <option value="VEHICLE_PURCHASE">Vehicle Purchase</option>
+              <option value="BUSINESS_EXPANSION">Business Expansion</option>
+              <option value="WORKING_CAPITAL">Working Capital</option>
+              <option value="EQUIPMENT_PURCHASE">Equipment Purchase</option>
+              <option value="DEBT_CONSOLIDATION">Debt Consolidation</option>
+              <option value="EDUCATION">Education</option>
+              <option value="PERSONAL_USE">Personal Use</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Additional Notes</label>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            rows={4}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            placeholder="Enter any additional information about this application..."
+          />
+        </div>
+
+        <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+          <button
+            onClick={() => router.push('/dashboard/applications')}
+            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          >
+            {loading && (
+              <svg
+                className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            )}
+            {loading ? 'Creating...' : 'Create Application'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStep = () => {
+    switch (step) {
+      case 1:
+        return renderProductSelection();
+      case 2:
+        return renderCustomerSelection();
+      case 3:
+        return renderApplicationForm();
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-2xl font-bold text-primary-600">New Loan Application</h1>
+              <div className="hidden sm:flex items-center space-x-2">
+                <span
+                  className={`text-sm font-medium ${step >= 1 ? 'text-primary-600' : 'text-gray-400'}`}
+                >
+                  1. Product
+                </span>
+                <span className="text-gray-400">→</span>
+                <span
+                  className={`text-sm font-medium ${step >= 2 ? 'text-primary-600' : 'text-gray-400'}`}
+                >
+                  2. Customer
+                </span>
+                <span className="text-gray-400">→</span>
+                <span
+                  className={`text-sm font-medium ${step >= 3 ? 'text-primary-600' : 'text-gray-400'}`}
+                >
+                  3. Details
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="text-sm text-gray-600 hover:text-primary-600 font-medium"
+            >
+              ← Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">{renderStep()}</main>
     </div>
   );
 }

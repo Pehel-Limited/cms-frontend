@@ -1,4 +1,4 @@
-import apiClient from '@/lib/api-client';
+import authApiClient from '@/lib/auth-api-client';
 import type {
   User,
   AuthTokens,
@@ -10,13 +10,18 @@ import config from '@/config';
 
 export const authService = {
   async login(credentials: LoginRequest): Promise<{ user: User; tokens: AuthTokens }> {
-    const response = await apiClient.post('/api/v1/auth/login', credentials);
+    const response = await authApiClient.post('/api/v1/auth/login', credentials);
     const { user, accessToken, refreshToken, expiresIn } = response.data;
 
     // Store tokens
     localStorage.setItem(config.auth.tokenKey, accessToken);
     localStorage.setItem(config.auth.refreshTokenKey, refreshToken);
     localStorage.setItem(config.auth.userKey, JSON.stringify(user));
+
+    // Store userId separately for API headers
+    if (user.userId) {
+      localStorage.setItem('userId', user.userId);
+    }
 
     return {
       user,
@@ -25,17 +30,17 @@ export const authService = {
   },
 
   async registerBankUser(data: RegisterBankUserRequest): Promise<User> {
-    const response = await apiClient.post('/api/v1/auth/register/bank-user', data);
+    const response = await authApiClient.post('/api/v1/auth/register/bank-user', data);
     return response.data;
   },
 
   async registerCustomer(data: RegisterCustomerRequest): Promise<User> {
-    const response = await apiClient.post('/api/v1/auth/register/customer', data);
+    const response = await authApiClient.post('/api/v1/auth/register/customer', data);
     return response.data;
   },
 
   async refreshToken(refreshToken: string): Promise<AuthTokens> {
-    const response = await apiClient.post('/api/v1/auth/refresh', { refreshToken });
+    const response = await authApiClient.post('/api/v1/auth/refresh', { refreshToken });
     const { accessToken, refreshToken: newRefreshToken, expiresIn } = response.data;
 
     localStorage.setItem(config.auth.tokenKey, accessToken);
@@ -45,24 +50,31 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<User> {
-    const response = await apiClient.get('/api/v1/users/me');
+    const response = await authApiClient.get('/api/v1/users/me');
     const user = response.data;
     localStorage.setItem(config.auth.userKey, JSON.stringify(user));
+
+    // Store userId separately for API headers
+    if (user.userId) {
+      localStorage.setItem('userId', user.userId);
+    }
+
     return user;
   },
 
   async logout(): Promise<void> {
     try {
-      await apiClient.post('/api/v1/auth/logout');
+      await authApiClient.post('/api/v1/auth/logout');
     } finally {
       localStorage.removeItem(config.auth.tokenKey);
       localStorage.removeItem(config.auth.refreshTokenKey);
       localStorage.removeItem(config.auth.userKey);
+      localStorage.removeItem('userId');
     }
   },
 
   async changePassword(oldPassword: string, newPassword: string): Promise<void> {
-    await apiClient.post('/api/v1/users/change-password', {
+    await authApiClient.post('/api/v1/users/change-password', {
       oldPassword,
       newPassword,
     });

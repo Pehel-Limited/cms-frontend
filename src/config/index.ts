@@ -1,6 +1,7 @@
 const config = {
   api: {
-    baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081',
+    baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081', // BFF-Admin
+    identityServiceUrl: process.env.NEXT_PUBLIC_IDENTITY_URL || 'http://localhost:8082', // Identity Service (direct)
     graphqlUrl: process.env.NEXT_PUBLIC_GRAPHQL_URL || 'http://localhost:8081/graphql',
     timeout: 30000,
   },

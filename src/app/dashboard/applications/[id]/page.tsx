@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
+import { userService, User } from '@/services/api/userService';
 
 interface ActionModalProps {
   isOpen: boolean;
@@ -15,6 +16,60 @@ interface ActionModalProps {
 
 function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: ActionModalProps) {
   const [formData, setFormData] = useState<any>({});
+  const [underwriters, setUnderwriters] = useState<User[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Fetch underwriters when modal opens for assignment
+  useEffect(() => {
+    if (isOpen && type === 'assign') {
+      loadUnderwriters();
+      setSearchQuery('');
+      setFormData({});
+    }
+  }, [isOpen, type]);
+
+  // Debounced search effect
+  useEffect(() => {
+    if (type !== 'assign') return;
+    
+    const timeoutId = setTimeout(() => {
+      if (searchQuery || showDropdown) {
+        loadUnderwriters(searchQuery);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, type, showDropdown]);
+
+  const loadUnderwriters = async (search?: string) => {
+    try {
+      setSearchLoading(true);
+      const users = await userService.getUnderwriters(search);
+      setUnderwriters(users);
+    } catch (error) {
+      console.error('Failed to load underwriters:', error);
+      setUnderwriters([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setShowDropdown(true);
+    // Clear selection if user is typing
+    if (formData.assignedToUserId) {
+      setFormData({ ...formData, assignedToUserId: undefined });
+    }
+  };
+
+  const handleSelectUnderwriter = (user: User) => {
+    setFormData({ ...formData, assignedToUserId: user.userId });
+    setSearchQuery(user.fullName);
+    setShowDropdown(false);
+  };
 
   if (!isOpen) return null;
 
@@ -127,21 +182,60 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
 
           {type === 'assign' && (
             <div className="space-y-4">
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Assign To User ID *
+                  Assign To Underwriter *
                 </label>
                 <input
                   type="text"
-                  value={formData.assignedToUserId || ''}
-                  onChange={e => setFormData({ ...formData, assignedToUserId: e.target.value })}
+                  value={searchQuery}
+                  onChange={e => handleSearchChange(e.target.value)}
+                  onFocus={() => setShowDropdown(true)}
                   required
-                  placeholder="Enter user UUID..."
+                  placeholder="Search underwriter by name..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  autoComplete="off"
                 />
-                <p className="text-sm text-gray-500 mt-1">
-                  In production, this would be a searchable dropdown of available underwriters.
-                </p>
+                
+                {showDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {searchLoading ? (
+                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                        Loading underwriters...
+                      </div>
+                    ) : underwriters.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                        No underwriters found
+                      </div>
+                    ) : (
+                      underwriters.map(user => (
+                        <div
+                          key={user.userId}
+                          onClick={() => handleSelectUnderwriter(user)}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium text-gray-900">{user.fullName}</div>
+                              <div className="text-sm text-gray-500">
+                                {user.email} • {user.employeeId || 'N/A'}
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {user.department || 'Underwriting'}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+                
+                {formData.assignedToUserId && !showDropdown && (
+                  <p className="text-sm text-green-600 mt-1">
+                    ✓ Underwriter selected
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -151,6 +245,7 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
                   value={formData.notes || ''}
                   onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   rows={3}
+                  placeholder="Add any notes about this assignment..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>

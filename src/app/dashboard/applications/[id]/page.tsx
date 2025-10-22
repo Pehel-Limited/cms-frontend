@@ -33,7 +33,7 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
   // Debounced search effect
   useEffect(() => {
     if (type !== 'assign') return;
-    
+
     const timeoutId = setTimeout(() => {
       if (searchQuery || showDropdown) {
         loadUnderwriters(searchQuery);
@@ -196,7 +196,7 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   autoComplete="off"
                 />
-                
+
                 {showDropdown && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {searchLoading ? (
@@ -230,11 +230,9 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
                     )}
                   </div>
                 )}
-                
+
                 {formData.assignedToUserId && !showDropdown && (
-                  <p className="text-sm text-green-600 mt-1">
-                    ✓ Underwriter selected
-                  </p>
+                  <p className="text-sm text-green-600 mt-1">✓ Underwriter selected</p>
                 )}
               </div>
               <div>

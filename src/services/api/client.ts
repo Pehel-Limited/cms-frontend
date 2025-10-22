@@ -1,4 +1,5 @@
 // services/api/client.ts
+import config from '@/config';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
 
@@ -20,7 +21,7 @@ export class ApiClient {
 
       // If no userId in localStorage, try to get it from user data
       if (!userId) {
-        const userDataStr = localStorage.getItem('user_data');
+        const userDataStr = localStorage.getItem(config.auth.userKey);
         if (userDataStr) {
           try {
             const userData = JSON.parse(userDataStr);
@@ -56,18 +57,80 @@ export class ApiClient {
 
   private getAuthToken(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('authToken');
+      return localStorage.getItem(config.auth.tokenKey);
     }
     return null;
   }
 
-  async get<T>(path: string): Promise<T> {
+  private async refreshToken(): Promise<string | null> {
+    if (typeof window === 'undefined') return null;
+
+    const refreshToken = localStorage.getItem(config.auth.refreshTokenKey);
+    if (!refreshToken) {
+      console.warn('[ApiClient] No refresh token found');
+      return null;
+    }
+
+    try {
+      console.log('[ApiClient] Attempting to refresh token...');
+      const response = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!response.ok) {
+        console.error('[ApiClient] Token refresh failed with status:', response.status);
+        throw new Error('Token refresh failed');
+      }
+
+      const data = await response.json();
+      const newAccessToken = data.accessToken;
+      const newRefreshToken = data.refreshToken;
+
+      // Store new tokens
+      localStorage.setItem(config.auth.tokenKey, newAccessToken);
+      if (newRefreshToken) {
+        localStorage.setItem(config.auth.refreshTokenKey, newRefreshToken);
+      }
+
+      console.log('[ApiClient] Token refreshed successfully');
+      return newAccessToken;
+    } catch (error) {
+      // Refresh failed, clear tokens and redirect to login
+      console.error('[ApiClient] Token refresh failed, logging out:', error);
+      localStorage.removeItem(config.auth.tokenKey);
+      localStorage.removeItem(config.auth.refreshTokenKey);
+      localStorage.removeItem(config.auth.userKey);
+      localStorage.removeItem('userId');
+
+      // Redirect to login
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+
+      return null;
+    }
+  }
+
+  async get<T>(path: string, retryCount: number = 0): Promise<T> {
     const headers = await this.getHeaders();
 
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: 'GET',
       headers,
     });
+
+    // Handle 401 Unauthorized - try to refresh token
+    if (response.status === 401 && retryCount === 0) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        // Retry the request with new token
+        return this.get<T>(path, retryCount + 1);
+      }
+    }
 
     if (!response.ok) {
       await this.handleError(response);
@@ -76,7 +139,7 @@ export class ApiClient {
     return response.json();
   }
 
-  async post<T>(path: string, data: any): Promise<T> {
+  async post<T>(path: string, data: any, retryCount: number = 0): Promise<T> {
     const headers = await this.getHeaders();
 
     const response = await fetch(`${this.baseUrl}${path}`, {
@@ -85,6 +148,15 @@ export class ApiClient {
       body: JSON.stringify(data),
     });
 
+    // Handle 401 Unauthorized - try to refresh token
+    if (response.status === 401 && retryCount === 0) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        // Retry the request with new token
+        return this.post<T>(path, data, retryCount + 1);
+      }
+    }
+
     if (!response.ok) {
       await this.handleError(response);
     }
@@ -92,7 +164,7 @@ export class ApiClient {
     return response.json();
   }
 
-  async put<T>(path: string, data: any): Promise<T> {
+  async put<T>(path: string, data: any, retryCount: number = 0): Promise<T> {
     const headers = await this.getHeaders();
 
     const response = await fetch(`${this.baseUrl}${path}`, {
@@ -101,6 +173,15 @@ export class ApiClient {
       body: JSON.stringify(data),
     });
 
+    // Handle 401 Unauthorized - try to refresh token
+    if (response.status === 401 && retryCount === 0) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        // Retry the request with new token
+        return this.put<T>(path, data, retryCount + 1);
+      }
+    }
+
     if (!response.ok) {
       await this.handleError(response);
     }
@@ -108,13 +189,22 @@ export class ApiClient {
     return response.json();
   }
 
-  async delete<T>(path: string): Promise<T> {
+  async delete<T>(path: string, retryCount: number = 0): Promise<T> {
     const headers = await this.getHeaders();
 
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: 'DELETE',
       headers,
     });
+
+    // Handle 401 Unauthorized - try to refresh token
+    if (response.status === 401 && retryCount === 0) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        // Retry the request with new token
+        return this.delete<T>(path, retryCount + 1);
+      }
+    }
 
     if (!response.ok) {
       await this.handleError(response);

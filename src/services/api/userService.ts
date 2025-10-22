@@ -30,7 +30,7 @@ export interface UsersResponse {
 }
 
 class UserService {
-  private baseUrl = '/users';
+  private baseUrl = '/api/v1/users';
 
   async getUsers(params?: {
     search?: string;
@@ -40,7 +40,7 @@ class UserService {
     sort?: string;
   }): Promise<UsersResponse> {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.search) queryParams.append('search', params.search);
     if (params?.role) queryParams.append('role', params.role);
     if (params?.page !== undefined) queryParams.append('page', params.page.toString());

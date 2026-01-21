@@ -119,16 +119,21 @@ export interface ApplicationResponse {
 
   assignedToUser?: {
     userId: string;
+    username: string;
     firstName: string;
     lastName: string;
     email: string;
+    userType?: string;
+    roles?: string[];
   };
 
   createdByUser?: {
     userId: string;
+    username: string;
     firstName: string;
     lastName: string;
     email: string;
+    userType?: string;
   };
 
   product?: {
@@ -347,8 +352,8 @@ export class ApplicationService {
   }> {
     try {
       // Get counts for different statuses
-      const [myAssigned, pending, approved, rejected, underReview, draft] = await Promise.all([
-        this.getMyAssignedApplications({ size: 1 })
+      const [myCreated, pending, approved, rejected, underReview, draft] = await Promise.all([
+        this.getMyCreatedApplications(0, 1)
           .then(r => r.totalElements)
           .catch(() => 0),
         this.getApplicationCount(bankId, 'SUBMITTED').catch(() => 0),
@@ -359,7 +364,7 @@ export class ApplicationService {
       ]);
 
       return {
-        myApplications: myAssigned,
+        myApplications: myCreated,
         pendingReview: pending + underReview,
         approved,
         rejected,

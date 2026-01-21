@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import { useAppSelector } from '@/store';
 import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
 import { userService, User } from '@/services/api/userService';
 
@@ -12,23 +14,44 @@ interface ActionModalProps {
   title: string;
   type: 'approve' | 'reject' | 'assign' | 'return';
   loading: boolean;
+  application?: ApplicationResponse | null;
 }
 
-function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: ActionModalProps) {
+function ActionModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  type,
+  loading,
+  application,
+}: ActionModalProps) {
   const [formData, setFormData] = useState<any>({});
   const [underwriters, setUnderwriters] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Fetch underwriters when modal opens for assignment
+  // Initialize form data when modal opens
   useEffect(() => {
-    if (isOpen && type === 'assign') {
-      loadUnderwriters();
-      setSearchQuery('');
-      setFormData({});
+    if (isOpen) {
+      if (type === 'approve' && application) {
+        // Pre-populate with application data
+        setFormData({
+          approvedAmount: application.requestedAmount || '',
+          approvedTermMonths: application.requestedTermMonths || '',
+          interestRate: '',
+          notes: '',
+        });
+      } else if (type === 'assign') {
+        loadUnderwriters();
+        setSearchQuery('');
+        setFormData({});
+      } else {
+        setFormData({});
+      }
     }
-  }, [isOpen, type]);
+  }, [isOpen, type, application]);
 
   // Debounced search effect
   useEffect(() => {
@@ -60,13 +83,13 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
     setSearchQuery(value);
     setShowDropdown(true);
     // Clear selection if user is typing
-    if (formData.assignedToUserId) {
-      setFormData({ ...formData, assignedToUserId: undefined });
+    if (formData.assignToUserId) {
+      setFormData({ ...formData, assignToUserId: undefined });
     }
   };
 
   const handleSelectUnderwriter = (user: User) => {
-    setFormData({ ...formData, assignedToUserId: user.userId });
+    setFormData({ ...formData, assignToUserId: user.userId });
     setSearchQuery(user.fullName);
     setShowDropdown(false);
   };
@@ -216,14 +239,16 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
                         >
                           <div className="flex items-center justify-between">
                             <div>
-                              <div className="font-medium text-gray-900">{user.fullName}</div>
+                              <div className="font-medium text-gray-900">
+                                {user.fullName ||
+                                  `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
+                                  user.username}
+                              </div>
                               <div className="text-sm text-gray-500">
-                                {user.email} • {user.employeeId || 'N/A'}
+                                {user.email} • {user.userType || 'Underwriter'}
                               </div>
                             </div>
-                            <div className="text-xs text-gray-400">
-                              {user.department || 'Underwriting'}
-                            </div>
+                            <div className="text-xs text-gray-400">{user.status || 'Active'}</div>
                           </div>
                         </div>
                       ))
@@ -231,7 +256,7 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
                   </div>
                 )}
 
-                {formData.assignedToUserId && !showDropdown && (
+                {formData.assignToUserId && !showDropdown && (
                   <p className="text-sm text-green-600 mt-1">✓ Underwriter selected</p>
                 )}
               </div>
@@ -298,10 +323,19 @@ function ActionModal({ isOpen, onClose, onConfirm, title, type, loading }: Actio
   );
 }
 
+// Helper to format role name for display
+const formatRoleName = (role: string): string => {
+  return role
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+};
+
 export default function ApplicationDetailPage() {
   const router = useRouter();
   const params = useParams();
   const applicationId = params.id as string;
+  const { user: currentUser } = useAppSelector(state => state.auth);
 
   const [application, setApplication] = useState<ApplicationResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -411,15 +445,41 @@ export default function ApplicationDetailPage() {
 
   const canSubmit = application?.status === 'DRAFT';
   const canAssign = application?.status === 'SUBMITTED';
-  const canApproveReject = [
+
+  // Check if current user is the assigned reviewer
+  const isAssignedReviewer =
+    application?.assignedToUserId && currentUser?.userId === application.assignedToUserId;
+
+  // Check if current user is the creator of the application
+  const isApplicationCreator = currentUser?.userId === application?.createdByUserId;
+
+  // Only the assigned reviewer can approve/reject/return when under review
+  const isUnderReviewStatus = [
     'UNDER_REVIEW',
     'CREDIT_CHECK',
     'UNDERWRITING',
     'MANAGER_APPROVAL',
   ].includes(application?.status || '');
-  const canReturn = ['UNDER_REVIEW', 'CREDIT_CHECK', 'UNDERWRITING'].includes(
-    application?.status || ''
-  );
+
+  // Only assigned reviewer can approve
+  const canApprove = isUnderReviewStatus && isAssignedReviewer;
+
+  // Assigned reviewer can reject, OR the application creator (RM) can withdraw anytime before final decision
+  const isNotFinalStatus = ![
+    'APPROVED',
+    'REJECTED',
+    'WITHDRAWN',
+    'CANCELLED',
+    'DISBURSED',
+  ].includes(application?.status || '');
+  const canWithdraw = isNotFinalStatus && isApplicationCreator && application?.status !== 'DRAFT';
+
+  // Reviewer's reject (from review perspective)
+  const canReviewerReject = isUnderReviewStatus && isAssignedReviewer;
+
+  const canReturn =
+    ['UNDER_REVIEW', 'CREDIT_CHECK', 'UNDERWRITING'].includes(application?.status || '') &&
+    isAssignedReviewer;
 
   if (loading) {
     return (
@@ -474,8 +534,39 @@ export default function ApplicationDetailPage() {
         </div>
       </div>
 
+      {/* Info banner for RM when application is under review by someone else */}
+      {isUnderReviewStatus && !isAssignedReviewer && application.assignedToUser && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center gap-2">
+            <svg
+              className="w-5 h-5 text-blue-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <p className="text-blue-800">
+              This application is currently being reviewed by{' '}
+              <span className="font-semibold">
+                {application.assignedToUser.firstName} {application.assignedToUser.lastName}
+              </span>
+              {application.assignedToUser.roles && application.assignedToUser.roles.length > 0 && (
+                <span> ({formatRoleName(application.assignedToUser.roles[0])})</span>
+              )}
+              . Approval is pending review completion, but you can still withdraw if needed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
-      {(canSubmit || canAssign || canApproveReject || canReturn) && (
+      {(canSubmit || canAssign || canApprove || canReviewerReject || canWithdraw || canReturn) && (
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Actions</h2>
           <div className="flex gap-3 flex-wrap">
@@ -499,23 +590,34 @@ export default function ApplicationDetailPage() {
               </button>
             )}
 
-            {canApproveReject && (
-              <>
-                <button
-                  onClick={() => openModal('approve', 'Approve Application')}
-                  disabled={actionLoading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => openModal('reject', 'Reject Application')}
-                  disabled={actionLoading}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                >
-                  Reject
-                </button>
-              </>
+            {canApprove && (
+              <button
+                onClick={() => openModal('approve', 'Approve Application')}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                Approve
+              </button>
+            )}
+
+            {canReviewerReject && (
+              <button
+                onClick={() => openModal('reject', 'Reject Application')}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                Reject
+              </button>
+            )}
+
+            {canWithdraw && (
+              <button
+                onClick={() => openModal('reject', 'Withdraw Application')}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+              >
+                Withdraw
+              </button>
             )}
 
             {canReturn && (
@@ -540,12 +642,12 @@ export default function ApplicationDetailPage() {
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Application Information</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-500">Application ID</p>
-                <p className="text-gray-900 font-medium">{application.applicationId}</p>
-              </div>
-              <div>
                 <p className="text-sm text-gray-500">Application Number</p>
                 <p className="text-gray-900 font-medium">{application.applicationNumber}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Status</p>
+                <p className="text-gray-900 font-medium">{application.status.replace(/_/g, ' ')}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Channel</p>
@@ -553,28 +655,66 @@ export default function ApplicationDetailPage() {
                   {application.channel.replace(/_/g, ' ')}
                 </p>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <p className="text-gray-900 font-medium">{application.status.replace(/_/g, ' ')}</p>
-              </div>
+              {application.currentStage && (
+                <div>
+                  <p className="text-sm text-gray-500">Current Stage</p>
+                  <p className="text-gray-900 font-medium">
+                    {application.currentStage.replace(/_/g, ' ')}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Customer Details */}
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Customer Details</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">Customer Details</h2>
+              <Link
+                href={`/dashboard/applications?customerId=${application.customerId}`}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                View All Applications →
+              </Link>
+            </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-500">Customer ID</p>
-                <p className="text-gray-900 font-medium">{application.customerId}</p>
-              </div>
-              {application.customer && (
-                <div>
-                  <p className="text-sm text-gray-500">Customer Name</p>
-                  <p className="text-gray-900 font-medium">
-                    {application.customer.firstName} {application.customer.lastName}
-                    {application.customer.businessName && ` (${application.customer.businessName})`}
-                  </p>
+              {application.customer ? (
+                <>
+                  <div>
+                    <p className="text-sm text-gray-500">Customer Name</p>
+                    <p className="text-gray-900 font-medium">
+                      {application.customer.firstName} {application.customer.lastName}
+                    </p>
+                  </div>
+                  {application.customer.businessName && (
+                    <div>
+                      <p className="text-sm text-gray-500">Business Name</p>
+                      <p className="text-gray-900 font-medium">
+                        {application.customer.businessName}
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm text-gray-500">Customer Number</p>
+                    <p className="text-gray-900 font-medium">
+                      {application.customer.customerNumber || '-'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Email</p>
+                    <p className="text-gray-900 font-medium">{application.customer.email || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Phone</p>
+                    <p className="text-gray-900 font-medium">
+                      {application.customer.phoneNumber || '-'}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="col-span-2">
+                  <p className="text-sm text-gray-500">Customer ID</p>
+                  <p className="text-gray-900 font-medium">{application.customerId}</p>
                 </div>
               )}
             </div>
@@ -603,8 +743,10 @@ export default function ApplicationDetailPage() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Product ID</p>
-                <p className="text-gray-900 font-medium">{application.productId}</p>
+                <p className="text-sm text-gray-500">Product</p>
+                <p className="text-gray-900 font-medium">
+                  {application.product?.productName || 'Home Loan'}
+                </p>
               </div>
             </div>
             {application.loanPurposeDescription && (
@@ -830,7 +972,23 @@ export default function ApplicationDetailPage() {
               <div className="space-y-3">
                 <div>
                   <p className="text-sm text-gray-500">Assigned To</p>
-                  <p className="text-gray-900 font-medium">{application.assignedToUserId}</p>
+                  {application.assignedToUser ? (
+                    <div>
+                      <p className="text-gray-900 font-medium">
+                        {application.assignedToUser.firstName} {application.assignedToUser.lastName}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {application.assignedToUser.roles &&
+                        application.assignedToUser.roles.length > 0
+                          ? formatRoleName(application.assignedToUser.roles[0])
+                          : application.assignedToUser.userType?.replace(/_/g, ' ')}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-gray-900 font-medium">
+                      User #{application.assignedToUserId.slice(-8)}
+                    </p>
+                  )}
                 </div>
                 {application.assignedAt && (
                   <div>
@@ -896,6 +1054,7 @@ export default function ApplicationDetailPage() {
           title={modalState.title}
           type={modalState.type}
           loading={actionLoading}
+          application={application}
         />
       )}
     </div>

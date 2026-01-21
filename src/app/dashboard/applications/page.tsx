@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAppSelector } from '@/store';
 import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
+import config from '@/config';
 
 const APPLICATION_STATUSES = [
   'ALL',
@@ -30,8 +32,17 @@ const STATUS_COLORS: Record<string, string> = {
   CONDITIONALLY_APPROVED: 'bg-teal-100 text-teal-800',
 };
 
+// Helper to check if user is a reviewer (Credit Analyst, Credit Officer, Underwriter)
+const isReviewerRole = (roles: string[] | undefined): boolean => {
+  if (!roles) return false;
+  const reviewerRoles = ['CREDIT_ANALYST', 'CREDIT_OFFICER', 'UNDERWRITER', 'RISK_MANAGER'];
+  return roles.some(role => reviewerRoles.includes(role));
+};
+
 export default function ApplicationsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user } = useAppSelector(state => state.auth);
   const [applications, setApplications] = useState<ApplicationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,29 +51,87 @@ export default function ApplicationsPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
+  const [isReviewer, setIsReviewer] = useState(false);
+  const [filterCustomerId, setFilterCustomerId] = useState<string | null>(null);
 
-  // Get bankId from localStorage (should come from auth context in production)
-  const bankId = typeof window !== 'undefined' ? localStorage.getItem('bankId') || '' : '';
+  // Check for customerId in URL params
+  useEffect(() => {
+    const customerId = searchParams.get('customerId');
+    setFilterCustomerId(customerId);
+  }, [searchParams]);
+
+  // Get bankId from user object or localStorage fallback
+  const getBankId = (): string => {
+    if (user?.bankId) return user.bankId;
+    if (typeof window !== 'undefined') {
+      // Try to get from stored user data
+      const userDataStr = localStorage.getItem(config.auth.userKey);
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr);
+          return userData.bankId || '';
+        } catch (e) {
+          console.error('Failed to parse user data:', e);
+        }
+      }
+    }
+    return '';
+  };
+
+  const bankId = getBankId();
 
   useEffect(() => {
-    if (bankId) {
-      fetchApplications();
-    }
-  }, [bankId, selectedStatus, searchTerm, currentPage]);
+    // Check if user is a reviewer
+    const userIsReviewer = isReviewerRole(user?.roles);
+    setIsReviewer(userIsReviewer);
+    fetchApplications(userIsReviewer);
+  }, [user, selectedStatus, searchTerm, currentPage, filterCustomerId]);
 
-  const fetchApplications = async () => {
+  const fetchApplications = async (userIsReviewer?: boolean) => {
+    // Ensure userId is set for X-User-Id header
+    if (typeof window !== 'undefined' && user?.userId) {
+      localStorage.setItem('userId', user.userId);
+    }
+
+    // Use the passed value or check from state
+    const isReviewerUser =
+      userIsReviewer !== undefined ? userIsReviewer : isReviewerRole(user?.roles);
+
     try {
       setLoading(true);
       setError(null);
 
-      const response = await applicationService.getApplications({
-        bankId,
-        status: selectedStatus === 'ALL' ? undefined : selectedStatus,
-        search: searchTerm || undefined,
-        page: currentPage,
-        size: 20,
-        sort: 'createdAt,desc',
-      });
+      let response;
+
+      // If filtering by customerId, use that endpoint
+      if (filterCustomerId) {
+        response = await applicationService.getApplicationsByCustomer(
+          filterCustomerId,
+          currentPage,
+          20
+        );
+        console.log('Fetched applications for customer:', filterCustomerId, response);
+      } else if (isReviewerUser) {
+        // For reviewers, fetch assigned applications
+        response = await applicationService.getMyAssignedApplications({
+          page: currentPage,
+          size: 20,
+        });
+        console.log('Fetched assigned applications for reviewer:', response);
+      } else if (bankId) {
+        // For other users with bankId, fetch all applications for bank
+        response = await applicationService.getApplications({
+          bankId,
+          status: selectedStatus === 'ALL' ? undefined : selectedStatus,
+          search: searchTerm || undefined,
+          page: currentPage,
+          size: 20,
+          sort: 'createdAt,desc',
+        });
+      } else {
+        // Fallback to user's own applications
+        response = await applicationService.getMyCreatedApplications(currentPage, 20);
+      }
 
       setApplications(response.content);
       setTotalPages(response.totalPages);
@@ -107,17 +176,36 @@ export default function ApplicationsPage() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Loan Applications</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {filterCustomerId
+              ? 'Customer Applications'
+              : isReviewer
+                ? 'Applications for Review'
+                : 'Loan Applications'}
+          </h1>
           <p className="text-gray-600 mt-1">
-            {totalElements} total application{totalElements !== 1 ? 's' : ''}
+            {totalElements} application{totalElements !== 1 ? 's' : ''}
+            {filterCustomerId ? ' for this customer' : isReviewer ? ' assigned to you' : ''}
           </p>
         </div>
-        <button
-          onClick={() => router.push('/dashboard/applications/new')}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-        >
-          + New Application
-        </button>
+        <div className="flex gap-3">
+          {filterCustomerId && (
+            <button
+              onClick={() => router.push('/dashboard/applications')}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              ← Clear Filter
+            </button>
+          )}
+          {!isReviewer && !filterCustomerId && (
+            <button
+              onClick={() => router.push('/dashboard/applications/new')}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+            >
+              + New Application
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}

@@ -6,6 +6,13 @@ import { useAppSelector } from '@/store';
 import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
 import { customerService } from '@/services/api/customerService';
 
+// Helper to check if user is a reviewer (Credit Analyst, Credit Officer, Underwriter)
+const isReviewerRole = (roles: string[] | undefined): boolean => {
+  if (!roles) return false;
+  const reviewerRoles = ['CREDIT_ANALYST', 'CREDIT_OFFICER', 'UNDERWRITER', 'RISK_MANAGER'];
+  return roles.some(role => reviewerRoles.includes(role));
+};
+
 export default function DashboardPage() {
   const { user } = useAppSelector(state => state.auth);
   const [stats, setStats] = useState({
@@ -18,30 +25,77 @@ export default function DashboardPage() {
   });
   const [recentApplications, setRecentApplications] = useState<ApplicationResponse[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [isReviewer, setIsReviewer] = useState(false);
 
   // Fetch dashboard data
   useEffect(() => {
     const fetchDashboardData = async () => {
-      if (!user?.bankId) {
-        console.error('No bankId found in user object:', user);
-        return;
+      // Ensure X-User-Id header uses the logged-in user (fixes fallback to admin ID)
+      if (typeof window !== 'undefined' && user?.userId) {
+        localStorage.setItem('userId', user.userId);
       }
+
+      // Check if user is a reviewer
+      const userIsReviewer = isReviewerRole(user?.roles);
+      setIsReviewer(userIsReviewer);
 
       try {
         setLoadingStats(true);
 
-        console.log('Fetching dashboard stats for bankId:', user.bankId);
+        // Fetch applications based on user role
+        let myApplicationsCount = 0;
+        let recentApps: ApplicationResponse[] = [];
 
-        // Fetch stats
-        const dashboardStats = await applicationService.getDashboardStats(user.bankId);
-        console.log('Dashboard stats received:', dashboardStats);
+        if (userIsReviewer) {
+          // For reviewers (Credit Analysts, etc.), show assigned applications
+          try {
+            const assignedAppsResponse = await applicationService.getMyAssignedApplications({
+              page: 0,
+              size: 5,
+            });
+            myApplicationsCount = assignedAppsResponse.totalElements || 0;
+            recentApps = assignedAppsResponse.content || [];
+            console.log('Assigned applications for review:', assignedAppsResponse);
+          } catch (err) {
+            console.error('Failed to fetch assigned applications:', err);
+          }
+        } else {
+          // For RMs, show created applications
+          try {
+            const myAppsResponse = await applicationService.getMyCreatedApplications(0, 1);
+            myApplicationsCount = myAppsResponse.totalElements || 0;
+            console.log('My created applications count:', myApplicationsCount);
+          } catch (err) {
+            console.error('Failed to fetch my applications count:', err);
+          }
 
-        // Fetch recent applications (assigned to me)
-        const recentAppsResponse = await applicationService.getMyAssignedApplications({
-          page: 0,
-          size: 5,
-        });
-        console.log('Recent applications:', recentAppsResponse);
+          // Fetch recent created applications
+          try {
+            const recentAppsResponse = await applicationService.getMyCreatedApplications(0, 5);
+            recentApps = recentAppsResponse.content || [];
+          } catch (err) {
+            console.error('Failed to fetch recent applications:', err);
+          }
+        }
+
+        // Fetch other stats (requires bankId)
+        let otherStats = { pendingReview: 0, approved: 0, rejected: 0 };
+        if (user?.bankId) {
+          console.log('Fetching dashboard stats for bankId:', user.bankId);
+          try {
+            const dashboardStats = await applicationService.getDashboardStats(user.bankId);
+            otherStats = {
+              pendingReview: dashboardStats.pendingReview,
+              approved: dashboardStats.approved,
+              rejected: dashboardStats.rejected,
+            };
+            console.log('Dashboard stats received:', dashboardStats);
+          } catch (err) {
+            console.error('Failed to fetch dashboard stats:', err);
+          }
+        } else {
+          console.warn('No bankId found in user object, skipping bank-level stats fetch');
+        }
 
         // Fetch customer count
         let customerCount = 0;
@@ -53,15 +107,15 @@ export default function DashboardPage() {
         }
 
         setStats({
-          myApplications: dashboardStats.myApplications,
-          pendingReview: dashboardStats.pendingReview,
-          approved: dashboardStats.approved,
-          rejected: dashboardStats.rejected,
+          myApplications: myApplicationsCount,
+          pendingReview: otherStats.pendingReview,
+          approved: otherStats.approved,
+          rejected: otherStats.rejected,
           totalCustomers: customerCount,
-          activeLoans: dashboardStats.approved, // Using approved as proxy for now
+          activeLoans: otherStats.approved, // Using approved as proxy for now
         });
 
-        setRecentApplications(recentAppsResponse.content);
+        setRecentApplications(recentApps);
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       } finally {
@@ -136,12 +190,14 @@ export default function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-8">
-        {/* My Applications */}
+        {/* My Applications / Assigned for Review */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+            <div
+              className={`w-12 h-12 ${isReviewer ? 'bg-purple-100' : 'bg-blue-100'} rounded-lg flex items-center justify-center`}
+            >
               <svg
-                className="w-6 h-6 text-blue-600"
+                className={`w-6 h-6 ${isReviewer ? 'text-purple-600' : 'text-blue-600'}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -156,8 +212,12 @@ export default function DashboardPage() {
             </div>
             <span className="text-3xl font-bold text-gray-900">{stats.myApplications}</span>
           </div>
-          <h3 className="text-sm font-medium text-gray-600 mb-1">My Applications</h3>
-          <p className="text-xs text-gray-500">Total applications managed</p>
+          <h3 className="text-sm font-medium text-gray-600 mb-1">
+            {isReviewer ? 'Assigned for Review' : 'My Applications'}
+          </h3>
+          <p className="text-xs text-gray-500">
+            {isReviewer ? 'Applications awaiting your review' : 'Total applications managed'}
+          </p>
         </div>
 
         {/* Pending Review */}
@@ -369,10 +429,12 @@ export default function DashboardPage() {
 
       {/* Recent Activity & Pending Tasks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Applications */}
+        {/* Recent Applications / Pending Review */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Applications</h3>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {isReviewer ? 'Pending Review' : 'Recent Applications'}
+            </h3>
             <Link
               href="/dashboard/applications"
               className="text-sm text-primary-600 hover:text-primary-700 font-medium"

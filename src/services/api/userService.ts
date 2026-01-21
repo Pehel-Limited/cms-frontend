@@ -2,23 +2,23 @@ import { apiClient } from './client';
 
 export interface User {
   userId: string;
+  bankId?: string;
   username: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  fullName: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
   phoneNumber?: string;
-  employeeId?: string;
-  userType: string;
-  status: string;
-  roles: string[];
-  bankId: string;
-  branchCode?: string;
-  department?: string;
-  createdAt: string;
+  userType?: string;
+  status?: string;
+  twoFactorEnabled?: boolean;
   lastLoginAt?: string;
-  twoFactorEnabled: boolean;
-  accountLocked: boolean;
+  forcePasswordChange?: boolean;
+  passwordExpiresAt?: string;
+  roles?: string[];
+  permissions?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface UsersResponse {
@@ -57,7 +57,19 @@ class UserService {
   }
 
   async getUnderwriters(search?: string): Promise<User[]> {
-    return this.getUsersByRole('UNDERWRITER', search);
+    // Fetch both Credit Analysts and Credit Officers (they are the underwriters)
+    const [analysts, officers] = await Promise.all([
+      this.getUsersByRole('CREDIT_ANALYST', search).catch(() => []),
+      this.getUsersByRole('CREDIT_OFFICER', search).catch(() => []),
+    ]);
+
+    // Combine and deduplicate by userId
+    const combined = [...analysts, ...officers];
+    const uniqueUsers = combined.filter(
+      (user, index, self) => index === self.findIndex(u => u.userId === user.userId)
+    );
+
+    return uniqueUsers;
   }
 }
 

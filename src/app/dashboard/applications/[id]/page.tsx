@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { useAppSelector } from '@/store';
 import {
   applicationService,
@@ -449,9 +450,9 @@ export default function ApplicationDetailPage() {
       setActionLoading(true);
       await applicationService.submitApplication(applicationId);
       await fetchApplication();
-      alert('Application submitted successfully!');
+      toast.success('Application submitted successfully!');
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      toast.error(`Error: ${err.message}`);
     } finally {
       setActionLoading(false);
     }
@@ -474,11 +475,11 @@ export default function ApplicationDetailPage() {
       switch (modalState.type) {
         case 'approve':
           await applicationService.approveApplication(applicationId, data);
-          alert('Application approved successfully!');
+          toast.success('Application approved successfully!');
           break;
         case 'reject':
           await applicationService.rejectApplication(applicationId, data);
-          alert('Application rejected.');
+          toast.info('Application rejected.');
           break;
         case 'assign':
           await applicationService.assignApplication(applicationId, {
@@ -491,32 +492,32 @@ export default function ApplicationDetailPage() {
               content: data.notes,
             });
           }
-          alert('Application assigned successfully!');
+          toast.success('Application assigned successfully!');
           break;
         case 'return':
           await applicationService.returnForCorrections(applicationId, data.reason);
-          alert('Application returned for corrections.');
+          toast.warning('Application returned for corrections.');
           break;
         case 'note':
           await applicationService.addNote(applicationId, {
             noteType: data.noteType || 'ADDITIONAL_INFO',
             content: data.noteContent,
           });
-          alert('Note added successfully! The reviewer will be notified.');
+          toast.success('Note added successfully!');
           break;
         case 'cancel':
           await applicationService.cancelApplication(
             applicationId,
             data.reason || 'Cancelled by user'
           );
-          alert('Application cancelled successfully.');
+          toast.info('Application cancelled successfully.');
           break;
       }
 
       closeModal();
       await fetchApplication();
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      toast.error(`Error: ${err.message}`);
     } finally {
       setActionLoading(false);
     }

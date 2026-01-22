@@ -306,6 +306,68 @@ class CustomerService {
     }
     return age;
   }
+
+  /**
+   * Update customer details
+   */
+  async updateCustomer(customerId: string, updateData: Partial<Customer>): Promise<Customer> {
+    try {
+      const response = await apiClient.put<Customer>(
+        `/api/admin/customers/${customerId}`,
+        updateData
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update customer status (activate/deactivate/suspend)
+   */
+  async updateCustomerStatus(customerId: string, status: string): Promise<Customer> {
+    try {
+      const response = await apiClient.patch<Customer>(
+        `/api/admin/customers/${customerId}/status`,
+        { status }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error updating customer status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Soft delete customer (mark as deleted, recoverable)
+   */
+  async softDeleteCustomer(customerId: string): Promise<{ message: string; customerId: string }> {
+    try {
+      const response = await apiClient.delete<{ message: string; customerId: string }>(
+        `/api/admin/customers/${customerId}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error soft deleting customer:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Permanently delete customer (irreversible)
+   */
+  async hardDeleteCustomer(customerId: string): Promise<{ message: string; customerId: string }> {
+    try {
+      const response = await apiClient.delete<{ message: string; customerId: string }>(
+        `/api/admin/customers/${customerId}/permanent`
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error permanently deleting customer:', error);
+      throw error;
+    }
+  }
 }
 
 export const customerService = new CustomerService();

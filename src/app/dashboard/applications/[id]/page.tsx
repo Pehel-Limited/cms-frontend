@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAppSelector } from '@/store';
-import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
+import {
+  applicationService,
+  ApplicationResponse,
+  ApplicationNote,
+} from '@/services/api/applicationService';
 import { userService, User } from '@/services/api/userService';
 
 interface ActionModalProps {
@@ -12,7 +16,7 @@ interface ActionModalProps {
   onClose: () => void;
   onConfirm: (data: any) => void;
   title: string;
-  type: 'approve' | 'reject' | 'assign' | 'return';
+  type: 'approve' | 'reject' | 'assign' | 'return' | 'note' | 'cancel';
   loading: boolean;
   application?: ApplicationResponse | null;
 }
@@ -293,6 +297,62 @@ function ActionModal({
             </div>
           )}
 
+          {type === 'note' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Note Type</label>
+                <select
+                  value={formData.noteType || 'ADDITIONAL_INFO'}
+                  onChange={e => setFormData({ ...formData, noteType: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ADDITIONAL_INFO">Additional Information</option>
+                  <option value="CORRECTION">Correction/Update</option>
+                  <option value="DOCUMENT_UPDATE">Document Update</option>
+                  <option value="CUSTOMER_UPDATE">Customer Update</option>
+                  <option value="URGENT">Urgent Note</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Note/Message *
+                </label>
+                <textarea
+                  value={formData.noteContent || ''}
+                  onChange={e => setFormData({ ...formData, noteContent: e.target.value })}
+                  rows={5}
+                  required
+                  placeholder="Enter additional information or corrections for the reviewer..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <p className="text-sm text-gray-500">
+                This note will be visible to the reviewer and added to the application history.
+              </p>
+            </div>
+          )}
+
+          {type === 'cancel' && (
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                Are you sure you want to cancel this draft application? This action cannot be
+                undone.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason for Cancellation (optional)
+                </label>
+                <textarea
+                  value={formData.reason || ''}
+                  onChange={e => setFormData({ ...formData, reason: e.target.value })}
+                  rows={3}
+                  placeholder="Provide a reason for cancellation..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3 mt-6">
             <button
               type="button"
@@ -306,9 +366,11 @@ function ActionModal({
               type="submit"
               disabled={loading}
               className={`flex-1 px-4 py-2 rounded-lg text-white disabled:opacity-50 flex items-center justify-center gap-2 ${
-                type === 'reject' || type === 'return'
+                type === 'reject' || type === 'return' || type === 'cancel'
                   ? 'bg-red-600 hover:bg-red-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  : type === 'note'
+                    ? 'bg-indigo-600 hover:bg-indigo-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
               {loading && (
@@ -338,13 +400,14 @@ export default function ApplicationDetailPage() {
   const { user: currentUser } = useAppSelector(state => state.auth);
 
   const [application, setApplication] = useState<ApplicationResponse | null>(null);
+  const [notes, setNotes] = useState<ApplicationNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
-    type: 'approve' | 'reject' | 'assign' | 'return' | null;
+    type: 'approve' | 'reject' | 'assign' | 'return' | 'note' | 'cancel' | null;
     title: string;
   }>({
     isOpen: false,
@@ -362,6 +425,15 @@ export default function ApplicationDetailPage() {
       setError(null);
       const data = await applicationService.getApplication(applicationId);
       setApplication(data);
+
+      // Fetch notes for this application
+      try {
+        const notesData = await applicationService.getNotes(applicationId);
+        setNotes(notesData);
+      } catch (noteErr) {
+        console.error('Failed to fetch notes:', noteErr);
+        setNotes([]);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load application');
       console.error('Error fetching application:', err);
@@ -385,7 +457,7 @@ export default function ApplicationDetailPage() {
     }
   };
 
-  const openModal = (type: 'approve' | 'reject' | 'assign' | 'return', title: string) => {
+  const openModal = (type: 'approve' | 'reject' | 'assign' | 'return' | 'note', title: string) => {
     setModalState({ isOpen: true, type, title });
   };
 
@@ -409,12 +481,35 @@ export default function ApplicationDetailPage() {
           alert('Application rejected.');
           break;
         case 'assign':
-          await applicationService.assignApplication(applicationId, data);
+          await applicationService.assignApplication(applicationId, {
+            assignToUserId: data.assignToUserId,
+          });
+          // If notes were provided with the assignment, add them as a note
+          if (data.notes && data.notes.trim()) {
+            await applicationService.addNote(applicationId, {
+              noteType: 'ASSIGNMENT_NOTE',
+              content: data.notes,
+            });
+          }
           alert('Application assigned successfully!');
           break;
         case 'return':
           await applicationService.returnForCorrections(applicationId, data.reason);
           alert('Application returned for corrections.');
+          break;
+        case 'note':
+          await applicationService.addNote(applicationId, {
+            noteType: data.noteType || 'ADDITIONAL_INFO',
+            content: data.noteContent,
+          });
+          alert('Note added successfully! The reviewer will be notified.');
+          break;
+        case 'cancel':
+          await applicationService.cancelApplication(
+            applicationId,
+            data.reason || 'Cancelled by user'
+          );
+          alert('Application cancelled successfully.');
           break;
       }
 
@@ -443,15 +538,20 @@ export default function ApplicationDetailPage() {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const canSubmit = application?.status === 'DRAFT';
-  const canAssign = application?.status === 'SUBMITTED';
+  // Check if current user is the creator of the application
+  const isApplicationCreator = currentUser?.userId === application?.createdByUserId;
+
+  // Can submit: DRAFT status only (initial submission)
+  const canSubmit = application?.status === 'DRAFT' && isApplicationCreator;
+
+  // Can assign: SUBMITTED status or RETURNED status (to reassign for review after corrections)
+  const canAssign =
+    (application?.status === 'SUBMITTED' || application?.status === 'RETURNED') &&
+    isApplicationCreator;
 
   // Check if current user is the assigned reviewer
   const isAssignedReviewer =
     application?.assignedToUserId && currentUser?.userId === application.assignedToUserId;
-
-  // Check if current user is the creator of the application
-  const isApplicationCreator = currentUser?.userId === application?.createdByUserId;
 
   // Only the assigned reviewer can approve/reject/return when under review
   const isUnderReviewStatus = [
@@ -464,7 +564,10 @@ export default function ApplicationDetailPage() {
   // Only assigned reviewer can approve
   const canApprove = isUnderReviewStatus && isAssignedReviewer;
 
-  // Assigned reviewer can reject, OR the application creator (RM) can withdraw anytime before final decision
+  // Application creator (RM) can cancel DRAFT applications
+  const canCancel = application?.status === 'DRAFT' && isApplicationCreator;
+
+  // Application creator (RM) can withdraw non-draft applications before final decision
   const isNotFinalStatus = ![
     'APPROVED',
     'REJECTED',
@@ -480,6 +583,15 @@ export default function ApplicationDetailPage() {
   const canReturn =
     ['UNDER_REVIEW', 'CREDIT_CHECK', 'UNDERWRITING'].includes(application?.status || '') &&
     isAssignedReviewer;
+
+  // Application creator can add notes while under review (to send info to reviewer)
+  const canAddNote = isUnderReviewStatus && isApplicationCreator;
+
+  // Application creator can edit the application when in DRAFT, RETURNED, or even UNDER_REVIEW
+  const canEdit =
+    ['DRAFT', 'RETURNED', 'UNDER_REVIEW', 'CREDIT_CHECK', 'UNDERWRITING', 'SUBMITTED'].includes(
+      application?.status || ''
+    ) && isApplicationCreator;
 
   if (loading) {
     return (
@@ -566,10 +678,28 @@ export default function ApplicationDetailPage() {
       )}
 
       {/* Actions */}
-      {(canSubmit || canAssign || canApprove || canReviewerReject || canWithdraw || canReturn) && (
+      {(canSubmit ||
+        canAssign ||
+        canApprove ||
+        canReviewerReject ||
+        canWithdraw ||
+        canCancel ||
+        canReturn ||
+        canAddNote ||
+        canEdit) && (
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Actions</h2>
           <div className="flex gap-3 flex-wrap">
+            {canEdit && (
+              <button
+                onClick={() => router.push(`/dashboard/applications/${applicationId}/edit`)}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Edit Application
+              </button>
+            )}
+
             {canSubmit && (
               <button
                 onClick={handleSubmit}
@@ -620,6 +750,16 @@ export default function ApplicationDetailPage() {
               </button>
             )}
 
+            {canCancel && (
+              <button
+                onClick={() => openModal('cancel', 'Cancel Application')}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                Cancel Application
+              </button>
+            )}
+
             {canReturn && (
               <button
                 onClick={() => openModal('return', 'Return for Corrections')}
@@ -627,6 +767,16 @@ export default function ApplicationDetailPage() {
                 className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
                 Return for Corrections
+              </button>
+            )}
+
+            {canAddNote && (
+              <button
+                onClick={() => openModal('note', 'Add Note for Reviewer')}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Add Note
               </button>
             )}
           </div>
@@ -736,6 +886,12 @@ export default function ApplicationDetailPage() {
                   {application.requestedTermMonths} months
                 </p>
               </div>
+              {application.requestedInterestRate && (
+                <div>
+                  <p className="text-sm text-gray-500">Interest Rate</p>
+                  <p className="text-gray-900 font-medium">{application.requestedInterestRate}%</p>
+                </div>
+              )}
               <div>
                 <p className="text-sm text-gray-500">Loan Purpose</p>
                 <p className="text-gray-900 font-medium">
@@ -970,26 +1126,52 @@ export default function ApplicationDetailPage() {
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Assignment</h2>
               <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-500">Assigned To</p>
-                  {application.assignedToUser ? (
-                    <div>
+                {/* If I'm the assigned reviewer, show who assigned me (Assigned By) */}
+                {isAssignedReviewer ? (
+                  <div>
+                    <p className="text-sm text-gray-500">Assigned By</p>
+                    {application.createdByUser ? (
+                      <div>
+                        <p className="text-gray-900 font-medium">
+                          {application.createdByUser.firstName} {application.createdByUser.lastName}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {application.createdByUser.roles &&
+                          application.createdByUser.roles.length > 0
+                            ? formatRoleName(application.createdByUser.roles[0])
+                            : application.createdByUser.userType?.replace(/_/g, ' ')}
+                        </p>
+                      </div>
+                    ) : (
                       <p className="text-gray-900 font-medium">
-                        {application.assignedToUser.firstName} {application.assignedToUser.lastName}
+                        User #{application.createdByUserId.slice(-8)}
                       </p>
-                      <p className="text-sm text-gray-500">
-                        {application.assignedToUser.roles &&
-                        application.assignedToUser.roles.length > 0
-                          ? formatRoleName(application.assignedToUser.roles[0])
-                          : application.assignedToUser.userType?.replace(/_/g, ' ')}
+                    )}
+                  </div>
+                ) : (
+                  /* If I'm not the reviewer, show who it's assigned to */
+                  <div>
+                    <p className="text-sm text-gray-500">Assigned To</p>
+                    {application.assignedToUser ? (
+                      <div>
+                        <p className="text-gray-900 font-medium">
+                          {application.assignedToUser.firstName}{' '}
+                          {application.assignedToUser.lastName}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {application.assignedToUser.roles &&
+                          application.assignedToUser.roles.length > 0
+                            ? formatRoleName(application.assignedToUser.roles[0])
+                            : application.assignedToUser.userType?.replace(/_/g, ' ')}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-gray-900 font-medium">
+                        User #{application.assignedToUserId.slice(-8)}
                       </p>
-                    </div>
-                  ) : (
-                    <p className="text-gray-900 font-medium">
-                      User #{application.assignedToUserId.slice(-8)}
-                    </p>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
                 {application.assignedAt && (
                   <div>
                     <p className="text-sm text-gray-500">Assigned At</p>
@@ -998,6 +1180,29 @@ export default function ApplicationDetailPage() {
                     </p>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Notes from Application Creator */}
+          {notes.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Notes</h2>
+              <div className="space-y-4">
+                {notes.map(note => (
+                  <div key={note.noteId} className="border-l-4 border-indigo-500 pl-4 py-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        {note.createdByUserName || `User #${note.createdByUserId.slice(-8)}`}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(note.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-600">{note.content}</p>
+                    <p className="text-xs text-gray-400 mt-1">{note.noteType.replace(/_/g, ' ')}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}

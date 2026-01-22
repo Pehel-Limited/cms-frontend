@@ -10,12 +10,15 @@ export default function NewCustomerPage() {
     email: '',
     phone: '',
     dateOfBirth: '',
-    panNumber: '',
-    aadharNumber: '',
+    nationality: '',
+    identityType: '',
+    identityNumber: '',
+    taxReferenceNumber: '',
     address: '',
     city: '',
-    state: '',
-    pincode: '',
+    county: '',
+    eircode: '',
+    country: 'Ireland',
     employmentType: '',
     monthlyIncome: '',
   });
@@ -89,6 +92,7 @@ export default function NewCustomerPage() {
                   value={formData.phone}
                   onChange={e => setFormData({ ...formData, phone: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="+353"
                 />
               </div>
               <div>
@@ -104,29 +108,83 @@ export default function NewCustomerPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">PAN Number *</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nationality *
+                </label>
+                <select
                   required
-                  value={formData.panNumber}
-                  onChange={e =>
-                    setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent uppercase"
-                  maxLength={10}
-                />
+                  value={formData.nationality}
+                  onChange={e => setFormData({ ...formData, nationality: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Select nationality</option>
+                  <option value="IE">Irish</option>
+                  <option value="GB">British</option>
+                  <option value="DE">German</option>
+                  <option value="FR">French</option>
+                  <option value="ES">Spanish</option>
+                  <option value="IT">Italian</option>
+                  <option value="PL">Polish</option>
+                  <option value="NL">Dutch</option>
+                  <option value="PT">Portuguese</option>
+                  <option value="OTHER_EU">Other EU</option>
+                  <option value="NON_EU">Non-EU</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Identity Information */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Identity Verification</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Identity Document Type *
+                </label>
+                <select
+                  required
+                  value={formData.identityType}
+                  onChange={e => setFormData({ ...formData, identityType: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Select document type</option>
+                  <option value="PASSPORT">Passport</option>
+                  <option value="DRIVERS_LICENSE">Driving Licence</option>
+                  <option value="PPSN">PPSN Card (Ireland)</option>
+                  <option value="NINO">National Insurance Card (UK)</option>
+                  <option value="EU_NATIONAL_ID">EU National ID Card</option>
+                  <option value="RESIDENCE_PERMIT">EU Residence Permit</option>
+                  <option value="BRP">Biometric Residence Permit (UK)</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Aadhar Number *
+                  Identity Document Number *
                 </label>
                 <input
                   type="text"
                   required
-                  value={formData.aadharNumber}
-                  onChange={e => setFormData({ ...formData, aadharNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  maxLength={12}
+                  value={formData.identityNumber}
+                  onChange={e =>
+                    setFormData({ ...formData, identityNumber: e.target.value.toUpperCase() })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent uppercase"
+                  placeholder="Enter document number"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tax Reference Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.taxReferenceNumber}
+                  onChange={e =>
+                    setFormData({ ...formData, taxReferenceNumber: e.target.value.toUpperCase() })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent uppercase"
+                  placeholder="PPSN (Ireland) / UTR (UK)"
                 />
               </div>
             </div>
@@ -157,25 +215,53 @@ export default function NewCustomerPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">State *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  County / Region *
+                </label>
                 <input
                   type="text"
                   required
-                  value={formData.state}
-                  onChange={e => setFormData({ ...formData, state: e.target.value })}
+                  value={formData.county}
+                  onChange={e => setFormData({ ...formData, county: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="e.g., Dublin, Cork, London"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pincode *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Eircode / Postcode *
+                </label>
                 <input
                   type="text"
                   required
-                  value={formData.pincode}
-                  onChange={e => setFormData({ ...formData, pincode: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  maxLength={6}
+                  value={formData.eircode}
+                  onChange={e =>
+                    setFormData({ ...formData, eircode: e.target.value.toUpperCase() })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent uppercase"
+                  placeholder="e.g., D02 XY45 or SW1A 1AA"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
+                <select
+                  required
+                  value={formData.country}
+                  onChange={e => setFormData({ ...formData, country: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="Ireland">Ireland</option>
+                  <option value="United Kingdom">United Kingdom</option>
+                  <option value="Germany">Germany</option>
+                  <option value="France">France</option>
+                  <option value="Spain">Spain</option>
+                  <option value="Italy">Italy</option>
+                  <option value="Netherlands">Netherlands</option>
+                  <option value="Belgium">Belgium</option>
+                  <option value="Portugal">Portugal</option>
+                  <option value="Poland">Poland</option>
+                  <option value="Other">Other EU Country</option>
+                </select>
               </div>
             </div>
           </div>
@@ -186,7 +272,7 @@ export default function NewCustomerPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Employment Type *
+                  Employment Status *
                 </label>
                 <select
                   required
@@ -194,16 +280,20 @@ export default function NewCustomerPage() {
                   onChange={e => setFormData({ ...formData, employmentType: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
-                  <option value="">Select type</option>
-                  <option value="SALARIED">Salaried</option>
-                  <option value="SELF_EMPLOYED">Self Employed</option>
-                  <option value="BUSINESS">Business Owner</option>
-                  <option value="PROFESSIONAL">Professional</option>
+                  <option value="">Select status</option>
+                  <option value="EMPLOYED_FULL_TIME">Employed (Full-time)</option>
+                  <option value="EMPLOYED_PART_TIME">Employed (Part-time)</option>
+                  <option value="SELF_EMPLOYED">Self-Employed</option>
+                  <option value="CONTRACTOR">Contractor</option>
+                  <option value="RETIRED">Retired</option>
+                  <option value="STUDENT">Student</option>
+                  <option value="HOMEMAKER">Homemaker</option>
+                  <option value="UNEMPLOYED">Unemployed</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Monthly Income (₹) *
+                  Annual Income (€) *
                 </label>
                 <input
                   type="number"
@@ -211,6 +301,7 @@ export default function NewCustomerPage() {
                   value={formData.monthlyIncome}
                   onChange={e => setFormData({ ...formData, monthlyIncome: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Gross annual income"
                 />
               </div>
             </div>

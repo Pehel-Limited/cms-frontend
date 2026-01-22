@@ -134,6 +134,7 @@ export interface ApplicationResponse {
     lastName: string;
     email: string;
     userType?: string;
+    roles?: string[];
   };
 
   product?: {
@@ -177,6 +178,16 @@ export interface UpdateStatusRequest {
   notes?: string;
 }
 
+export interface ApplicationNote {
+  noteId: string;
+  applicationId: string;
+  createdByUserId: string;
+  createdByUserName?: string;
+  noteType: string;
+  content: string;
+  createdAt: string;
+}
+
 export class ApplicationService {
   private client: ApiClient;
 
@@ -189,6 +200,16 @@ export class ApplicationService {
    */
   async createApplication(data: CreateApplicationRequest): Promise<ApplicationResponse> {
     return this.client.post<ApplicationResponse>('/api/admin/applications', data);
+  }
+
+  /**
+   * Update an existing application
+   */
+  async updateApplication(
+    id: string,
+    data: Partial<CreateApplicationRequest>
+  ): Promise<ApplicationResponse> {
+    return this.client.put<ApplicationResponse>(`/api/admin/applications/${id}`, data);
   }
 
   /**
@@ -328,6 +349,30 @@ export class ApplicationService {
       `/api/admin/applications/${id}/return?reason=${encodeURIComponent(reason)}`,
       {}
     );
+  }
+
+  /**
+   * Cancel a draft application
+   */
+  async cancelApplication(id: string, reason?: string): Promise<ApplicationResponse> {
+    const url = reason
+      ? `/api/admin/applications/${id}/cancel?reason=${encodeURIComponent(reason)}`
+      : `/api/admin/applications/${id}/cancel`;
+    return this.client.post<ApplicationResponse>(url, {});
+  }
+
+  /**
+   * Add note to application
+   */
+  async addNote(id: string, data: { noteType: string; content: string }): Promise<void> {
+    return this.client.post<void>(`/api/admin/applications/${id}/notes`, data);
+  }
+
+  /**
+   * Get notes for application
+   */
+  async getNotes(id: string): Promise<ApplicationNote[]> {
+    return this.client.get<ApplicationNote[]>(`/api/admin/applications/${id}/notes`);
   }
 
   /**

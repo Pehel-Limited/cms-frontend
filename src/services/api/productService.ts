@@ -178,9 +178,9 @@ class ProductService {
 
   // Helper methods for formatting
   formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-IN', {
+    return new Intl.NumberFormat('en-IE', {
       style: 'currency',
-      currency: 'INR',
+      currency: 'EUR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
@@ -195,9 +195,9 @@ class ProductService {
 
   formatLoanAmount(minAmount: number, maxAmount?: number): string {
     if (maxAmount && minAmount !== maxAmount) {
-      return `₹${minAmount.toLocaleString('en-IN')} - ₹${maxAmount.toLocaleString('en-IN')}`;
+      return `€${minAmount.toLocaleString('en-IE')} - €${maxAmount.toLocaleString('en-IE')}`;
     }
-    return `₹${minAmount.toLocaleString('en-IN')}`;
+    return `€${minAmount.toLocaleString('en-IE')}`;
   }
 
   formatTenure(minMonths: number, maxMonths?: number): string {

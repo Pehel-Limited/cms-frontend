@@ -10,8 +10,16 @@ export interface Product {
   productType: string;
   productCategory: string;
   productStatus: string;
-  shortDescription: string;
+  shortDescription?: string;
   detailedDescription?: string;
+  marketingDescription?: string;
+  termsAndConditions?: string;
+
+  // Irish/EU specific fields
+  interestLogicDescription?: string;
+  principalStructure?: string;
+  regulatoryBody?: string;
+  eligibleCustomerTypes?: string[];
 
   // Eligibility
   minCustomerAge?: number;
@@ -25,6 +33,7 @@ export interface Product {
   minLoanAmount: number;
   maxLoanAmount: number;
   defaultLoanAmount?: number;
+  amountStepSize?: number;
 
   // Interest
   interestType: string;
@@ -36,7 +45,9 @@ export interface Product {
   minTermMonths: number;
   maxTermMonths: number;
   defaultTermMonths?: number;
-  repaymentFrequency: string;
+  termStepMonths?: number;
+  repaymentFrequency?: string;
+  gracePeriodDays?: number;
 
   // Fees
   processingFee?: number;
@@ -65,6 +76,114 @@ export interface Product {
   slaDays?: number;
 }
 
+export interface CreateProductRequest {
+  bankId: string;
+  productCode: string;
+  productName: string;
+  productType: string;
+  productCategory?: string;
+  shortDescription?: string;
+  detailedDescription?: string;
+  marketingDescription?: string;
+  termsAndConditions?: string;
+  interestLogicDescription?: string;
+  principalStructure?: string;
+  regulatoryBody?: string;
+  eligibleCustomerTypes?: string[];
+  minCustomerAge?: number;
+  maxCustomerAge?: number;
+  minCreditScore?: number;
+  minAnnualIncome?: number;
+  minYearsInBusiness?: number;
+  minBusinessRevenue?: number;
+  minLoanAmount: number;
+  maxLoanAmount: number;
+  defaultLoanAmount?: number;
+  amountStepSize?: number;
+  interestType: string;
+  minInterestRate: number;
+  maxInterestRate: number;
+  defaultInterestRate?: number;
+  minTermMonths: number;
+  maxTermMonths: number;
+  defaultTermMonths?: number;
+  termStepMonths?: number;
+  repaymentFrequency?: string;
+  gracePeriodDays?: number;
+  processingFee?: number;
+  processingFeePercentage?: number;
+  latePaymentFee?: number;
+  prepaymentAllowed?: boolean;
+  prepaymentPenaltyPercentage?: number;
+  collateralRequired?: boolean;
+  collateralTypes?: string[];
+  loanToValueRatio?: number;
+  downPaymentRequired?: boolean;
+  minDownPaymentPercentage?: number;
+  requiresGuarantor?: boolean;
+  minGuarantors?: number;
+  isFeatured?: boolean;
+  isOnlineApplicationEnabled?: boolean;
+  autoApprovalEnabled?: boolean;
+  autoApprovalMaxAmount?: number;
+  autoApprovalMinCreditScore?: number;
+  slaDays?: number;
+}
+
+export interface UpdateProductRequest {
+  productCode?: string;
+  productName?: string;
+  productType?: string;
+  productCategory?: string;
+  productStatus?: string;
+  shortDescription?: string;
+  detailedDescription?: string;
+  marketingDescription?: string;
+  termsAndConditions?: string;
+  interestLogicDescription?: string;
+  principalStructure?: string;
+  regulatoryBody?: string;
+  eligibleCustomerTypes?: string[];
+  minCustomerAge?: number;
+  maxCustomerAge?: number;
+  minCreditScore?: number;
+  minAnnualIncome?: number;
+  minYearsInBusiness?: number;
+  minBusinessRevenue?: number;
+  minLoanAmount?: number;
+  maxLoanAmount?: number;
+  defaultLoanAmount?: number;
+  amountStepSize?: number;
+  interestType?: string;
+  minInterestRate?: number;
+  maxInterestRate?: number;
+  defaultInterestRate?: number;
+  minTermMonths?: number;
+  maxTermMonths?: number;
+  defaultTermMonths?: number;
+  termStepMonths?: number;
+  repaymentFrequency?: string;
+  gracePeriodDays?: number;
+  processingFee?: number;
+  processingFeePercentage?: number;
+  latePaymentFee?: number;
+  prepaymentAllowed?: boolean;
+  prepaymentPenaltyPercentage?: number;
+  collateralRequired?: boolean;
+  collateralTypes?: string[];
+  loanToValueRatio?: number;
+  downPaymentRequired?: boolean;
+  minDownPaymentPercentage?: number;
+  requiresGuarantor?: boolean;
+  minGuarantors?: number;
+  isFeatured?: boolean;
+  isOnlineApplicationEnabled?: boolean;
+  autoApprovalEnabled?: boolean;
+  autoApprovalMaxAmount?: number;
+  autoApprovalMinCreditScore?: number;
+  slaDays?: number;
+}
+
 export interface ProductsResponse {
   products: Product[];
   total: number;
@@ -78,12 +197,60 @@ class ProductService {
     return null;
   }
 
+  private getUserId(): string | null {
+    if (typeof window !== 'undefined') {
+      const userStr = localStorage.getItem(config.auth.userKey);
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        return user.userId;
+      }
+    }
+    return null;
+  }
+
   private getHeaders() {
     const token = this.getAuthToken();
+    const userId = this.getUserId();
     return {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
+      ...(userId && { 'X-User-Id': userId }),
     };
+  }
+
+  async createProduct(request: CreateProductRequest): Promise<Product> {
+    try {
+      const response = await axios.post(`${API_URL}/api/admin/products`, request, {
+        headers: this.getHeaders(),
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error creating product:', error);
+      throw error;
+    }
+  }
+
+  async updateProduct(productId: string, request: UpdateProductRequest): Promise<Product> {
+    try {
+      const response = await axios.put(`${API_URL}/api/admin/products/${productId}`, request, {
+        headers: this.getHeaders(),
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating product:', error);
+      throw error;
+    }
+  }
+
+  async deleteProduct(productId: string): Promise<void> {
+    try {
+      await axios.delete(`${API_URL}/api/admin/products/${productId}`, {
+        headers: this.getHeaders(),
+      });
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      throw error;
+    }
   }
 
   async getAllProducts(bankId: string): Promise<Product[]> {
@@ -95,6 +262,35 @@ class ProductService {
       return response.data;
     } catch (error) {
       console.error('Error fetching products:', error);
+      throw error;
+    }
+  }
+
+  async getActiveProducts(bankId: string): Promise<Product[]> {
+    try {
+      const response = await axios.get(`${API_URL}/api/admin/products/active`, {
+        params: { bankId },
+        headers: this.getHeaders(),
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching active products:', error);
+      throw error;
+    }
+  }
+
+  async getProductsByCustomerType(bankId: string, customerType: string): Promise<Product[]> {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/admin/products/customer-type/${customerType}`,
+        {
+          params: { bankId },
+          headers: this.getHeaders(),
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching products by customer type:', error);
       throw error;
     }
   }

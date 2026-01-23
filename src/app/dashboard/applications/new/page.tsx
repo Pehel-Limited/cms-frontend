@@ -71,7 +71,12 @@ export default function NewApplicationPage() {
     try {
       const customer = await customerService.getCustomerById(customerId);
       setSelectedCustomer(customer);
-      setStep(3);
+      // Only move to step 3 if a product is already selected
+      // Otherwise stay at step 1 to let user select a product first
+      if (selectedProduct) {
+        setStep(3);
+      }
+      // If no product selected, stay at step 1 (product selection)
     } catch (err) {
       console.error('Failed to load customer:', err);
     }
@@ -128,9 +133,9 @@ export default function NewApplicationPage() {
         customerId: selectedCustomer.customerId,
         requestedAmount: parseFloat(loanAmount),
         requestedTermMonths: parseInt(loanTerm),
-        proposedInterestRate: parseFloat(interestRate) / 100,
+        requestedInterestRate: parseFloat(interestRate) / 100,
         loanPurpose,
-        notes: notes || undefined,
+        loanPurposeDescription: notes || undefined,
         channel: 'RELATIONSHIP_MANAGER',
       };
 
@@ -161,7 +166,9 @@ export default function NewApplicationPage() {
               if (product.defaultTermMonths) setLoanTerm(product.defaultTermMonths.toString());
               if (product.defaultInterestRate)
                 setInterestRate((product.defaultInterestRate * 100).toString());
-              setStep(2);
+              // If customer is already selected (pre-selected from customer page), go directly to step 3
+              // Otherwise go to step 2 to select customer
+              setStep(selectedCustomer ? 3 : 2);
             }}
             className={`cursor-pointer border-2 rounded-lg p-6 transition-all hover:shadow-lg ${
               selectedProduct?.productId === product.productId
@@ -449,7 +456,7 @@ export default function NewApplicationPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Loan Amount (₹) *
+              Loan Amount (€) *
             </label>
             <input
               type="number"
@@ -460,7 +467,7 @@ export default function NewApplicationPage() {
             />
             {selectedProduct && (
               <p className="mt-1 text-xs text-gray-500">
-                Range: ₹{selectedProduct.minLoanAmount?.toLocaleString()} - ₹
+                Range: €{selectedProduct.minLoanAmount?.toLocaleString()} - €
                 {selectedProduct.maxLoanAmount?.toLocaleString()}
               </p>
             )}

@@ -67,7 +67,10 @@ export default function EditApplicationPage() {
       setSelectedProductId(appData.productId || '');
       setRequestedAmount(appData.requestedAmount?.toString() || '');
       setRequestedTermMonths(appData.requestedTermMonths?.toString() || '');
-      setRequestedInterestRate(appData.requestedInterestRate?.toString() || '');
+      // Interest rate is stored as decimal (0.095), display as percentage (9.5)
+      setRequestedInterestRate(
+        appData.requestedInterestRate ? (appData.requestedInterestRate * 100).toString() : ''
+      );
       setLoanPurpose(appData.loanPurpose || '');
       setLoanPurposeDescription(appData.loanPurposeDescription || '');
 
@@ -105,7 +108,8 @@ export default function EditApplicationPage() {
       };
 
       if (requestedInterestRate) {
-        updateData.requestedInterestRate = parseFloat(requestedInterestRate);
+        // Convert from percentage (displayed) back to decimal (stored)
+        updateData.requestedInterestRate = parseFloat(requestedInterestRate) / 100;
       }
       if (loanPurposeDescription) {
         updateData.loanPurposeDescription = loanPurposeDescription;
@@ -262,7 +266,7 @@ export default function EditApplicationPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Requested Amount ($)
+                Requested Amount (€)
               </label>
               <input
                 type="number"
@@ -273,7 +277,7 @@ export default function EditApplicationPage() {
               />
               {selectedProduct && (
                 <p className="text-xs text-gray-500 mt-1">
-                  Range: ${selectedProduct.minLoanAmount?.toLocaleString()} - $
+                  Range: €{selectedProduct.minLoanAmount?.toLocaleString()} - €
                   {selectedProduct.maxLoanAmount?.toLocaleString()}
                 </p>
               )}
@@ -318,13 +322,15 @@ export default function EditApplicationPage() {
               >
                 <option value="">Select purpose</option>
                 <option value="HOME_PURCHASE">Home Purchase</option>
-                <option value="REFINANCE">Refinance</option>
-                <option value="HOME_IMPROVEMENT">Home Improvement</option>
-                <option value="DEBT_CONSOLIDATION">Debt Consolidation</option>
-                <option value="BUSINESS">Business</option>
-                <option value="EDUCATION">Education</option>
-                <option value="MEDICAL">Medical</option>
+                <option value="HOME_CONSTRUCTION">Home Construction</option>
+                <option value="HOME_RENOVATION">Home Renovation</option>
                 <option value="VEHICLE_PURCHASE">Vehicle Purchase</option>
+                <option value="BUSINESS_EXPANSION">Business Expansion</option>
+                <option value="WORKING_CAPITAL">Working Capital</option>
+                <option value="EQUIPMENT_PURCHASE">Equipment Purchase</option>
+                <option value="DEBT_CONSOLIDATION">Debt Consolidation</option>
+                <option value="EDUCATION">Education</option>
+                <option value="PERSONAL_USE">Personal Use</option>
                 <option value="OTHER">Other</option>
               </select>
             </div>
@@ -350,7 +356,7 @@ export default function EditApplicationPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Annual Income ($)
+                Annual Income (€)
               </label>
               <input
                 type="number"
@@ -363,7 +369,7 @@ export default function EditApplicationPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Expenses ($)
+                Monthly Expenses (€)
               </label>
               <input
                 type="number"
@@ -477,7 +483,7 @@ export default function EditApplicationPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Value ($)
+                  Property Value (€)
                 </label>
                 <input
                   type="number"
@@ -490,7 +496,7 @@ export default function EditApplicationPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Down Payment ($)
+                  Down Payment (€)
                 </label>
                 <input
                   type="number"

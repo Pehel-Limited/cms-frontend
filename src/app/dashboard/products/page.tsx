@@ -30,30 +30,6 @@ const STATUS_COLORS: Record<string, string> = {
   DISCONTINUED: 'bg-red-100 text-red-800',
 };
 
-const PRODUCT_TYPE_ICONS: Record<string, string> = {
-  PERSONAL_LOAN: '💰',
-  PCP: '🚗',
-  HIRE_PURCHASE: '🚙',
-  CREDIT_CARD: '💳',
-  OVERDRAFT: '🏦',
-  BNPL: '🛒',
-  MORTGAGE: '🏠',
-  SME_TERM_LOAN: '🏢',
-  BUSINESS_OVERDRAFT: '💼',
-  INVOICE_FINANCE: '📄',
-  BUSINESS_CREDIT_CARD: '💳',
-  COMMERCIAL_MORTGAGE: '🏭',
-  ASSET_LEASING: '⚙️',
-  AGRI_LOAN: '🌾',
-  CREDIT_UNION_LOAN: '🤝',
-  GREEN_LOAN: '🌿',
-  MICROFINANCE: '🌱',
-  HOME_LOAN: '🏡',
-  AUTO_LOAN: '🚗',
-  BUSINESS_LOAN: '🏢',
-  EDUCATION_LOAN: '🎓',
-};
-
 export default function ProductsPage() {
   const router = useRouter();
   const { user } = useAppSelector(state => state.auth);
@@ -157,10 +133,6 @@ export default function ProductsPage() {
     } finally {
       setDeleting(false);
     }
-  };
-
-  const getProductIcon = (productType: string) => {
-    return PRODUCT_TYPE_ICONS[productType] || '💼';
   };
 
   const formatCustomerTypes = (types?: string[]): string => {
@@ -501,26 +473,23 @@ export default function ProductsPage() {
                 {filteredProducts.map(product => (
                   <tr key={product.productId} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className="text-2xl mr-3">{getProductIcon(product.productType)}</span>
-                        <div>
-                          <div className="flex items-center">
-                            <span className="text-sm font-medium text-gray-900">
-                              {product.productName}
+                      <div>
+                        <div className="flex items-center">
+                          <span className="text-sm font-medium text-gray-900">
+                            {product.productName}
+                          </span>
+                          {product.isFeatured && (
+                            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              ★
                             </span>
-                            {product.isFeatured && (
-                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                ★
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-500">{product.productCode}</div>
-                          {product.shortDescription && (
-                            <div className="text-xs text-gray-400 truncate max-w-xs">
-                              {product.shortDescription}
-                            </div>
                           )}
                         </div>
+                        <div className="text-xs text-gray-500">{product.productCode}</div>
+                        {product.shortDescription && (
+                          <div className="text-xs text-gray-400 truncate max-w-xs">
+                            {product.shortDescription}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

@@ -3,30 +3,82 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { kycService, type CreateKycCaseRequest, type DiligenceLevel } from '@/services/api/kycService';
+import {
+  kycService,
+  type CreateKycCaseRequest,
+  type DiligenceLevel,
+} from '@/services/api/kycService';
 import { customerService, type Customer } from '@/services/api/customerService';
 
 const SEGMENT_OPTIONS = [
-  { value: 'INDIVIDUAL', label: 'Individual', description: 'Natural person opening personal account' },
-  { value: 'SOLE_TRADER', label: 'Sole Trader', description: 'Self-employed individual trading under own name' },
-  { value: 'COMPANY', label: 'Company (Ltd/PLC)', description: 'Private or public limited company' },
+  {
+    value: 'INDIVIDUAL',
+    label: 'Individual',
+    description: 'Natural person opening personal account',
+  },
+  {
+    value: 'SOLE_TRADER',
+    label: 'Sole Trader',
+    description: 'Self-employed individual trading under own name',
+  },
+  {
+    value: 'COMPANY',
+    label: 'Company (Ltd/PLC)',
+    description: 'Private or public limited company',
+  },
   { value: 'PARTNERSHIP', label: 'Partnership', description: 'General or limited partnership' },
   { value: 'TRUST', label: 'Trust', description: 'Express trust or similar legal arrangement' },
-  { value: 'CHARITY', label: 'Charity/Non-Profit', description: 'Registered charity or non-profit organization' },
-  { value: 'CLUB_ASSOCIATION', label: 'Club/Association', description: 'Unincorporated association or club' },
+  {
+    value: 'CHARITY',
+    label: 'Charity/Non-Profit',
+    description: 'Registered charity or non-profit organization',
+  },
+  {
+    value: 'CLUB_ASSOCIATION',
+    label: 'Club/Association',
+    description: 'Unincorporated association or club',
+  },
 ];
 
 const CASE_TYPE_OPTIONS = [
-  { value: 'ONBOARDING', label: 'Onboarding', description: 'New customer KYC during account opening' },
-  { value: 'PERIODIC_REVIEW', label: 'Periodic Review', description: 'Scheduled review based on risk tier' },
-  { value: 'EVENT_DRIVEN', label: 'Event Driven', description: 'Triggered by suspicious activity or changes' },
-  { value: 'REMEDIATION', label: 'Remediation', description: 'Fixing incomplete or outdated KYC records' },
+  {
+    value: 'ONBOARDING',
+    label: 'Onboarding',
+    description: 'New customer KYC during account opening',
+  },
+  {
+    value: 'PERIODIC_REVIEW',
+    label: 'Periodic Review',
+    description: 'Scheduled review based on risk tier',
+  },
+  {
+    value: 'EVENT_DRIVEN',
+    label: 'Event Driven',
+    description: 'Triggered by suspicious activity or changes',
+  },
+  {
+    value: 'REMEDIATION',
+    label: 'Remediation',
+    description: 'Fixing incomplete or outdated KYC records',
+  },
 ];
 
 const DILIGENCE_OPTIONS: { value: DiligenceLevel; label: string; description: string }[] = [
-  { value: 'SDD', label: 'Simplified Due Diligence', description: 'Low-risk customers with minimal verification' },
-  { value: 'CDD', label: 'Standard Customer Due Diligence', description: 'Standard verification for most customers' },
-  { value: 'EDD', label: 'Enhanced Due Diligence', description: 'High-risk customers requiring additional checks' },
+  {
+    value: 'SDD',
+    label: 'Simplified Due Diligence',
+    description: 'Low-risk customers with minimal verification',
+  },
+  {
+    value: 'CDD',
+    label: 'Standard Customer Due Diligence',
+    description: 'Standard verification for most customers',
+  },
+  {
+    value: 'EDD',
+    label: 'Enhanced Due Diligence',
+    description: 'High-risk customers requiring additional checks',
+  },
 ];
 
 export default function NewKycCasePage() {
@@ -83,7 +135,7 @@ export default function NewKycCasePage() {
   };
 
   const handleChange = (field: keyof CreateKycCaseRequest, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value || undefined }));
+    setFormData(prev => ({ ...prev, [field]: value || undefined }));
   };
 
   return (
@@ -142,7 +194,7 @@ export default function NewKycCasePage() {
                     type="text"
                     placeholder="Search by name, email, or customer number..."
                     value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    onChange={e => setCustomerSearch(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                   <svg
@@ -162,7 +214,7 @@ export default function NewKycCasePage() {
 
                 {customers.length > 0 && (
                   <div className="mt-2 border border-gray-200 rounded-lg max-h-60 overflow-y-auto">
-                    {customers.map((customer) => (
+                    {customers.map(customer => (
                       <button
                         key={customer.customerId}
                         type="button"
@@ -197,11 +249,12 @@ export default function NewKycCasePage() {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer Segment</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Select the customer segment to determine the appropriate KYC requirements per EU/Irish AML regulations.
+              Select the customer segment to determine the appropriate KYC requirements per EU/Irish
+              AML regulations.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {SEGMENT_OPTIONS.map((option) => (
+              {SEGMENT_OPTIONS.map(option => (
                 <label
                   key={option.value}
                   className={`relative flex cursor-pointer rounded-lg border p-4 hover:border-primary-500 ${
@@ -215,7 +268,7 @@ export default function NewKycCasePage() {
                     name="customerSegment"
                     value={option.value}
                     checked={formData.customerSegment === option.value}
-                    onChange={(e) => handleChange('customerSegment', e.target.value)}
+                    onChange={e => handleChange('customerSegment', e.target.value)}
                     className="sr-only"
                   />
                   <div className="flex-1">
@@ -223,8 +276,16 @@ export default function NewKycCasePage() {
                     <div className="text-sm text-gray-500">{option.description}</div>
                   </div>
                   {formData.customerSegment === option.value && (
-                    <svg className="h-5 w-5 text-primary-600" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    <svg
+                      className="h-5 w-5 text-primary-600"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   )}
                 </label>
@@ -237,7 +298,7 @@ export default function NewKycCasePage() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Case Type</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CASE_TYPE_OPTIONS.map((option) => (
+              {CASE_TYPE_OPTIONS.map(option => (
                 <label
                   key={option.value}
                   className={`relative flex cursor-pointer rounded-lg border p-4 hover:border-primary-500 ${
@@ -251,7 +312,7 @@ export default function NewKycCasePage() {
                     name="caseType"
                     value={option.value}
                     checked={formData.caseType === option.value}
-                    onChange={(e) => handleChange('caseType', e.target.value)}
+                    onChange={e => handleChange('caseType', e.target.value)}
                     className="sr-only"
                   />
                   <div className="flex-1">
@@ -259,8 +320,16 @@ export default function NewKycCasePage() {
                     <div className="text-sm text-gray-500">{option.description}</div>
                   </div>
                   {formData.caseType === option.value && (
-                    <svg className="h-5 w-5 text-primary-600" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    <svg
+                      className="h-5 w-5 text-primary-600"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   )}
                 </label>
@@ -272,8 +341,8 @@ export default function NewKycCasePage() {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Due Diligence Level</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Leave as &quot;Auto-determine&quot; to let the system calculate based on risk assessment.
-              Override only if you have specific regulatory requirements.
+              Leave as &quot;Auto-determine&quot; to let the system calculate based on risk
+              assessment. Override only if you have specific regulatory requirements.
             </p>
 
             <div className="space-y-3">
@@ -295,17 +364,22 @@ export default function NewKycCasePage() {
                 <div className="flex-1">
                   <div className="font-medium text-gray-900">Auto-determine</div>
                   <div className="text-sm text-gray-500">
-                    System will determine appropriate level based on customer segment and risk factors
+                    System will determine appropriate level based on customer segment and risk
+                    factors
                   </div>
                 </div>
                 {!formData.requiredDiligence && (
                   <svg className="h-5 w-5 text-primary-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 )}
               </label>
 
-              {DILIGENCE_OPTIONS.map((option) => (
+              {DILIGENCE_OPTIONS.map(option => (
                 <label
                   key={option.value}
                   className={`relative flex cursor-pointer rounded-lg border p-4 hover:border-primary-500 ${
@@ -319,12 +393,14 @@ export default function NewKycCasePage() {
                     name="requiredDiligence"
                     value={option.value}
                     checked={formData.requiredDiligence === option.value}
-                    onChange={(e) => handleChange('requiredDiligence', e.target.value)}
+                    onChange={e => handleChange('requiredDiligence', e.target.value)}
                     className="sr-only"
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded ${kycService.getDiligenceColor(option.value)}`}>
+                      <span
+                        className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded ${kycService.getDiligenceColor(option.value)}`}
+                      >
                         {option.value}
                       </span>
                       <span className="font-medium text-gray-900">{option.label}</span>
@@ -332,8 +408,16 @@ export default function NewKycCasePage() {
                     <div className="text-sm text-gray-500 mt-1">{option.description}</div>
                   </div>
                   {formData.requiredDiligence === option.value && (
-                    <svg className="h-5 w-5 text-primary-600" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    <svg
+                      className="h-5 w-5 text-primary-600"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   )}
                 </label>
@@ -347,7 +431,7 @@ export default function NewKycCasePage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Trigger Reason</h2>
               <textarea
                 value={formData.triggerReason || ''}
-                onChange={(e) => handleChange('triggerReason', e.target.value)}
+                onChange={e => handleChange('triggerReason', e.target.value)}
                 placeholder="Describe the reason for initiating this KYC review..."
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"

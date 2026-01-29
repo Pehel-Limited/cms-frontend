@@ -3,7 +3,12 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { kycService, type KycCase, type PageResponse, type KycCaseStatus } from '@/services/api/kycService';
+import {
+  kycService,
+  type KycCase,
+  type PageResponse,
+  type KycCaseStatus,
+} from '@/services/api/kycService';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All Statuses' },
@@ -72,7 +77,7 @@ export default function KycCasesPage() {
     }
   };
 
-  const filteredCases = cases.filter((kycCase) => {
+  const filteredCases = cases.filter(kycCase => {
     // Apply segment filter
     if (segmentFilter && kycCase.customerSegment !== segmentFilter) {
       return false;
@@ -121,7 +126,7 @@ export default function KycCasesPage() {
                   type="text"
                   placeholder="Search by reference or name..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={e => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
                 <svg
@@ -145,13 +150,13 @@ export default function KycCasesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
                 value={statusFilter}
-                onChange={(e) => {
+                onChange={e => {
                   setStatusFilter(e.target.value);
                   setPage(0);
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                {STATUS_OPTIONS.map((option) => (
+                {STATUS_OPTIONS.map(option => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -161,13 +166,15 @@ export default function KycCasesPage() {
 
             {/* Segment Filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Customer Segment</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Customer Segment
+              </label>
               <select
                 value={segmentFilter}
-                onChange={(e) => setSegmentFilter(e.target.value)}
+                onChange={e => setSegmentFilter(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                {SEGMENT_OPTIONS.map((option) => (
+                {SEGMENT_OPTIONS.map(option => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -182,7 +189,12 @@ export default function KycCasesPage() {
                 className="w-full inline-flex items-center justify-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
                 </svg>
                 New Case
               </Link>
@@ -236,8 +248,11 @@ export default function KycCasesPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredCases.map((kycCase) => (
-                      <tr key={kycCase.caseId} className={kycCase.isOverdue ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                    {filteredCases.map(kycCase => (
+                      <tr
+                        key={kycCase.caseId}
+                        className={kycCase.isOverdue ? 'bg-red-50' : 'hover:bg-gray-50'}
+                      >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Link
                             href={`/dashboard/kyc/cases/${kycCase.caseId}`}
@@ -252,27 +267,39 @@ export default function KycCasesPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{kycCase.partyDisplayName || 'Unknown'}</span>
+                          <span className="text-sm text-gray-900">
+                            {kycCase.partyDisplayName || 'Unknown'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-600">{formatSegment(kycCase.customerSegment)}</span>
+                          <span className="text-sm text-gray-600">
+                            {formatSegment(kycCase.customerSegment)}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-600">{formatCaseType(kycCase.caseType)}</span>
+                          <span className="text-sm text-gray-600">
+                            {formatCaseType(kycCase.caseType)}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${kycService.getStatusColor(kycCase.status)}`}>
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${kycService.getStatusColor(kycCase.status)}`}
+                          >
                             {kycCase.statusDisplay}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {kycCase.riskTier ? (
                             <div className="flex items-center">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${kycService.getRiskTierColor(kycCase.riskTier)}`}>
+                              <span
+                                className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${kycService.getRiskTierColor(kycCase.riskTier)}`}
+                              >
                                 {kycCase.riskTier.replace('_', ' ')}
                               </span>
                               {kycCase.riskScore !== undefined && (
-                                <span className="ml-2 text-xs text-gray-500">({kycCase.riskScore})</span>
+                                <span className="ml-2 text-xs text-gray-500">
+                                  ({kycCase.riskScore})
+                                </span>
                               )}
                             </div>
                           ) : (
@@ -280,13 +307,17 @@ export default function KycCasesPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${kycService.getDiligenceColor(kycCase.requiredDiligence)}`}>
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${kycService.getDiligenceColor(kycCase.requiredDiligence)}`}
+                          >
                             {kycService.getDiligenceLabel(kycCase.requiredDiligence)}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {kycCase.dueDate ? (
-                            <span className={`text-sm ${kycCase.isOverdue ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
+                            <span
+                              className={`text-sm ${kycCase.isOverdue ? 'text-red-600 font-semibold' : 'text-gray-600'}`}
+                            >
                               {new Date(kycCase.dueDate).toLocaleDateString()}
                             </span>
                           ) : (
@@ -333,7 +364,8 @@ export default function KycCasesPage() {
               {totalPages > 1 && (
                 <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
                   <div className="text-sm text-gray-600">
-                    Showing {page * 20 + 1} to {Math.min((page + 1) * 20, totalElements)} of {totalElements} cases
+                    Showing {page * 20 + 1} to {Math.min((page + 1) * 20, totalElements)} of{' '}
+                    {totalElements} cases
                   </div>
                   <div className="flex gap-2">
                     <button

@@ -47,18 +47,18 @@ export interface KycCase {
   events?: KycCaseEvent[];
 }
 
-export type KycCaseStatus = 
-  | 'DRAFT' 
-  | 'PENDING_DOCUMENTS' 
-  | 'UNDER_REVIEW' 
-  | 'PENDING_VERIFICATION' 
+export type KycCaseStatus =
+  | 'DRAFT'
+  | 'PENDING_DOCUMENTS'
+  | 'UNDER_REVIEW'
+  | 'PENDING_VERIFICATION'
   | 'PENDING_SCREENING'
-  | 'PENDING_RISK' 
-  | 'PENDING_APPROVAL' 
-  | 'ESCALATED' 
-  | 'APPROVED' 
-  | 'REJECTED' 
-  | 'INCOMPLETE' 
+  | 'PENDING_RISK'
+  | 'PENDING_APPROVAL'
+  | 'ESCALATED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'INCOMPLETE'
   | 'ON_HOLD';
 
 export type DiligenceLevel = 'SDD' | 'CDD' | 'EDD';
@@ -133,19 +133,19 @@ export interface PartyRelationship {
   updatedAt: string;
 }
 
-export type RelationshipType = 
+export type RelationshipType =
   | 'BENEFICIAL_OWNER'
-  | 'DIRECTOR' 
-  | 'SHAREHOLDER' 
-  | 'SIGNATORY' 
+  | 'DIRECTOR'
+  | 'SHAREHOLDER'
+  | 'SIGNATORY'
   | 'TRUSTEE'
-  | 'SETTLOR' 
-  | 'BENEFICIARY_OF_TRUST' 
-  | 'PARTNER' 
+  | 'SETTLOR'
+  | 'BENEFICIARY_OF_TRUST'
+  | 'PARTNER'
   | 'MEMBER'
-  | 'COMMITTEE_MEMBER' 
-  | 'AUTHORIZED_PERSON' 
-  | 'POWER_OF_ATTORNEY' 
+  | 'COMMITTEE_MEMBER'
+  | 'AUTHORIZED_PERSON'
+  | 'POWER_OF_ATTORNEY'
   | 'SECRETARY';
 
 export interface KycDocument {
@@ -216,7 +216,13 @@ export interface VerificationCheck {
   partyId: string;
   caseId?: string;
   documentId?: string;
-  verificationType: 'EIDV' | 'VIDEO_KYC' | 'BIOMETRIC' | 'CRO_REGISTRY' | 'ADDRESS_VERIFY' | 'BANK_REFERENCE';
+  verificationType:
+    | 'EIDV'
+    | 'VIDEO_KYC'
+    | 'BIOMETRIC'
+    | 'CRO_REGISTRY'
+    | 'ADDRESS_VERIFY'
+    | 'BANK_REFERENCE';
   verificationTypeDisplay: string;
   provider: string;
   providerReference?: string;
@@ -365,7 +371,9 @@ class KycService {
   // ------------------------------------------------------------------------
 
   async getDashboardStats(): Promise<KycDashboardStats> {
-    const response = await apiClient.get<KycDashboardStats>(`${this.baseUrl}/cases/dashboard/stats`);
+    const response = await apiClient.get<KycDashboardStats>(
+      `${this.baseUrl}/cases/dashboard/stats`
+    );
     return response.data;
   }
 
@@ -380,20 +388,22 @@ class KycService {
     size?: number;
     sort?: string;
   }): Promise<PageResponse<KycCase>> {
-    const response = await apiClient.get<PageResponse<KycCase>>(`${this.baseUrl}/cases`, { params });
+    const response = await apiClient.get<PageResponse<KycCase>>(`${this.baseUrl}/cases`, {
+      params,
+    });
     return response.data;
   }
 
   async getMyCases(page = 0, size = 20): Promise<PageResponse<KycCase>> {
     const response = await apiClient.get<PageResponse<KycCase>>(`${this.baseUrl}/cases/my-cases`, {
-      params: { page, size }
+      params: { page, size },
     });
     return response.data;
   }
 
   async getCase(caseId: string, includeDetails = false): Promise<KycCase> {
     const response = await apiClient.get<KycCase>(`${this.baseUrl}/cases/${caseId}`, {
-      params: { includeDetails }
+      params: { includeDetails },
     });
     return response.data;
   }
@@ -436,11 +446,9 @@ class KycService {
   }
 
   async rejectCase(caseId: string, reason: string): Promise<KycCase> {
-    const response = await apiClient.post<KycCase>(
-      `${this.baseUrl}/cases/${caseId}/reject`,
-      null,
-      { params: { reason } }
-    );
+    const response = await apiClient.post<KycCase>(`${this.baseUrl}/cases/${caseId}/reject`, null, {
+      params: { reason },
+    });
     return response.data;
   }
 
@@ -472,7 +480,9 @@ class KycService {
   }
 
   async createPartyFromCustomer(customerId: string): Promise<Party> {
-    const response = await apiClient.post<Party>(`${this.baseUrl}/parties/from-customer/${customerId}`);
+    const response = await apiClient.post<Party>(
+      `${this.baseUrl}/parties/from-customer/${customerId}`
+    );
     return response.data;
   }
 
@@ -482,17 +492,24 @@ class KycService {
   }
 
   async getPartyGraph(partyId: string): Promise<PartyRelationship[]> {
-    const response = await apiClient.get<PartyRelationship[]>(`${this.baseUrl}/parties/${partyId}/graph`);
+    const response = await apiClient.get<PartyRelationship[]>(
+      `${this.baseUrl}/parties/${partyId}/graph`
+    );
     return response.data;
   }
 
   async getBeneficialOwners(partyId: string): Promise<PartyRelationship[]> {
-    const response = await apiClient.get<PartyRelationship[]>(`${this.baseUrl}/parties/${partyId}/beneficial-owners`);
+    const response = await apiClient.get<PartyRelationship[]>(
+      `${this.baseUrl}/parties/${partyId}/beneficial-owners`
+    );
     return response.data;
   }
 
   async addRelationship(request: CreatePartyRelationshipRequest): Promise<PartyRelationship> {
-    const response = await apiClient.post<PartyRelationship>(`${this.baseUrl}/parties/relationships`, request);
+    const response = await apiClient.post<PartyRelationship>(
+      `${this.baseUrl}/parties/relationships`,
+      request
+    );
     return response.data;
   }
 
@@ -501,7 +518,9 @@ class KycService {
   // ------------------------------------------------------------------------
 
   async getDocumentsForParty(partyId: string): Promise<KycDocument[]> {
-    const response = await apiClient.get<KycDocument[]>(`${this.baseUrl}/documents/party/${partyId}`);
+    const response = await apiClient.get<KycDocument[]>(
+      `${this.baseUrl}/documents/party/${partyId}`
+    );
     return response.data;
   }
 
@@ -511,7 +530,9 @@ class KycService {
   }
 
   async verifyDocument(documentId: string): Promise<KycDocument> {
-    const response = await apiClient.post<KycDocument>(`${this.baseUrl}/documents/${documentId}/verify`);
+    const response = await apiClient.post<KycDocument>(
+      `${this.baseUrl}/documents/${documentId}/verify`
+    );
     return response.data;
   }
 
@@ -529,9 +550,9 @@ class KycService {
   // ------------------------------------------------------------------------
 
   async initiateScreening(
-    partyId: string, 
-    screeningType: string, 
-    caseId?: string, 
+    partyId: string,
+    screeningType: string,
+    caseId?: string,
     provider = 'INTERNAL'
   ): Promise<ScreeningResult> {
     const response = await apiClient.post<ScreeningResult>(
@@ -659,7 +680,10 @@ class KycService {
   }
 
   formatRelationshipType(type: RelationshipType): string {
-    return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    return type
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, l => l.toUpperCase());
   }
 }
 

@@ -247,7 +247,7 @@ export default function NewAccountPage() {
       for (const party of selectedParties) {
         if (!party.isPrimary || selectedParties.length > 1) {
           try {
-            await accountService.addPartyRole(account.id, {
+            await accountService.addPartyRole(account.accountId, {
               partyId: party.partyId,
               partyType: party.partyType,
               role: party.role,

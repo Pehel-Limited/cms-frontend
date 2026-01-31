@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { RootState } from '@/store/store';
+import { RootState } from '@/store';
 import apiClient from '@/lib/api-client';
 
 // ============================================

@@ -138,9 +138,10 @@ export default function AccountsPage() {
 
   // Check if user has Bank Super Admin role (only they can delete accounts)
   const isBankSuperAdmin =
-    user?.roles?.some(
-      role => role.roleName === 'Bank Super Admin' || role.roleName === 'BANK_SUPER_ADMIN'
-    ) ?? false;
+    user?.roles?.some(role => {
+      const roleType = typeof role === 'string' ? role : role.roleType;
+      return roleType === 'BANK_SUPER_ADMIN' || roleType === 'Bank Super Admin';
+    }) ?? false;
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -8,7 +8,7 @@ export interface User {
   phoneNumber?: string;
   userType: 'BANK_USER' | 'CUSTOMER';
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_ACTIVATION' | 'LOCKED';
-  roles: Role[];
+  roles: (Role | string)[]; // Can be Role objects or just role type strings
   lastLoginAt?: string;
   twoFactorEnabled: boolean;
 }

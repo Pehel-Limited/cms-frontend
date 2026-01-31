@@ -42,6 +42,7 @@ export interface Customer {
   primaryIdentityType?: string;
   primaryIdentityNumber?: string;
   taxIdNumber?: string;
+  nationality?: string;
 
   // Financial
   annualIncome?: number;

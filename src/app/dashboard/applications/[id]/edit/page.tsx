@@ -67,9 +67,9 @@ export default function EditApplicationPage() {
       setSelectedProductId(appData.productId || '');
       setRequestedAmount(appData.requestedAmount?.toString() || '');
       setRequestedTermMonths(appData.requestedTermMonths?.toString() || '');
-      // Interest rate is stored as decimal (0.095), display as percentage (9.5)
+      // Interest rate is now stored as percentage (9.5 = 9.5%)
       setRequestedInterestRate(
-        appData.requestedInterestRate ? (appData.requestedInterestRate * 100).toString() : ''
+        appData.requestedInterestRate ? appData.requestedInterestRate.toString() : ''
       );
       setLoanPurpose(appData.loanPurpose || '');
       setLoanPurposeDescription(appData.loanPurposeDescription || '');
@@ -109,7 +109,7 @@ export default function EditApplicationPage() {
 
       if (requestedInterestRate) {
         // Convert from percentage (displayed) back to decimal (stored)
-        updateData.requestedInterestRate = parseFloat(requestedInterestRate) / 100;
+        updateData.requestedInterestRate = parseFloat(requestedInterestRate);
       }
       if (loanPurposeDescription) {
         updateData.loanPurposeDescription = loanPurposeDescription;
@@ -162,11 +162,20 @@ export default function EditApplicationPage() {
     }
   };
 
+  // Get effective status - prefer lomsStatus over legacy status
+  const effectiveStatus = application?.lomsStatus || application?.status || '';
+
   const canEdit =
     application &&
-    ['DRAFT', 'RETURNED', 'UNDER_REVIEW', 'CREDIT_CHECK', 'UNDERWRITING', 'SUBMITTED'].includes(
-      application.status
-    ) &&
+    [
+      'DRAFT',
+      'RETURNED',
+      'UNDER_REVIEW',
+      'CREDIT_CHECK',
+      'UNDERWRITING',
+      'SUBMITTED',
+      'KYC_PENDING',
+    ].includes(effectiveStatus) &&
     currentUser?.userId === application.createdByUserId;
 
   if (loading) {

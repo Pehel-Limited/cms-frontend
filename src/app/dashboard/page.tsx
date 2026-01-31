@@ -7,10 +7,14 @@ import { applicationService, ApplicationResponse } from '@/services/api/applicat
 import { customerService } from '@/services/api/customerService';
 
 // Helper to check if user is a reviewer (Credit Analyst, Credit Officer, Underwriter)
-const isReviewerRole = (roles: string[] | undefined): boolean => {
+const isReviewerRole = (roles: (string | { roleType?: string })[] | undefined): boolean => {
   if (!roles) return false;
   const reviewerRoles = ['CREDIT_ANALYST', 'CREDIT_OFFICER', 'UNDERWRITER', 'RISK_MANAGER'];
-  return roles.some(role => reviewerRoles.includes(role));
+  return roles.some(role => {
+    // Handle both string roles and Role objects
+    const roleType = typeof role === 'string' ? role : role.roleType;
+    return roleType && reviewerRoles.includes(roleType.toUpperCase());
+  });
 };
 
 export default function DashboardPage() {
@@ -147,11 +151,39 @@ export default function DashboardPage() {
       case 'SUBMITTED':
         return 'bg-yellow-100 text-yellow-800';
       case 'UNDER_REVIEW':
+      case 'KYC_PENDING':
+      case 'DECISIONING_PENDING':
+      case 'PENDING_CREDIT_CHECK':
+      case 'REFERRED_TO_UNDERWRITER':
+      case 'PENDING_UNDERWRITING':
         return 'bg-blue-100 text-blue-800';
       case 'APPROVED':
+      case 'APPROVED_PENDING_OFFER':
         return 'bg-green-100 text-green-800';
+      case 'OFFER_GENERATED':
+      case 'OFFER_SENT':
+        return 'bg-indigo-100 text-indigo-800';
+      case 'AWAITING_SIGNATURE':
+      case 'PENDING_ESIGN':
+      case 'ESIGN_IN_PROGRESS':
+        return 'bg-cyan-100 text-cyan-800';
+      case 'SIGNED':
+      case 'ESIGN_COMPLETED':
+        return 'bg-teal-100 text-teal-800';
+      case 'BOOKING_PENDING':
+      case 'PENDING_BOOKING':
+      case 'BOOKING_IN_PROGRESS':
+        return 'bg-amber-100 text-amber-800';
+      case 'BOOKED':
+      case 'DISBURSED':
+        return 'bg-emerald-100 text-emerald-800';
       case 'REJECTED':
+      case 'DECLINED':
         return 'bg-red-100 text-red-800';
+      case 'CANCELLED':
+      case 'WITHDRAWN':
+      case 'EXPIRED':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -485,9 +517,9 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <span
-                    className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(app.status)}`}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full ${getStatusColor(app.lomsStatus || app.status)}`}
                   >
-                    {formatStatus(app.status)}
+                    {formatStatus(app.lomsStatus || app.status)}
                   </span>
                 </Link>
               ))}

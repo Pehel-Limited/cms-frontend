@@ -161,7 +161,19 @@ export class ApiClient {
       await this.handleError(response);
     }
 
-    return response.json();
+    // Handle empty responses (204 No Content or empty body)
+    const contentLength = response.headers.get('content-length');
+    if (response.status === 204 || contentLength === '0') {
+      return undefined as T;
+    }
+
+    // Try to parse JSON, return undefined if empty
+    const text = await response.text();
+    if (!text || text.trim() === '') {
+      return undefined as T;
+    }
+
+    return JSON.parse(text) as T;
   }
 
   async put<T>(path: string, data: any, retryCount: number = 0): Promise<T> {

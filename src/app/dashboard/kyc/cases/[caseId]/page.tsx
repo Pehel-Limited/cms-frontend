@@ -65,15 +65,17 @@ export default function KycCaseDetailPage() {
           break;
         case 'reject':
           if (!reason) {
-            reason = prompt('Please provide a reason for rejection:');
-            if (!reason) return;
+            const inputReason = prompt('Please provide a reason for rejection:');
+            if (!inputReason) return;
+            reason = inputReason;
           }
           await kycService.rejectCase(kycCase.caseId, reason);
           break;
         case 'escalate':
           if (!reason) {
-            reason = prompt('Please provide a reason for escalation:');
-            if (!reason) return;
+            const inputReason = prompt('Please provide a reason for escalation:');
+            if (!inputReason) return;
+            reason = inputReason;
           }
           await kycService.escalateCase(kycCase.caseId, reason);
           break;

@@ -11,6 +11,7 @@ import {
   ApplicationNote,
 } from '@/services/api/applicationService';
 import { userService, User } from '@/services/api/userService';
+import { ApplicationWorkflowPanel } from '@/components/workflow';
 
 interface ActionModalProps {
   isOpen: boolean;
@@ -95,7 +96,7 @@ function ActionModal({
 
   const handleSelectUnderwriter = (user: User) => {
     setFormData({ ...formData, assignToUserId: user.userId });
-    setSearchQuery(user.fullName);
+    setSearchQuery(user.fullName || '');
     setShowDropdown(false);
   };
 
@@ -394,6 +395,17 @@ const formatRoleName = (role: string): string => {
     .replace(/\b\w/g, c => c.toUpperCase());
 };
 
+// Helper to get effective status - always prefer lomsStatus over legacy status
+const getEffectiveStatus = (app: ApplicationResponse | null): string => {
+  if (!app) return '';
+  return app.lomsStatus || app.status || 'DRAFT';
+};
+
+// Helper to format status for display
+const formatStatus = (status: string): string => {
+  return status.replace(/_/g, ' ');
+};
+
 export default function ApplicationDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -458,7 +470,10 @@ export default function ApplicationDetailPage() {
     }
   };
 
-  const openModal = (type: 'approve' | 'reject' | 'assign' | 'return' | 'note', title: string) => {
+  const openModal = (
+    type: 'approve' | 'reject' | 'assign' | 'return' | 'note' | 'cancel',
+    title: string
+  ) => {
     setModalState({ isOpen: true, type, title });
   };
 
@@ -525,6 +540,7 @@ export default function ApplicationDetailPage() {
 
   const getStatusColor = (status: string) => {
     const colors: { [key: string]: string } = {
+      // Legacy statuses
       DRAFT: 'bg-gray-100 text-gray-800',
       SUBMITTED: 'bg-blue-100 text-blue-800',
       UNDER_REVIEW: 'bg-yellow-100 text-yellow-800',
@@ -535,6 +551,28 @@ export default function ApplicationDetailPage() {
       REJECTED: 'bg-red-100 text-red-800',
       RETURNED_FOR_CORRECTIONS: 'bg-amber-100 text-amber-800',
       DISBURSED: 'bg-emerald-100 text-emerald-800',
+      // LOMS statuses
+      KYC_PENDING: 'bg-orange-100 text-orange-800',
+      DECISIONING_PENDING: 'bg-purple-100 text-purple-800',
+      PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-800',
+      REFERRED_TO_UNDERWRITER: 'bg-yellow-100 text-yellow-800',
+      PENDING_UNDERWRITING: 'bg-indigo-100 text-indigo-800',
+      APPROVED_PENDING_OFFER: 'bg-green-100 text-green-800',
+      DECLINED: 'bg-red-100 text-red-800',
+      OFFER_GENERATED: 'bg-indigo-100 text-indigo-800',
+      OFFER_SENT: 'bg-indigo-100 text-indigo-800',
+      AWAITING_SIGNATURE: 'bg-cyan-100 text-cyan-800',
+      PENDING_ESIGN: 'bg-cyan-100 text-cyan-800',
+      ESIGN_IN_PROGRESS: 'bg-cyan-100 text-cyan-800',
+      ESIGN_COMPLETED: 'bg-teal-100 text-teal-800',
+      SIGNED: 'bg-teal-100 text-teal-800',
+      BOOKING_PENDING: 'bg-amber-100 text-amber-800',
+      PENDING_BOOKING: 'bg-amber-100 text-amber-800',
+      BOOKING_IN_PROGRESS: 'bg-amber-100 text-amber-800',
+      BOOKED: 'bg-emerald-100 text-emerald-800',
+      CANCELLED: 'bg-gray-100 text-gray-800',
+      WITHDRAWN: 'bg-gray-100 text-gray-800',
+      EXPIRED: 'bg-gray-100 text-gray-800',
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -542,57 +580,82 @@ export default function ApplicationDetailPage() {
   // Check if current user is the creator of the application
   const isApplicationCreator = currentUser?.userId === application?.createdByUserId;
 
+  // Get the effective status (lomsStatus takes precedence)
+  const effectiveStatus = getEffectiveStatus(application);
+
   // Can submit: DRAFT status only (initial submission)
-  const canSubmit = application?.status === 'DRAFT' && isApplicationCreator;
+  const canSubmit = effectiveStatus === 'DRAFT' && isApplicationCreator;
 
   // Can assign: SUBMITTED status or RETURNED status (to reassign for review after corrections)
   const canAssign =
-    (application?.status === 'SUBMITTED' || application?.status === 'RETURNED') &&
-    isApplicationCreator;
+    (effectiveStatus === 'SUBMITTED' || effectiveStatus === 'RETURNED') && isApplicationCreator;
 
   // Check if current user is the assigned reviewer
   const isAssignedReviewer =
     application?.assignedToUserId && currentUser?.userId === application.assignedToUserId;
 
   // Only the assigned reviewer can approve/reject/return when under review
+  // Include both legacy and LOMS statuses for review states
   const isUnderReviewStatus = [
     'UNDER_REVIEW',
     'CREDIT_CHECK',
     'UNDERWRITING',
     'MANAGER_APPROVAL',
-  ].includes(application?.status || '');
+    // LOMS statuses that indicate review in progress
+    'KYC_PENDING',
+    'DECISIONING_PENDING',
+    'PENDING_CREDIT_CHECK',
+    'REFERRED_TO_UNDERWRITER',
+    'PENDING_UNDERWRITING',
+  ].includes(effectiveStatus);
 
   // Only assigned reviewer can approve
   const canApprove = isUnderReviewStatus && isAssignedReviewer;
 
   // Application creator (RM) can cancel DRAFT applications
-  const canCancel = application?.status === 'DRAFT' && isApplicationCreator;
+  const canCancel = effectiveStatus === 'DRAFT' && isApplicationCreator;
 
   // Application creator (RM) can withdraw non-draft applications before final decision
   const isNotFinalStatus = ![
     'APPROVED',
+    'APPROVED_PENDING_OFFER',
     'REJECTED',
+    'DECLINED',
     'WITHDRAWN',
     'CANCELLED',
     'DISBURSED',
-  ].includes(application?.status || '');
-  const canWithdraw = isNotFinalStatus && isApplicationCreator && application?.status !== 'DRAFT';
+    'BOOKED',
+    'EXPIRED',
+  ].includes(effectiveStatus);
+  const canWithdraw = isNotFinalStatus && isApplicationCreator && effectiveStatus !== 'DRAFT';
 
   // Reviewer's reject (from review perspective)
   const canReviewerReject = isUnderReviewStatus && isAssignedReviewer;
 
   const canReturn =
-    ['UNDER_REVIEW', 'CREDIT_CHECK', 'UNDERWRITING'].includes(application?.status || '') &&
-    isAssignedReviewer;
+    [
+      'UNDER_REVIEW',
+      'CREDIT_CHECK',
+      'UNDERWRITING',
+      'REFERRED_TO_UNDERWRITER',
+      'PENDING_UNDERWRITING',
+      'KYC_PENDING',
+    ].includes(effectiveStatus) && isAssignedReviewer;
 
   // Application creator can add notes while under review (to send info to reviewer)
   const canAddNote = isUnderReviewStatus && isApplicationCreator;
 
   // Application creator can edit the application when in DRAFT, RETURNED, or even UNDER_REVIEW
   const canEdit =
-    ['DRAFT', 'RETURNED', 'UNDER_REVIEW', 'CREDIT_CHECK', 'UNDERWRITING', 'SUBMITTED'].includes(
-      application?.status || ''
-    ) && isApplicationCreator;
+    [
+      'DRAFT',
+      'RETURNED',
+      'UNDER_REVIEW',
+      'CREDIT_CHECK',
+      'UNDERWRITING',
+      'SUBMITTED',
+      'KYC_PENDING',
+    ].includes(effectiveStatus) && isApplicationCreator;
 
   if (loading) {
     return (
@@ -639,9 +702,9 @@ export default function ApplicationDetailPage() {
           </div>
           <div>
             <span
-              className={`px-4 py-2 rounded-full text-sm font-semibold ${getStatusColor(application.status)}`}
+              className={`px-4 py-2 rounded-full text-sm font-semibold ${getStatusColor(effectiveStatus)}`}
             >
-              {application.status.replace(/_/g, ' ')}
+              {formatStatus(effectiveStatus)}
             </span>
           </div>
         </div>
@@ -678,7 +741,22 @@ export default function ApplicationDetailPage() {
         </div>
       )}
 
-      {/* Actions */}
+      {/* LOMS Workflow Panel - Loan Origination Workflow */}
+      <div className="mb-6">
+        <ApplicationWorkflowPanel
+          applicationId={applicationId as string}
+          applicationStatus={effectiveStatus}
+          customerId={application.customerId}
+          currentUserId={currentUser?.userId || ''}
+          isApplicationCreator={isApplicationCreator}
+          assignedToUserId={application.assignedToUserId}
+          approvedAmount={application.approvedAmount || application.requestedAmount || 0}
+          currency="EUR"
+          onStatusChange={fetchApplication}
+        />
+      </div>
+
+      {/* Legacy Actions */}
       {(canSubmit ||
         canAssign ||
         canApprove ||
@@ -798,7 +876,7 @@ export default function ApplicationDetailPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Status</p>
-                <p className="text-gray-900 font-medium">{application.status.replace(/_/g, ' ')}</p>
+                <p className="text-gray-900 font-medium">{formatStatus(effectiveStatus)}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Channel</p>
@@ -1096,19 +1174,31 @@ export default function ApplicationDetailPage() {
                 </div>
               )}
 
-              {application.decisionMadeAt && application.status === 'APPROVED' && (
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-green-600 mt-2"></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Approved</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(application.decisionMadeAt).toLocaleString()}
-                    </p>
+              {application.decisionMadeAt &&
+                [
+                  'APPROVED',
+                  'APPROVED_PENDING_OFFER',
+                  'OFFER_GENERATED',
+                  'PENDING_ESIGN',
+                  'AWAITING_SIGNATURE',
+                  'ESIGN_COMPLETED',
+                  'SIGNED',
+                  'PENDING_BOOKING',
+                  'BOOKING_PENDING',
+                  'BOOKED',
+                ].includes(effectiveStatus) && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 rounded-full bg-green-600 mt-2"></div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Approved</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(application.decisionMadeAt).toLocaleString()}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {application.decisionMadeAt && application.status === 'REJECTED' && (
+              {application.decisionMadeAt && ['REJECTED', 'DECLINED'].includes(effectiveStatus) && (
                 <div className="flex items-start gap-3">
                   <div className="w-2 h-2 rounded-full bg-red-600 mt-2"></div>
                   <div>

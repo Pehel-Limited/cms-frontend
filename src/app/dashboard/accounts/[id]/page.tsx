@@ -405,12 +405,10 @@ export default function AccountDetailPage() {
                     </p>
                   </div>
                 )}
-                {account.closedDate && (
+                {account.closedAt && (
                   <div>
                     <p className="text-sm text-gray-500">Closed Date</p>
-                    <p className="font-medium">
-                      {new Date(account.closedDate).toLocaleDateString()}
-                    </p>
+                    <p className="font-medium">{new Date(account.closedAt).toLocaleDateString()}</p>
                   </div>
                 )}
                 {account.termMonths && (

@@ -33,10 +33,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // Helper to check if user is a reviewer (Credit Analyst, Credit Officer, Underwriter)
-const isReviewerRole = (roles: string[] | undefined): boolean => {
+const isReviewerRole = (roles: (string | { roleType?: string })[] | undefined): boolean => {
   if (!roles) return false;
   const reviewerRoles = ['CREDIT_ANALYST', 'CREDIT_OFFICER', 'UNDERWRITER', 'RISK_MANAGER'];
-  return roles.some(role => reviewerRoles.includes(role));
+  return roles.some(role => {
+    // Handle both string roles and Role objects
+    const roleType = typeof role === 'string' ? role : role.roleType;
+    return roleType && reviewerRoles.includes(roleType.toUpperCase());
+  });
 };
 
 export default function ApplicationsPage() {

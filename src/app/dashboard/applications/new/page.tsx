@@ -43,8 +43,7 @@ export default function NewApplicationPage() {
         setSelectedProduct(product);
         if (product.defaultLoanAmount) setLoanAmount(product.defaultLoanAmount.toString());
         if (product.defaultTermMonths) setLoanTerm(product.defaultTermMonths.toString());
-        if (product.defaultInterestRate)
-          setInterestRate((product.defaultInterestRate * 100).toString());
+        if (product.defaultInterestRate) setInterestRate(product.defaultInterestRate.toString());
         // Automatically move to step 2 (customer selection) when product is preselected
         setStep(2);
       }
@@ -133,7 +132,7 @@ export default function NewApplicationPage() {
         customerId: selectedCustomer.customerId,
         requestedAmount: parseFloat(loanAmount),
         requestedTermMonths: parseInt(loanTerm),
-        requestedInterestRate: parseFloat(interestRate) / 100,
+        requestedInterestRate: parseFloat(interestRate),
         loanPurpose,
         loanPurposeDescription: notes || undefined,
         channel: 'RELATIONSHIP_MANAGER',
@@ -165,7 +164,7 @@ export default function NewApplicationPage() {
               if (product.defaultLoanAmount) setLoanAmount(product.defaultLoanAmount.toString());
               if (product.defaultTermMonths) setLoanTerm(product.defaultTermMonths.toString());
               if (product.defaultInterestRate)
-                setInterestRate((product.defaultInterestRate * 100).toString());
+                setInterestRate(product.defaultInterestRate.toString());
               // If customer is already selected (pre-selected from customer page), go directly to step 3
               // Otherwise go to step 2 to select customer
               setStep(selectedCustomer ? 3 : 2);
@@ -505,8 +504,8 @@ export default function NewApplicationPage() {
             />
             {selectedProduct && (
               <p className="mt-1 text-xs text-gray-500">
-                Range: {(selectedProduct.minInterestRate * 100).toFixed(2)}% -{' '}
-                {(selectedProduct.maxInterestRate * 100).toFixed(2)}%
+                Range: {selectedProduct.minInterestRate?.toFixed(2)}% -{' '}
+                {selectedProduct.maxInterestRate?.toFixed(2)}%
               </p>
             )}
           </div>

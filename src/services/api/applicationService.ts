@@ -47,6 +47,7 @@ export interface ApplicationResponse {
   productId: string;
   applicationNumber: string;
   status: string;
+  lomsStatus?: string; // LOMS workflow status (takes precedence over status when present)
   channel: string;
   currentStage: string;
 

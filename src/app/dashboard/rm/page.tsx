@@ -41,9 +41,9 @@ export default function DashboardPage() {
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IE', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'EUR',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
@@ -268,6 +268,9 @@ export default function DashboardPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Priority
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Application
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -294,20 +297,24 @@ export default function DashboardPage() {
                 {worklist.map(item => (
                   <tr key={item.applicationId} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <a
-                        href={`/dashboard/applications/${item.applicationId}`}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer hover:underline"
-                      >
-                        {item.applicationNumber}
-                      </a>
-                      <div className="text-xs text-gray-500">{item.productCode}</div>
-                      {item.slaBreachDays !== null && item.slaBreachDays > 0 && (
-                        <div className="mt-1">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                            SLA Breach: +{item.slaBreachDays}d
-                          </span>
+                      <div className="flex items-center">
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${item.slaBreachDays !== null && item.slaBreachDays > 0 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}
+                        >
+                          {item.priorityScore}
                         </div>
-                      )}
+                        {item.slaBreachDays !== null && item.slaBreachDays > 0 && (
+                          <span className="ml-2 text-xs font-medium text-red-600">
+                            SLA +{item.slaBreachDays}d
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer">
+                        {item.applicationNumber}
+                      </div>
+                      <div className="text-xs text-gray-500">{item.productCode}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{item.customerName}</div>
@@ -369,6 +376,55 @@ export default function DashboardPage() {
               <p className="mt-2">No applications in your worklist</p>
             </div>
           )}
+        </div>
+
+        {/* Pipeline Funnel */}
+        <div className="bg-white rounded-lg shadow mb-8">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-bold text-gray-900">Pipeline by Stage</h2>
+            <p className="text-sm text-gray-600 mt-1">Application funnel and bottleneck analysis</p>
+          </div>
+          <div className="p-6">
+            <div className="space-y-4">
+              {pipeline.map(stage => (
+                <div key={stage.stage} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex-1">
+                      <h3 className="text-sm font-medium text-gray-900">
+                        {stage.stage.replace(/_/g, ' ')}
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        Avg: {stage.avgDaysInStage.toFixed(1)}d | P90:{' '}
+                        {stage.p90DaysInStage.toFixed(1)}d
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900">{stage.applicationCount}</p>
+                      <p className="text-sm text-gray-600">{formatCurrency(stage.totalValue)}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 text-xs text-gray-600 mt-2">
+                    {stage.kycPendingCount > 0 && <span>KYC: {stage.kycPendingCount}</span>}
+                    {stage.amlPendingCount > 0 && <span>AML: {stage.amlPendingCount}</span>}
+                    {stage.docsPendingCount > 0 && <span>Docs: {stage.docsPendingCount}</span>}
+                    {stage.creditCheckPendingCount > 0 && (
+                      <span>Credit: {stage.creditCheckPendingCount}</span>
+                    )}
+                  </div>
+                  <div className="mt-3">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full"
+                        style={{
+                          width: `${Math.min(100, (stage.applicationCount / Math.max(...pipeline.map(p => p.applicationCount))) * 100)}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

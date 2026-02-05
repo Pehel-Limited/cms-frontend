@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   dashboardService,
   DashboardKpis,
@@ -10,6 +11,7 @@ import {
 import config from '@/config';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [worklist, setWorklist] = useState<WorklistItem[]>([]);
   const [pipeline, setPipeline] = useState<PipelineStage[]>([]);
@@ -68,25 +70,6 @@ export default function DashboardPage() {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const getActionButtonColor = (action: string) => {
-    const colors: Record<string, string> = {
-      REQUEST_DOCUMENTS: 'bg-blue-600 hover:bg-blue-700',
-      COMPLETE_KYC: 'bg-yellow-600 hover:bg-yellow-700',
-      ASSIGN_TO_UNDERWRITER: 'bg-purple-600 hover:bg-purple-700',
-      SEND_OFFER_LETTER: 'bg-green-600 hover:bg-green-700',
-      PROCESS_BOOKING: 'bg-indigo-600 hover:bg-indigo-700',
-      FOLLOW_UP: 'bg-gray-600 hover:bg-gray-700',
-    };
-    return colors[action] || 'bg-gray-600 hover:bg-gray-700';
-  };
-
-  const formatAction = (action: string) => {
-    return action
-      .replace(/_/g, ' ')
-      .toLowerCase()
-      .replace(/\b\w/g, l => l.toUpperCase());
-  };
-
   if (loading && !kpis) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -105,7 +88,7 @@ export default function DashboardPage() {
 
         {/* KPI Tiles */}
         {kpis && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
               <div className="flex items-center justify-between">
                 <div>
@@ -158,7 +141,10 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500">
+            <div
+              onClick={() => router.push('/dashboard/applications')}
+              className="bg-white rounded-lg shadow p-6 border-l-4 border-yellow-500 cursor-pointer hover:shadow-lg transition-shadow"
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Needs Your Action</p>
@@ -177,33 +163,6 @@ export default function DashboardPage() {
                       strokeLinejoin="round"
                       strokeWidth={2}
                       d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                    />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Conversion Rate (30d)</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">
-                    {kpis.conversionRate30d.toFixed(1)}%
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">Submitted → Booked</p>
-                </div>
-                <div className="p-3 bg-green-100 rounded-full">
-                  <svg
-                    className="w-8 h-8 text-green-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
                 </div>
@@ -248,10 +207,19 @@ export default function DashboardPage() {
                 >
                   <option value="">All Statuses</option>
                   <option value="SUBMITTED">Submitted</option>
-                  <option value="IN_REVIEW">In Review</option>
-                  <option value="UNDERWRITING">Underwriting</option>
+                  <option value="DOCUMENTS_PENDING">Documents Pending</option>
+                  <option value="DOCUMENTS_RECEIVED">Documents Received</option>
+                  <option value="CREDIT_CHECK_INITIATED">Credit Check Initiated</option>
+                  <option value="REFERRED_TO_UNDERWRITER">Referred to Underwriter</option>
+                  <option value="UNDER_UNDERWRITING">Under Underwriting</option>
+                  <option value="UNDERWRITING_APPROVED">Underwriting Approved</option>
                   <option value="APPROVED">Approved</option>
-                  <option value="APPROVED_PENDING_OFFER">Pending Offer</option>
+                  <option value="CONDITIONALLY_APPROVED">Conditionally Approved</option>
+                  <option value="OFFER_GENERATED">Offer Generated</option>
+                  <option value="PENDING_ESIGN">Pending E-Sign</option>
+                  <option value="AWAITING_BOOKING">Awaiting Booking</option>
+                  <option value="BOOKED">Booked</option>
+                  <option value="DECLINED">Declined</option>
                 </select>
                 <button
                   onClick={loadDashboardData}
@@ -282,24 +250,29 @@ export default function DashboardPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Aging
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Blocker
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Action
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {worklist.map(item => (
                   <tr key={item.applicationId} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <a
-                        href={`/dashboard/applications/${item.applicationId}`}
-                        className="text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer hover:underline"
-                      >
-                        {item.applicationNumber}
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/dashboard/applications/${item.applicationId}`}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer hover:underline"
+                        >
+                          {item.applicationNumber}
+                        </a>
+                        {item.createdByMe ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                            My App
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                            Assigned
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-gray-500">{item.productCode}</div>
                       {item.slaBreachDays !== null && item.slaBreachDays > 0 && (
                         <div className="mt-1">
@@ -329,21 +302,6 @@ export default function DashboardPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div>{item.daysSinceSubmitted}d total</div>
                       <div className="text-xs">{item.daysInCurrentStage}d in stage</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {item.blockerReason.replace(/_/g, ' ')}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Docs: {item.documentsSubmittedCount}/{item.documentsRequiredCount}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        className={`px-3 py-1 text-xs font-medium text-white rounded ${getActionButtonColor(item.nextAction)}`}
-                      >
-                        {formatAction(item.nextAction)}
-                      </button>
                     </td>
                   </tr>
                 ))}

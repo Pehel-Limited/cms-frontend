@@ -57,19 +57,11 @@ class UserService {
   }
 
   async getUnderwriters(search?: string): Promise<User[]> {
-    // Fetch both Credit Analysts and Credit Officers (they are the underwriters)
-    const [analysts, officers] = await Promise.all([
-      this.getUsersByRole('CREDIT_ANALYST', search).catch(() => []),
-      this.getUsersByRole('CREDIT_OFFICER', search).catch(() => []),
-    ]);
-
-    // Combine and deduplicate by userId
-    const combined = [...analysts, ...officers];
-    const uniqueUsers = combined.filter(
-      (user, index, self) => index === self.findIndex(u => u.userId === user.userId)
+    // Call the backend endpoint that filters by permission
+    const response = await apiClient.get<UsersResponse>(
+      `/api/v1/users/underwriters${search ? `?search=${encodeURIComponent(search)}` : ''}`
     );
-
-    return uniqueUsers;
+    return response.content;
   }
 }
 

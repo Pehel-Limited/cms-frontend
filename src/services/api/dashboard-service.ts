@@ -44,6 +44,7 @@ export interface WorklistItem {
   updatedAt: string;
   bankId: string;
   rmUserId: string;
+  createdByMe: boolean;
 }
 
 export interface PipelineStage {

@@ -384,9 +384,9 @@ class ProductService {
 
   formatInterestRate(minRate: number, maxRate?: number): string {
     if (maxRate && minRate !== maxRate) {
-      return `${(minRate * 100).toFixed(2)}% - ${(maxRate * 100).toFixed(2)}%`;
+      return `${minRate.toFixed(2)}% - ${maxRate.toFixed(2)}%`;
     }
-    return `${(minRate * 100).toFixed(2)}%`;
+    return `${minRate.toFixed(2)}%`;
   }
 
   formatLoanAmount(minAmount: number, maxAmount?: number): string {

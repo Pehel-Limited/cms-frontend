@@ -8,7 +8,30 @@ import {
   WorklistItem,
   PipelineStage,
 } from '@/services/api/dashboard-service';
+import {
+  SortableHeader,
+  SortConfig,
+  handleSortToggle,
+  sortData,
+} from '@/components/SortableHeader';
 import config from '@/config';
+
+type TimeframeFilter =
+  | 'today'
+  | 'this_week'
+  | 'this_month'
+  | 'last_30_days'
+  | 'last_90_days'
+  | 'all';
+
+const TIMEFRAME_OPTIONS: { value: TimeframeFilter; label: string }[] = [
+  { value: 'today', label: 'Today' },
+  { value: 'this_week', label: 'This Week' },
+  { value: 'this_month', label: 'This Month' },
+  { value: 'last_30_days', label: 'Last 30 Days' },
+  { value: 'last_90_days', label: 'Last 90 Days' },
+  { value: 'all', label: 'All Time' },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -17,12 +40,45 @@ export default function DashboardPage() {
   const [pipeline, setPipeline] = useState<PipelineStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<string | undefined>(undefined);
+  const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeFilter>('all');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: '', direction: null });
 
   const bankId = config.bank.defaultBankId;
 
   useEffect(() => {
     loadDashboardData();
-  }, [selectedFilter]);
+  }, [selectedFilter, selectedTimeframe]);
+
+  const getTimeframeDate = (timeframe: TimeframeFilter): Date | null => {
+    const now = new Date();
+    switch (timeframe) {
+      case 'today':
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      case 'this_week': {
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        return new Date(now.getFullYear(), now.getMonth(), diff);
+      }
+      case 'this_month':
+        return new Date(now.getFullYear(), now.getMonth(), 1);
+      case 'last_30_days':
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      case 'last_90_days':
+        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      case 'all':
+      default:
+        return null;
+    }
+  };
+
+  const filterByTimeframe = (items: WorklistItem[]): WorklistItem[] => {
+    const cutoffDate = getTimeframeDate(selectedTimeframe);
+    if (!cutoffDate) return items;
+    return items.filter(item => {
+      const itemDate = new Date(item.submittedAt || item.updatedAt);
+      return itemDate >= cutoffDate;
+    });
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -33,7 +89,7 @@ export default function DashboardPage() {
         dashboardService.getPipeline(bankId),
       ]);
       setKpis(kpisData);
-      setWorklist(worklistData);
+      setWorklist(filterByTimeframe(worklistData));
       setPipeline(pipelineData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -51,10 +107,6 @@ export default function DashboardPage() {
     }).format(value);
   };
 
-  const formatNumber = (value: number) => {
-    return new Intl.NumberFormat('en-GB').format(value);
-  };
-
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       DRAFT: 'bg-gray-100 text-gray-800',
@@ -69,6 +121,12 @@ export default function DashboardPage() {
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
+
+  const handleSort = (field: string) => {
+    setSortConfig(handleSortToggle(field, sortConfig));
+  };
+
+  const sortedWorklist = sortData(worklist, sortConfig);
 
   if (loading && !kpis) {
     return (
@@ -194,12 +252,32 @@ export default function DashboardPage() {
         {/* Worklist Section */}
         <div className="bg-white rounded-lg shadow mb-8">
           <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">My Worklist</h2>
-                <p className="text-sm text-gray-600 mt-1">Prioritized by urgency and SLA</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Prioritized by urgency and SLA
+                  {worklist.length > 0 && (
+                    <span className="ml-1">
+                      · {worklist.length} application{worklist.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {/* Timeframe Filter */}
+                <select
+                  value={selectedTimeframe}
+                  onChange={e => setSelectedTimeframe(e.target.value as TimeframeFilter)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {TIMEFRAME_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {/* Status Filter */}
                 <select
                   value={selectedFilter || ''}
                   onChange={e => setSelectedFilter(e.target.value || undefined)}
@@ -222,6 +300,12 @@ export default function DashboardPage() {
                   <option value="DECLINED">Declined</option>
                 </select>
                 <button
+                  onClick={() => router.push('/dashboard/applications')}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                >
+                  View All Applications →
+                </button>
+                <button
                   onClick={loadDashboardData}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
                 >
@@ -235,25 +319,46 @@ export default function DashboardPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Application
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Product / Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aging
-                  </th>
+                  <SortableHeader
+                    label="Application"
+                    field="applicationNumber"
+                    currentSort={sortConfig}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Customer"
+                    field="customerName"
+                    currentSort={sortConfig}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Product / Amount"
+                    field="requestedAmount"
+                    currentSort={sortConfig}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Status"
+                    field="status"
+                    currentSort={sortConfig}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Action Required"
+                    field="blockerReason"
+                    currentSort={sortConfig}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Timeline"
+                    field="daysInCurrentStage"
+                    currentSort={sortConfig}
+                    onSort={handleSort}
+                  />
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {worklist.map(item => (
+                {sortedWorklist.map(item => (
                   <tr key={item.applicationId} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -299,9 +404,61 @@ export default function DashboardPage() {
                         {item.status.replace(/_/g, ' ')}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div>{item.daysSinceSubmitted}d total</div>
-                      <div className="text-xs">{item.daysInCurrentStage}d in stage</div>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {item.blockerReason && item.blockerReason !== 'IN_PROGRESS' && (
+                        <div className="mb-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            {item.blockerReason.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                      )}
+                      <div
+                        className="text-sm text-blue-600 font-medium flex items-center gap-1 cursor-pointer hover:underline"
+                        onClick={() => router.push(`/dashboard/applications/${item.applicationId}`)}
+                      >
+                        <span>{item.nextAction?.replace(/_/g, ' ')}</span>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 7l5 5m0 0l-5 5m5-5H6"
+                          />
+                        </svg>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-sm font-bold ${item.daysInCurrentStage > 5 ? 'text-orange-600' : 'text-gray-900'}`}
+                          >
+                            {item.daysInCurrentStage}d
+                          </span>
+                          <span className="text-xs text-gray-500">in status</span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {item.daysSinceSubmitted}d total age
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ))}

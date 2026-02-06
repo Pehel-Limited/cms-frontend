@@ -3,11 +3,18 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { customerService, type Customer } from '@/services/api/customerService';
+import {
+  SortableHeader,
+  SortConfig,
+  handleSortToggle,
+  sortData,
+} from '@/components/SortableHeader';
 
 export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: '', direction: null });
 
   useEffect(() => {
     loadCustomers();
@@ -36,6 +43,12 @@ export default function CustomersPage() {
 
     return name.includes(term) || email.includes(term) || phone.includes(term);
   });
+
+  const onSort = (field: string) => {
+    setSortConfig(handleSortToggle(field, sortConfig));
+  };
+
+  const sortedCustomers = sortData(filteredCustomers, sortConfig);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -144,28 +157,43 @@ export default function CustomersPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Customer
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Contact
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Risk Rating
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
+                      <SortableHeader
+                        label="Customer"
+                        field="firstName"
+                        currentSort={sortConfig}
+                        onSort={onSort}
+                      />
+                      <SortableHeader
+                        label="Type"
+                        field="customerType"
+                        currentSort={sortConfig}
+                        onSort={onSort}
+                      />
+                      <SortableHeader
+                        label="Contact"
+                        field="primaryEmail"
+                        currentSort={sortConfig}
+                        onSort={onSort}
+                      />
+                      <SortableHeader
+                        label="Risk Rating"
+                        field="riskRating"
+                        currentSort={sortConfig}
+                        onSort={onSort}
+                      />
+                      <SortableHeader
+                        label="Status"
+                        field="customerStatus"
+                        currentSort={sortConfig}
+                        onSort={onSort}
+                      />
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredCustomers.map(customer => (
+                    {sortedCustomers.map(customer => (
                       <tr key={customer.customerId} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">

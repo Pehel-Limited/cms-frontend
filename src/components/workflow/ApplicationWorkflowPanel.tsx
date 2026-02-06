@@ -13,6 +13,7 @@ import {
   LoanBooking,
 } from '@/types/loms';
 import { lomsService } from '@/services/api/lomsService';
+import { applicationService } from '@/services/api/applicationService';
 import { WorkflowStepper } from './WorkflowStepper';
 import { WorkflowActions, WorkflowAction } from './WorkflowActions';
 import { OfferCard } from './OfferCard';
@@ -28,6 +29,7 @@ interface ApplicationWorkflowPanelProps {
   assignedToUserId?: string;
   approvedAmount?: number;
   currency?: string;
+  kycVerified?: boolean;
   onStatusChange?: () => void;
 }
 
@@ -44,6 +46,7 @@ export function ApplicationWorkflowPanel({
   assignedToUserId,
   approvedAmount = 0,
   currency = 'EUR',
+  kycVerified = false,
   onStatusChange,
 }: ApplicationWorkflowPanelProps) {
   const [statusInfo, setStatusInfo] = useState<StatusInfo | null>(null);
@@ -219,6 +222,11 @@ export function ApplicationWorkflowPanel({
           setActiveTab('history');
           break;
 
+        case 'COMPLETE_KYC':
+          await applicationService.completeKyc(applicationId);
+          toast.success('KYC Completed Successfully');
+          break;
+
         default:
           toast.info(`Action ${action} not yet implemented`);
       }
@@ -318,6 +326,7 @@ export function ApplicationWorkflowPanel({
               canWithdraw={statusInfo.canWithdraw}
               onAction={handleAction}
               loading={loading}
+              kycVerified={kycVerified}
             />
           )}
 

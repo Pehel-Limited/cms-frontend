@@ -752,6 +752,7 @@ export default function ApplicationDetailPage() {
           assignedToUserId={application.assignedToUserId}
           approvedAmount={application.approvedAmount || application.requestedAmount || 0}
           currency="EUR"
+          kycVerified={application.kycCompleted}
           onStatusChange={fetchApplication}
         />
       </div>

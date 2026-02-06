@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAppSelector } from '@/store';
 import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
+import {
+  SortableHeader,
+  SortConfig,
+  handleSortToggle,
+  sortData,
+} from '@/components/SortableHeader';
 import config from '@/config';
 
 const APPLICATION_STATUSES = [
@@ -57,6 +63,7 @@ export default function ApplicationsPage() {
   const [totalElements, setTotalElements] = useState(0);
   const [isReviewer, setIsReviewer] = useState(false);
   const [filterCustomerId, setFilterCustomerId] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: '', direction: null });
 
   // Check for customerId in URL params
   useEffect(() => {
@@ -175,6 +182,12 @@ export default function ApplicationsPage() {
     });
   };
 
+  const onSort = (field: string) => {
+    setSortConfig(handleSortToggle(field, sortConfig));
+  };
+
+  const sortedApplications = sortData(applications, sortConfig);
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -264,28 +277,43 @@ export default function ApplicationsPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Application
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Submitted
-                </th>
+                <SortableHeader
+                  label="Application"
+                  field="applicationNumber"
+                  currentSort={sortConfig}
+                  onSort={onSort}
+                />
+                <SortableHeader
+                  label="Customer"
+                  field="customer.firstName"
+                  currentSort={sortConfig}
+                  onSort={onSort}
+                />
+                <SortableHeader
+                  label="Amount"
+                  field="requestedAmount"
+                  currentSort={sortConfig}
+                  onSort={onSort}
+                />
+                <SortableHeader
+                  label="Status"
+                  field="status"
+                  currentSort={sortConfig}
+                  onSort={onSort}
+                />
+                <SortableHeader
+                  label="Submitted"
+                  field="submittedAt"
+                  currentSort={sortConfig}
+                  onSort={onSort}
+                />
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {applications.map(app => (
+              {sortedApplications.map(app => (
                 <tr key={app.applicationId} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">

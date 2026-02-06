@@ -13,6 +13,7 @@ interface WorkflowActionsProps {
   canWithdraw: boolean;
   onAction: (action: WorkflowAction) => void;
   loading?: boolean;
+  kycVerified?: boolean;
 }
 
 export type WorkflowAction =
@@ -30,7 +31,8 @@ export type WorkflowAction =
   | 'OVERRIDE_DECISION'
   | 'VIEW_OFFER'
   | 'VIEW_DOCUMENTS'
-  | 'VIEW_AUDIT';
+  | 'VIEW_AUDIT'
+  | 'COMPLETE_KYC';
 
 interface ActionConfig {
   action: WorkflowAction;
@@ -49,9 +51,27 @@ function getAvailableActions(
   status: LomsApplicationStatus,
   validTransitions: LomsApplicationStatus[],
   isAssignedReviewer: boolean,
-  isApplicationCreator: boolean
+  isApplicationCreator: boolean,
+  kycVerified: boolean = true
 ): ActionConfig[] {
   const actions: ActionConfig[] = [];
+
+  // Add KYC action if not verified and not in draft
+  if (
+    !kycVerified &&
+    status !== 'DRAFT' &&
+    status !== 'DECLINED' &&
+    status !== 'CANCELLED' &&
+    status !== 'WITHDRAWN'
+  ) {
+    actions.push({
+      action: 'COMPLETE_KYC',
+      label: 'Complete KYC',
+      description: 'Mark KYC as verified',
+      icon: '🛡️',
+      variant: 'primary',
+    });
+  }
 
   switch (status) {
     case 'DRAFT':
@@ -199,12 +219,14 @@ export function WorkflowActions({
   canWithdraw,
   onAction,
   loading = false,
+  kycVerified = true,
 }: WorkflowActionsProps) {
   const actions = getAvailableActions(
     currentStatus,
     validTransitions,
     isAssignedReviewer,
-    isApplicationCreator
+    isApplicationCreator,
+    kycVerified
   );
 
   // Filter actions based on user role

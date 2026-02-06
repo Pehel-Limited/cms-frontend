@@ -363,6 +363,13 @@ export class ApplicationService {
   }
 
   /**
+   * Complete KYC for application
+   */
+  async completeKyc(id: string): Promise<ApplicationResponse> {
+    return this.client.post<ApplicationResponse>(`/api/admin/applications/${id}/kyc`, {});
+  }
+
+  /**
    * Add note to application
    */
   async addNote(id: string, data: { noteType: string; content: string }): Promise<void> {

@@ -16,6 +16,12 @@ import {
   accountCategoryColors,
   formatCurrency,
 } from '@/services/api/accountService';
+import {
+  SortableHeader,
+  SortConfig,
+  handleSortToggle,
+  sortData,
+} from '@/components/SortableHeader';
 import { useAppSelector } from '@/store';
 import config from '@/config';
 
@@ -53,6 +59,7 @@ export default function AccountsPage() {
   const [totalElements, setTotalElements] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: '', direction: null });
 
   const getBankId = useCallback((): string => {
     if (user?.bankId) return user.bankId;
@@ -142,6 +149,12 @@ export default function AccountsPage() {
       const roleType = typeof role === 'string' ? role : role.roleType;
       return roleType === 'BANK_SUPER_ADMIN' || roleType === 'Bank Super Admin';
     }) ?? false;
+
+  const onSort = (field: string) => {
+    setSortConfig(handleSortToggle(field, sortConfig));
+  };
+
+  const sortedAccounts = sortData(accounts, sortConfig);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -322,28 +335,43 @@ export default function AccountsPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Account
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Balance
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Primary Holder
-                    </th>
+                    <SortableHeader
+                      label="Account"
+                      field="accountName"
+                      currentSort={sortConfig}
+                      onSort={onSort}
+                    />
+                    <SortableHeader
+                      label="Type"
+                      field="accountCategory"
+                      currentSort={sortConfig}
+                      onSort={onSort}
+                    />
+                    <SortableHeader
+                      label="Balance"
+                      field="availableBalance"
+                      currentSort={sortConfig}
+                      onSort={onSort}
+                    />
+                    <SortableHeader
+                      label="Status"
+                      field="status"
+                      currentSort={sortConfig}
+                      onSort={onSort}
+                    />
+                    <SortableHeader
+                      label="Primary Holder"
+                      field="primaryOwnerName"
+                      currentSort={sortConfig}
+                      onSort={onSort}
+                    />
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {accounts.map(account => (
+                  {sortedAccounts.map(account => (
                     <tr key={account.accountId} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>

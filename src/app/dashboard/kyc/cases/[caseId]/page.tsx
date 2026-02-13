@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   kycService,
   type KycCase,
+  type Party,
   type PartyRelationship,
   type KycDocument,
   type ScreeningResult,
@@ -21,6 +22,7 @@ export default function KycCaseDetailPage() {
   const caseId = params.caseId as string;
 
   const [kycCase, setKycCase] = useState<KycCase | null>(null);
+  const [party, setParty] = useState<Party | null>(null);
   const [partyGraph, setPartyGraph] = useState<PartyRelationship[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -38,13 +40,17 @@ export default function KycCaseDetailPage() {
       const caseData = await kycService.getCase(caseId, true);
       setKycCase(caseData);
 
-      // Load party graph if party exists
+      // Load party and party graph if party exists
       if (caseData.partyId) {
         try {
-          const graph = await kycService.getPartyGraph(caseData.partyId);
+          const [partyData, graph] = await Promise.all([
+            kycService.getParty(caseData.partyId),
+            kycService.getPartyGraph(caseData.partyId),
+          ]);
+          setParty(partyData);
           setPartyGraph(graph);
         } catch (e) {
-          console.error('Failed to load party graph:', e);
+          console.error('Failed to load party data:', e);
         }
       }
     } catch (error) {
@@ -170,8 +176,18 @@ export default function KycCaseDetailPage() {
                 )}
               </div>
               <p className="text-sm text-gray-500 mt-1">
-                {kycCase.partyDisplayName} | {formatSegment(kycCase.customerSegment)} |{' '}
-                {formatCaseType(kycCase.caseType)}
+                {party?.customerId ? (
+                  <Link
+                    href={`/dashboard/customers/${party.customerId}`}
+                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                  >
+                    {kycCase.partyDisplayName}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-gray-700">{kycCase.partyDisplayName}</span>
+                )}
+                {' | '}
+                {formatSegment(kycCase.customerSegment)} | {formatCaseType(kycCase.caseType)}
               </p>
             </div>
             <div className="flex items-center gap-4">

@@ -731,20 +731,68 @@ export default function CustomerDetailPage() {
 
             {/* KYC/AML Status */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">KYC/AML Status</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">KYC/AML Status</h2>
+                <div className="flex gap-2">
+                  {(!customer.kycStatus ||
+                    customer.kycStatus === 'NOT_STARTED' ||
+                    customer.kycStatus === 'PENDING') && (
+                    <Link
+                      href={`/dashboard/kyc/cases/new?customerId=${customer.customerId}`}
+                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <svg
+                        className="w-4 h-4 mr-1.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 4v16m8-8H4"
+                        />
+                      </svg>
+                      Initiate KYC
+                    </Link>
+                  )}
+                  <Link
+                    href={`/dashboard/kyc/cases?customerId=${customer.customerId}`}
+                    className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4 mr-1.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                      />
+                    </svg>
+                    View KYC Cases
+                  </Link>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">KYC Status</label>
                   <span
                     className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full ${
-                      customer.kycStatus === 'APPROVED'
+                      customer.kycStatus === 'APPROVED' || customer.kycStatus === 'COMPLETED'
                         ? 'bg-green-100 text-green-800'
-                        : customer.kycStatus === 'PENDING'
+                        : customer.kycStatus === 'PENDING' || customer.kycStatus === 'IN_PROGRESS'
                           ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
+                          : customer.kycStatus === 'REJECTED' || customer.kycStatus === 'FAILED'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {customer.kycStatus || 'Not Verified'}
+                    {customer.kycStatus?.replace(/_/g, ' ') || 'Not Verified'}
                   </span>
                 </div>
                 <div>
@@ -757,14 +805,18 @@ export default function CustomerDetailPage() {
                   <label className="block text-sm font-medium text-gray-500 mb-1">AML Status</label>
                   <span
                     className={`inline-block px-2.5 py-1 text-xs font-medium rounded-full ${
-                      customer.amlCheckStatus === 'APPROVED'
+                      customer.amlCheckStatus === 'APPROVED' || customer.amlCheckStatus === 'CLEAR'
                         ? 'bg-green-100 text-green-800'
-                        : customer.amlCheckStatus === 'PENDING'
+                        : customer.amlCheckStatus === 'PENDING' ||
+                            customer.amlCheckStatus === 'IN_PROGRESS'
                           ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'
+                          : customer.amlCheckStatus === 'FLAGGED' ||
+                              customer.amlCheckStatus === 'FAILED'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-800'
                     }`}
                   >
-                    {customer.amlCheckStatus || 'Not Checked'}
+                    {customer.amlCheckStatus?.replace(/_/g, ' ') || 'Not Checked'}
                   </span>
                 </div>
                 <div>
@@ -774,6 +826,35 @@ export default function CustomerDetailPage() {
                   <p className="text-gray-900">{formatDate(customer.customerSince)}</p>
                 </div>
               </div>
+              {/* Quick guidance message */}
+              {(!customer.kycStatus || customer.kycStatus === 'NOT_STARTED') && (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <svg
+                      className="w-5 h-5 text-amber-600 mt-0.5 shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">
+                        KYC verification required
+                      </p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        This customer has not completed KYC/AML verification. Click &quot;Initiate
+                        KYC&quot; to start the verification process.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

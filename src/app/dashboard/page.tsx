@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   dashboardService,
   DashboardKpis,
   WorklistItem,
   PipelineStage,
 } from '@/services/api/dashboard-service';
+import { applicationService } from '@/services/api/applicationService';
 import {
   SortableHeader,
   SortConfig,
@@ -42,6 +44,7 @@ export default function DashboardPage() {
   const [selectedFilter, setSelectedFilter] = useState<string | undefined>(undefined);
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeFilter>('all');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: '', direction: null });
+  const [kycLoadingId, setKycLoadingId] = useState<string | null>(null);
 
   const bankId = config.bank.defaultBankId;
 
@@ -124,6 +127,19 @@ export default function DashboardPage() {
 
   const handleSort = (field: string) => {
     setSortConfig(handleSortToggle(field, sortConfig));
+  };
+
+  const handleCompleteKyc = async (applicationId: string) => {
+    try {
+      setKycLoadingId(applicationId);
+      await applicationService.completeKyc(applicationId);
+      await loadDashboardData();
+    } catch (error) {
+      console.error('Failed to complete KYC:', error);
+      alert('Failed to complete KYC. Please try again.');
+    } finally {
+      setKycLoadingId(null);
+    }
   };
 
   const sortedWorklist = sortData(worklist, sortConfig);
@@ -388,7 +404,12 @@ export default function DashboardPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{item.customerName}</div>
+                      <Link
+                        href={`/dashboard/customers/${item.customerId}`}
+                        className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {item.customerName}
+                      </Link>
                       <div className="text-xs text-gray-500">{item.customerNumber}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -425,25 +446,40 @@ export default function DashboardPage() {
                           </span>
                         </div>
                       )}
-                      <div
-                        className="text-sm text-blue-600 font-medium flex items-center gap-1 cursor-pointer hover:underline"
-                        onClick={() => router.push(`/dashboard/applications/${item.applicationId}`)}
-                      >
-                        <span>{item.nextAction?.replace(/_/g, ' ')}</span>
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                      {item.nextAction === 'COMPLETE_KYC' ? (
+                        <button
+                          onClick={() => handleCompleteKyc(item.applicationId)}
+                          disabled={kycLoadingId === item.applicationId}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 7l5 5m0 0l-5 5m5-5H6"
-                          />
-                        </svg>
-                      </div>
+                          {kycLoadingId === item.applicationId ? (
+                            <>
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Completing...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Complete KYC
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <div
+                          className="text-sm text-blue-600 font-medium flex items-center gap-1 cursor-pointer hover:underline"
+                          onClick={() => router.push(`/dashboard/applications/${item.applicationId}`)}
+                        >
+                          <span>{item.nextAction?.replace(/_/g, ' ')}</span>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex flex-col gap-1">

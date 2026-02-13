@@ -5,6 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { applicationService, CreateApplicationRequest } from '@/services/api/applicationService';
 import { productService, type Product } from '@/services/api/productService';
 import { customerService, type Customer } from '@/services/api/customerService';
+import ProductFormFields, {
+  type ProductFormData,
+  INITIAL_FORM_DATA,
+  getProductCategory,
+  getFieldLabels,
+} from './ProductFormFields';
 import config from '@/config';
 
 export default function NewApplicationPage() {
@@ -25,11 +31,11 @@ export default function NewApplicationPage() {
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
 
-  const [loanAmount, setLoanAmount] = useState('');
-  const [loanTerm, setLoanTerm] = useState('');
-  const [interestRate, setInterestRate] = useState('');
-  const [loanPurpose, setLoanPurpose] = useState('');
-  const [notes, setNotes] = useState('');
+  const [formData, setFormData] = useState<ProductFormData>(INITIAL_FORM_DATA);
+
+  const updateField = (field: keyof ProductFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
 
   useEffect(() => {
     loadProducts();
@@ -41,9 +47,12 @@ export default function NewApplicationPage() {
       const product = products.find(p => p.productId === preselectedProductId);
       if (product) {
         setSelectedProduct(product);
-        if (product.defaultLoanAmount) setLoanAmount(product.defaultLoanAmount.toString());
-        if (product.defaultTermMonths) setLoanTerm(product.defaultTermMonths.toString());
-        if (product.defaultInterestRate) setInterestRate(product.defaultInterestRate.toString());
+        setFormData(prev => ({
+          ...prev,
+          loanAmount: product.defaultLoanAmount?.toString() || '',
+          loanTerm: product.defaultTermMonths?.toString() || '',
+          interestRate: product.defaultInterestRate?.toString() || '',
+        }));
         // Automatically move to step 2 (customer selection) when product is preselected
         setStep(2);
       }
@@ -117,8 +126,40 @@ export default function NewApplicationPage() {
       return;
     }
 
-    if (!loanAmount || !loanTerm || !interestRate || !loanPurpose) {
+    const category = getProductCategory(selectedProduct.productType);
+    const labels = getFieldLabels(category);
+    const needsTerm = labels.termLabel !== '';
+
+    if (
+      !formData.loanAmount ||
+      (needsTerm && !formData.loanTerm) ||
+      !formData.interestRate ||
+      !formData.loanPurpose
+    ) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    // Category-specific validation
+    if (
+      category === 'MORTGAGE' &&
+      (!formData.propertyAddress ||
+        !formData.propertyCity ||
+        !formData.propertyType ||
+        !formData.propertyValue)
+    ) {
+      setError('Please fill in all required property details');
+      return;
+    }
+    if (
+      category === 'VEHICLE_FINANCE' &&
+      (!formData.vehicleMake ||
+        !formData.vehicleModel ||
+        !formData.vehicleYear ||
+        !formData.vehicleCondition ||
+        !formData.vehicleValue)
+    ) {
+      setError('Please fill in all required vehicle details');
       return;
     }
 
@@ -126,16 +167,45 @@ export default function NewApplicationPage() {
       setLoading(true);
       setError(null);
 
+      // Convert mortgage term from years to months
+      // For revolving products (credit card, overdraft) with no term field, default to 12 months (annual review)
+      const termMonths =
+        category === 'MORTGAGE'
+          ? parseInt(formData.loanTerm) * 12
+          : needsTerm
+            ? parseInt(formData.loanTerm)
+            : 12;
+
       const request: CreateApplicationRequest = {
         bankId,
         productId: selectedProduct.productId,
         customerId: selectedCustomer.customerId,
-        requestedAmount: parseFloat(loanAmount),
-        requestedTermMonths: parseInt(loanTerm),
-        requestedInterestRate: parseFloat(interestRate),
-        loanPurpose,
-        loanPurposeDescription: notes || undefined,
+        requestedAmount: parseFloat(formData.loanAmount),
+        requestedTermMonths: termMonths,
+        requestedInterestRate: parseFloat(formData.interestRate),
+        loanPurpose: formData.loanPurpose,
+        loanPurposeDescription: formData.notes || undefined,
         channel: 'RELATIONSHIP_MANAGER',
+        // Employment & income
+        ...(formData.employmentStatus && { employmentStatus: formData.employmentStatus }),
+        ...(formData.employerName && { employerName: formData.employerName }),
+        ...(formData.annualIncome && { statedAnnualIncome: parseFloat(formData.annualIncome) }),
+        // Property (mortgage)
+        ...(formData.propertyAddress && { propertyAddress: formData.propertyAddress }),
+        ...(formData.propertyCity && { propertyCity: formData.propertyCity }),
+        ...(formData.propertyState && { propertyState: formData.propertyState }),
+        ...(formData.propertyPostalCode && { propertyPostalCode: formData.propertyPostalCode }),
+        ...(formData.propertyType && { propertyType: formData.propertyType }),
+        ...(formData.propertyValue && { propertyValue: parseFloat(formData.propertyValue) }),
+        ...(formData.downPaymentAmount && {
+          downPaymentAmount: parseFloat(formData.downPaymentAmount),
+        }),
+        // Vehicle
+        ...(formData.vehicleMake && { vehicleMake: formData.vehicleMake }),
+        ...(formData.vehicleModel && { vehicleModel: formData.vehicleModel }),
+        ...(formData.vehicleYear && { vehicleYear: parseInt(formData.vehicleYear) }),
+        ...(formData.vehicleCondition && { vehicleCondition: formData.vehicleCondition }),
+        ...(formData.vehicleValue && { vehicleValue: parseFloat(formData.vehicleValue) }),
       };
 
       const application = await applicationService.createApplication(request);
@@ -161,10 +231,12 @@ export default function NewApplicationPage() {
             key={product.productId}
             onClick={() => {
               setSelectedProduct(product);
-              if (product.defaultLoanAmount) setLoanAmount(product.defaultLoanAmount.toString());
-              if (product.defaultTermMonths) setLoanTerm(product.defaultTermMonths.toString());
-              if (product.defaultInterestRate)
-                setInterestRate(product.defaultInterestRate.toString());
+              setFormData(prev => ({
+                ...INITIAL_FORM_DATA,
+                loanAmount: product.defaultLoanAmount?.toString() || '',
+                loanTerm: product.defaultTermMonths?.toString() || '',
+                interestRate: product.defaultInterestRate?.toString() || '',
+              }));
               // If customer is already selected (pre-selected from customer page), go directly to step 3
               // Otherwise go to step 2 to select customer
               setStep(selectedCustomer ? 3 : 2);
@@ -406,184 +478,111 @@ export default function NewApplicationPage() {
     </div>
   );
 
-  const renderApplicationForm = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Application Details</h2>
-          <p className="text-gray-600">Complete the loan application information</p>
-        </div>
-        <button onClick={() => setStep(2)} className="text-sm text-gray-600 hover:text-gray-900">
-          ← Back to Customer Selection
-        </button>
-      </div>
+  const renderApplicationForm = () => {
+    if (!selectedProduct) return null;
+    const category = getProductCategory(selectedProduct.productType);
+    const categoryLabel: Record<string, string> = {
+      TERM_LOAN: 'Loan',
+      MORTGAGE: 'Mortgage',
+      VEHICLE_FINANCE: 'Vehicle Finance',
+      CREDIT_CARD: 'Credit Card',
+      OVERDRAFT: 'Overdraft',
+      BNPL: 'Buy Now Pay Later',
+      INVOICE_ASSET_FINANCE: 'Finance Facility',
+    };
+    const label = categoryLabel[category] || 'Application';
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Product</h3>
-          <p className="text-lg font-semibold text-gray-900">{selectedProduct?.productName}</p>
-          <p className="text-sm text-gray-600 mt-1">{selectedProduct?.productCode}</p>
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{label} Application</h2>
+            <p className="text-gray-600">
+              Complete the {label.toLowerCase()} application for {selectedProduct.productName}
+            </p>
+          </div>
+          <button onClick={() => setStep(2)} className="text-sm text-gray-600 hover:text-gray-900">
+            ← Back to Customer Selection
+          </button>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Customer</h3>
-          <p className="text-lg font-semibold text-gray-900">
-            {selectedCustomer && customerService.getCustomerName(selectedCustomer)}
-          </p>
-          <p className="text-sm text-gray-600 mt-1">{selectedCustomer?.customerNumber}</p>
-        </div>
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Product</h3>
+            <p className="text-lg font-semibold text-gray-900">{selectedProduct?.productName}</p>
+            <p className="text-sm text-gray-600 mt-1">{selectedProduct?.productCode}</p>
+          </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex">
-              <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <div className="ml-3">
-                <p className="text-sm text-red-800">{error}</p>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Customer</h3>
+            <p className="text-lg font-semibold text-gray-900">
+              {selectedCustomer && customerService.getCustomerName(selectedCustomer)}
+            </p>
+            <p className="text-sm text-gray-600 mt-1">{selectedCustomer?.customerNumber}</p>
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex">
+                <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <div className="ml-3">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Loan Amount (€) *
-            </label>
-            <input
-              type="number"
-              value={loanAmount}
-              onChange={e => setLoanAmount(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Enter loan amount"
-            />
-            {selectedProduct && (
-              <p className="mt-1 text-xs text-gray-500">
-                Range: €{selectedProduct.minLoanAmount?.toLocaleString()} - €
-                {selectedProduct.maxLoanAmount?.toLocaleString()}
-              </p>
-            )}
-          </div>
+          <ProductFormFields product={selectedProduct} formData={formData} onChange={updateField} />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Loan Term (months) *
-            </label>
-            <input
-              type="number"
-              value={loanTerm}
-              onChange={e => setLoanTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Enter loan term"
-            />
-            {selectedProduct && (
-              <p className="mt-1 text-xs text-gray-500">
-                Range: {selectedProduct.minTermMonths} - {selectedProduct.maxTermMonths} months
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Interest Rate (%) *
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={interestRate}
-              onChange={e => setInterestRate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Enter interest rate"
-            />
-            {selectedProduct && (
-              <p className="mt-1 text-xs text-gray-500">
-                Range: {selectedProduct.minInterestRate?.toFixed(2)}% -{' '}
-                {selectedProduct.maxInterestRate?.toFixed(2)}%
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Loan Purpose *</label>
-            <select
-              value={loanPurpose}
-              onChange={e => setLoanPurpose(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+            <button
+              onClick={() => router.push('/dashboard/applications')}
+              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+              disabled={loading}
             >
-              <option value="">Select purpose</option>
-              <option value="HOME_PURCHASE">Home Purchase</option>
-              <option value="HOME_CONSTRUCTION">Home Construction</option>
-              <option value="HOME_RENOVATION">Home Renovation</option>
-              <option value="VEHICLE_PURCHASE">Vehicle Purchase</option>
-              <option value="BUSINESS_EXPANSION">Business Expansion</option>
-              <option value="WORKING_CAPITAL">Working Capital</option>
-              <option value="EQUIPMENT_PURCHASE">Equipment Purchase</option>
-              <option value="DEBT_CONSOLIDATION">Debt Consolidation</option>
-              <option value="EDUCATION">Education</option>
-              <option value="PERSONAL_USE">Personal Use</option>
-              <option value="OTHER">Other</option>
-            </select>
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            >
+              {loading && (
+                <svg
+                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              )}
+              {loading ? 'Creating...' : `Create ${label} Application`}
+            </button>
           </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Additional Notes</label>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            rows={4}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            placeholder="Enter any additional information about this application..."
-          />
-        </div>
-
-        <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-          <button
-            onClick={() => router.push('/dashboard/applications')}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-          >
-            {loading && (
-              <svg
-                className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-            )}
-            {loading ? 'Creating...' : 'Create Application'}
-          </button>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStep = () => {
     switch (step) {
@@ -604,7 +603,9 @@ export default function NewApplicationPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-primary-600">New Loan Application</h1>
+              <h1 className="text-2xl font-bold text-primary-600">
+                New {selectedProduct ? selectedProduct.productName : ''} Application
+              </h1>
               <div className="hidden sm:flex items-center space-x-2">
                 <span
                   className={`text-sm font-medium ${step >= 1 ? 'text-primary-600' : 'text-gray-400'}`}

@@ -60,7 +60,6 @@ export default function DashboardPage() {
       IN_REVIEW: 'bg-yellow-100 text-yellow-800',
       UNDERWRITING: 'bg-orange-100 text-orange-800',
       APPROVED: 'bg-green-100 text-green-800',
-      APPROVED_PENDING_OFFER: 'bg-green-100 text-green-800',
       AWAITING_BOOKING: 'bg-purple-100 text-purple-800',
       BOOKED: 'bg-green-200 text-green-900',
       DECLINED: 'bg-red-100 text-red-800',
@@ -251,7 +250,6 @@ export default function DashboardPage() {
                   <option value="IN_REVIEW">In Review</option>
                   <option value="UNDERWRITING">Underwriting</option>
                   <option value="APPROVED">Approved</option>
-                  <option value="APPROVED_PENDING_OFFER">Pending Offer</option>
                 </select>
                 <button
                   onClick={loadDashboardData}

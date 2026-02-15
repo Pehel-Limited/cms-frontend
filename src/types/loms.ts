@@ -6,27 +6,51 @@
  * Includes both UI display names and backend status names
  */
 export type LomsApplicationStatus =
+  // Initial States
   | 'DRAFT'
   | 'SUBMITTED'
-  | 'KYC_PENDING'
-  | 'DECISIONING_PENDING'
+  // KYC/AML Check States
+  | 'PENDING_KYC'
+  | 'KYC_APPROVED'
+  | 'KYC_REJECTED'
+  // Document Collection
+  | 'PENDING_DOCUMENTS'
+  | 'DOCUMENTS_RECEIVED'
+  // Credit Assessment States
   | 'PENDING_CREDIT_CHECK'
-  | 'REFERRED_TO_UNDERWRITER'
+  | 'CREDIT_APPROVED'
+  | 'CREDIT_DECLINED'
+  // Underwriting States
   | 'PENDING_UNDERWRITING'
-  | 'APPROVED_PENDING_OFFER'
+  | 'IN_UNDERWRITING'
+  | 'UNDERWRITING_APPROVED'
+  | 'UNDERWRITING_DECLINED'
+  | 'REFERRED_TO_SENIOR'
+  // Decision/Offer States
+  | 'PENDING_DECISION'
   | 'APPROVED'
   | 'DECLINED'
   | 'OFFER_GENERATED'
   | 'OFFER_SENT'
-  | 'AWAITING_SIGNATURE'
+  | 'OFFER_ACCEPTED'
+  | 'OFFER_REJECTED'
+  | 'OFFER_EXPIRED'
+  | 'OFFER_COUNTERED'
+  // Conditions Precedent
+  | 'PENDING_CONDITIONS'
+  | 'CONDITIONS_MET'
+  // E-Signature States
   | 'PENDING_ESIGN'
   | 'ESIGN_IN_PROGRESS'
   | 'ESIGN_COMPLETED'
-  | 'SIGNED'
-  | 'BOOKING_PENDING'
+  // Booking/Disbursement States
   | 'PENDING_BOOKING'
   | 'BOOKING_IN_PROGRESS'
   | 'BOOKED'
+  | 'PENDING_DISBURSEMENT'
+  | 'DISBURSEMENT_IN_PROGRESS'
+  | 'DISBURSED'
+  // Terminal States
   | 'CANCELLED'
   | 'WITHDRAWN'
   | 'EXPIRED';
@@ -357,37 +381,21 @@ export const STATUS_CONFIG: Record<
     borderColor: 'border-blue-300',
     icon: '📤',
   },
-  KYC_PENDING: {
-    label: 'KYC Pending',
+  PENDING_KYC: {
+    label: 'Pending KYC',
     description: 'Awaiting KYC/AML verification',
     color: 'text-orange-700',
     bgColor: 'bg-orange-100',
     borderColor: 'border-orange-300',
     icon: '🔍',
   },
-  DECISIONING_PENDING: {
-    label: 'Decisioning',
-    description: 'Credit decision in progress',
-    color: 'text-purple-700',
-    bgColor: 'bg-purple-100',
-    borderColor: 'border-purple-300',
-    icon: '⚙️',
-  },
-  REFERRED_TO_UNDERWRITER: {
+  REFERRED_TO_SENIOR: {
     label: 'Under Review',
-    description: 'Referred for manual underwriting',
+    description: 'Referred for senior review',
     color: 'text-yellow-700',
     bgColor: 'bg-yellow-100',
     borderColor: 'border-yellow-300',
     icon: '👤',
-  },
-  APPROVED_PENDING_OFFER: {
-    label: 'Approved',
-    description: 'Credit approved, generating offer',
-    color: 'text-green-700',
-    bgColor: 'bg-green-100',
-    borderColor: 'border-green-300',
-    icon: '✅',
   },
   DECLINED: {
     label: 'Declined',
@@ -405,33 +413,9 @@ export const STATUS_CONFIG: Record<
     borderColor: 'border-indigo-300',
     icon: '📋',
   },
-  AWAITING_SIGNATURE: {
-    label: 'Awaiting Signature',
-    description: 'Pending customer signature',
-    color: 'text-cyan-700',
-    bgColor: 'bg-cyan-100',
-    borderColor: 'border-cyan-300',
-    icon: '✍️',
-  },
-  SIGNED: {
-    label: 'Signed',
-    description: 'Documents signed by customer',
-    color: 'text-teal-700',
-    bgColor: 'bg-teal-100',
-    borderColor: 'border-teal-300',
-    icon: '📝',
-  },
-  BOOKING_PENDING: {
-    label: 'Booking',
-    description: 'Loan booking in progress',
-    color: 'text-amber-700',
-    bgColor: 'bg-amber-100',
-    borderColor: 'border-amber-300',
-    icon: '📚',
-  },
   BOOKED: {
     label: 'Booked',
-    description: 'Loan successfully booked',
+    description: 'Successfully booked',
     color: 'text-emerald-700',
     bgColor: 'bg-emerald-100',
     borderColor: 'border-emerald-300',
@@ -445,10 +429,9 @@ export const STATUS_CONFIG: Record<
     borderColor: 'border-gray-300',
     icon: '🚫',
   },
-  // Backend status aliases
   APPROVED: {
     label: 'Approved',
-    description: 'Credit approved, ready for offer',
+    description: 'Application approved',
     color: 'text-green-700',
     bgColor: 'bg-green-100',
     borderColor: 'border-green-300',
@@ -504,7 +487,7 @@ export const STATUS_CONFIG: Record<
   },
   PENDING_BOOKING: {
     label: 'Pending Booking',
-    description: 'Ready for loan booking',
+    description: 'Ready for booking',
     color: 'text-amber-700',
     bgColor: 'bg-amber-100',
     borderColor: 'border-amber-300',
@@ -512,7 +495,7 @@ export const STATUS_CONFIG: Record<
   },
   BOOKING_IN_PROGRESS: {
     label: 'Booking',
-    description: 'Loan booking in progress',
+    description: 'Booking in progress',
     color: 'text-amber-700',
     bgColor: 'bg-amber-100',
     borderColor: 'border-amber-300',
@@ -534,6 +517,158 @@ export const STATUS_CONFIG: Record<
     borderColor: 'border-gray-300',
     icon: '⏰',
   },
+  KYC_APPROVED: {
+    label: 'KYC Approved',
+    description: 'KYC verification passed',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+    borderColor: 'border-green-300',
+    icon: '✅',
+  },
+  KYC_REJECTED: {
+    label: 'KYC Rejected',
+    description: 'KYC verification failed',
+    color: 'text-red-700',
+    bgColor: 'bg-red-100',
+    borderColor: 'border-red-300',
+    icon: '❌',
+  },
+  PENDING_DOCUMENTS: {
+    label: 'Pending Documents',
+    description: 'Awaiting required documents',
+    color: 'text-orange-700',
+    bgColor: 'bg-orange-100',
+    borderColor: 'border-orange-300',
+    icon: '📄',
+  },
+  DOCUMENTS_RECEIVED: {
+    label: 'Documents Received',
+    description: 'All required documents collected',
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-100',
+    borderColor: 'border-blue-300',
+    icon: '📋',
+  },
+  CREDIT_APPROVED: {
+    label: 'Credit Approved',
+    description: 'Credit check passed',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+    borderColor: 'border-green-300',
+    icon: '✅',
+  },
+  CREDIT_DECLINED: {
+    label: 'Credit Declined',
+    description: 'Credit check failed',
+    color: 'text-red-700',
+    bgColor: 'bg-red-100',
+    borderColor: 'border-red-300',
+    icon: '❌',
+  },
+  IN_UNDERWRITING: {
+    label: 'In Underwriting',
+    description: 'Actively being underwritten',
+    color: 'text-yellow-700',
+    bgColor: 'bg-yellow-100',
+    borderColor: 'border-yellow-300',
+    icon: '👤',
+  },
+  UNDERWRITING_APPROVED: {
+    label: 'Underwriting Approved',
+    description: 'Underwriting approved',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+    borderColor: 'border-green-300',
+    icon: '✅',
+  },
+  UNDERWRITING_DECLINED: {
+    label: 'Underwriting Declined',
+    description: 'Underwriting declined',
+    color: 'text-red-700',
+    bgColor: 'bg-red-100',
+    borderColor: 'border-red-300',
+    icon: '❌',
+  },
+  PENDING_DECISION: {
+    label: 'Pending Decision',
+    description: 'Awaiting final decision',
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-100',
+    borderColor: 'border-purple-300',
+    icon: '⚙️',
+  },
+  OFFER_ACCEPTED: {
+    label: 'Offer Accepted',
+    description: 'Customer accepted offer',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+    borderColor: 'border-green-300',
+    icon: '✅',
+  },
+  OFFER_REJECTED: {
+    label: 'Offer Rejected',
+    description: 'Customer rejected offer',
+    color: 'text-red-700',
+    bgColor: 'bg-red-100',
+    borderColor: 'border-red-300',
+    icon: '❌',
+  },
+  OFFER_EXPIRED: {
+    label: 'Offer Expired',
+    description: 'Offer validity expired',
+    color: 'text-gray-700',
+    bgColor: 'bg-gray-100',
+    borderColor: 'border-gray-300',
+    icon: '⏰',
+  },
+  OFFER_COUNTERED: {
+    label: 'Offer Countered',
+    description: 'Customer requested modification',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-100',
+    borderColor: 'border-amber-300',
+    icon: '↩️',
+  },
+  PENDING_CONDITIONS: {
+    label: 'Pending Conditions',
+    description: 'Conditions precedent not fulfilled',
+    color: 'text-orange-700',
+    bgColor: 'bg-orange-100',
+    borderColor: 'border-orange-300',
+    icon: '📋',
+  },
+  CONDITIONS_MET: {
+    label: 'Conditions Met',
+    description: 'All conditions satisfied',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+    borderColor: 'border-green-300',
+    icon: '✅',
+  },
+  PENDING_DISBURSEMENT: {
+    label: 'Pending Disbursement',
+    description: 'Awaiting disbursement',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-100',
+    borderColor: 'border-amber-300',
+    icon: '💰',
+  },
+  DISBURSEMENT_IN_PROGRESS: {
+    label: 'Disbursing',
+    description: 'Disbursement processing',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-100',
+    borderColor: 'border-amber-300',
+    icon: '💰',
+  },
+  DISBURSED: {
+    label: 'Disbursed',
+    description: 'Amount disbursed',
+    color: 'text-emerald-700',
+    bgColor: 'bg-emerald-100',
+    borderColor: 'border-emerald-300',
+    icon: '🎉',
+  },
 };
 
 /**
@@ -552,17 +687,27 @@ export const WORKFLOW_PHASES: {
   {
     phase: 'VERIFICATION',
     label: 'Verification',
-    statuses: ['KYC_PENDING'],
+    statuses: [
+      'PENDING_KYC',
+      'KYC_APPROVED',
+      'KYC_REJECTED',
+      'PENDING_DOCUMENTS',
+      'DOCUMENTS_RECEIVED',
+    ],
   },
   {
     phase: 'DECISIONING',
     label: 'Decision',
     statuses: [
-      'DECISIONING_PENDING',
       'PENDING_CREDIT_CHECK',
-      'REFERRED_TO_UNDERWRITER',
+      'CREDIT_APPROVED',
+      'CREDIT_DECLINED',
       'PENDING_UNDERWRITING',
-      'APPROVED_PENDING_OFFER',
+      'IN_UNDERWRITING',
+      'UNDERWRITING_APPROVED',
+      'UNDERWRITING_DECLINED',
+      'REFERRED_TO_SENIOR',
+      'PENDING_DECISION',
       'APPROVED',
       'DECLINED',
     ],
@@ -570,23 +715,33 @@ export const WORKFLOW_PHASES: {
   {
     phase: 'OFFER_MANAGEMENT',
     label: 'Offer',
-    statuses: ['OFFER_GENERATED', 'OFFER_SENT'],
+    statuses: [
+      'OFFER_GENERATED',
+      'OFFER_SENT',
+      'OFFER_ACCEPTED',
+      'OFFER_REJECTED',
+      'OFFER_EXPIRED',
+      'OFFER_COUNTERED',
+      'PENDING_CONDITIONS',
+      'CONDITIONS_MET',
+    ],
   },
   {
     phase: 'SIGNATURE',
     label: 'Signature',
-    statuses: [
-      'AWAITING_SIGNATURE',
-      'PENDING_ESIGN',
-      'ESIGN_IN_PROGRESS',
-      'ESIGN_COMPLETED',
-      'SIGNED',
-    ],
+    statuses: ['PENDING_ESIGN', 'ESIGN_IN_PROGRESS', 'ESIGN_COMPLETED'],
   },
   {
     phase: 'BOOKING',
     label: 'Booking',
-    statuses: ['BOOKING_PENDING', 'PENDING_BOOKING', 'BOOKING_IN_PROGRESS', 'BOOKED'],
+    statuses: [
+      'PENDING_BOOKING',
+      'BOOKING_IN_PROGRESS',
+      'BOOKED',
+      'PENDING_DISBURSEMENT',
+      'DISBURSEMENT_IN_PROGRESS',
+      'DISBURSED',
+    ],
   },
 ];
 
@@ -602,28 +757,42 @@ export function getPhaseForStatus(status: LomsApplicationStatus): WorkflowPhase 
  * Helper to calculate progress percentage
  */
 export function calculateProgress(status: LomsApplicationStatus): number {
-  const progressMap: Record<LomsApplicationStatus, number> = {
+  const progressMap: Partial<Record<LomsApplicationStatus, number>> = {
     DRAFT: 5,
     SUBMITTED: 15,
-    KYC_PENDING: 25,
-    DECISIONING_PENDING: 40,
+    PENDING_KYC: 25,
+    KYC_APPROVED: 28,
+    KYC_REJECTED: 100,
+    PENDING_DOCUMENTS: 30,
+    DOCUMENTS_RECEIVED: 33,
     PENDING_CREDIT_CHECK: 40,
-    REFERRED_TO_UNDERWRITER: 45,
+    CREDIT_APPROVED: 43,
+    CREDIT_DECLINED: 100,
     PENDING_UNDERWRITING: 45,
-    APPROVED_PENDING_OFFER: 55,
+    IN_UNDERWRITING: 47,
+    UNDERWRITING_APPROVED: 50,
+    UNDERWRITING_DECLINED: 100,
+    REFERRED_TO_SENIOR: 48,
+    PENDING_DECISION: 52,
     APPROVED: 55,
     DECLINED: 100,
     OFFER_GENERATED: 65,
     OFFER_SENT: 70,
-    AWAITING_SIGNATURE: 75,
+    OFFER_ACCEPTED: 72,
+    OFFER_REJECTED: 100,
+    OFFER_EXPIRED: 100,
+    OFFER_COUNTERED: 68,
+    PENDING_CONDITIONS: 73,
+    CONDITIONS_MET: 75,
     PENDING_ESIGN: 78,
     ESIGN_IN_PROGRESS: 80,
     ESIGN_COMPLETED: 85,
-    SIGNED: 85,
-    BOOKING_PENDING: 92,
     PENDING_BOOKING: 92,
     BOOKING_IN_PROGRESS: 95,
     BOOKED: 100,
+    PENDING_DISBURSEMENT: 97,
+    DISBURSEMENT_IN_PROGRESS: 98,
+    DISBURSED: 100,
     CANCELLED: 100,
     WITHDRAWN: 100,
     EXPIRED: 100,
@@ -635,5 +804,35 @@ export function calculateProgress(status: LomsApplicationStatus): number {
  * Check if status is terminal
  */
 export function isTerminalStatus(status: LomsApplicationStatus): boolean {
-  return ['DECLINED', 'BOOKED', 'CANCELLED', 'WITHDRAWN', 'EXPIRED'].includes(status);
+  return [
+    'DECLINED',
+    'KYC_REJECTED',
+    'CREDIT_DECLINED',
+    'UNDERWRITING_DECLINED',
+    'OFFER_REJECTED',
+    'OFFER_EXPIRED',
+    'BOOKED',
+    'DISBURSED',
+    'CANCELLED',
+    'WITHDRAWN',
+    'EXPIRED',
+  ].includes(status);
+}
+
+/**
+ * Get product-aware label (e.g. "Loan", "Overdraft", "Credit Card")
+ * Falls back to "Facility" as a generic banking term
+ */
+export function getProductLabel(productName?: string): string {
+  if (!productName) return 'Facility';
+  const name = productName.toLowerCase();
+  if (name.includes('overdraft')) return 'Overdraft';
+  if (name.includes('credit card')) return 'Credit Card';
+  if (name.includes('mortgage') || name.includes('home loan')) return 'Mortgage';
+  if (name.includes('vehicle') || name.includes('auto') || name.includes('car'))
+    return 'Vehicle Finance';
+  if (name.includes('bnpl') || name.includes('buy now')) return 'BNPL Facility';
+  if (name.includes('invoice') || name.includes('asset')) return 'Asset Finance';
+  if (name.includes('term loan') || name.includes('personal')) return 'Loan';
+  return productName;
 }

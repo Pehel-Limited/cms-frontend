@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { Offer, OfferCondition, STATUS_CONFIG } from '@/types/loms';
+import { Offer, OfferCondition, STATUS_CONFIG, getProductLabel } from '@/types/loms';
 
 interface OfferCardProps {
   offer: Offer;
@@ -10,6 +10,7 @@ interface OfferCardProps {
   onAccept?: () => void;
   onViewConditions?: () => void;
   loading?: boolean;
+  productName?: string;
 }
 
 /**
@@ -43,6 +44,7 @@ export function OfferCard({
   onAccept,
   onViewConditions,
   loading = false,
+  productName,
 }: OfferCardProps) {
   const isExpired = new Date(offer.expiryAt) < new Date();
   const isAccepted = offer.status === 'ACCEPTED';
@@ -69,7 +71,9 @@ export function OfferCard({
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-white">Loan Offer</h3>
+            <h3 className="text-lg font-semibold text-white">
+              {getProductLabel(productName)} Offer
+            </h3>
             <p className="text-blue-100 text-sm">Version {offer.version}</p>
           </div>
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusBadge.class}`}>
@@ -83,7 +87,7 @@ export function OfferCard({
         {/* Amount and terms */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div>
-            <p className="text-sm text-gray-500">Loan Amount</p>
+            <p className="text-sm text-gray-500">{getProductLabel(productName)} Amount</p>
             <p className="text-xl font-bold text-gray-900">
               {formatCurrency(offer.amount, offer.currency)}
             </p>

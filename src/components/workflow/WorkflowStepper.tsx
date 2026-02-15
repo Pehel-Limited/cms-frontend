@@ -9,17 +9,23 @@ import {
   calculateProgress,
   getPhaseForStatus,
   isTerminalStatus,
+  getProductLabel,
 } from '@/types/loms';
 
 interface WorkflowStepperProps {
   currentStatus: LomsApplicationStatus;
   className?: string;
+  productName?: string;
 }
 
 /**
  * Visual workflow stepper showing application progress through LOMS phases
  */
-export function WorkflowStepper({ currentStatus, className = '' }: WorkflowStepperProps) {
+export function WorkflowStepper({
+  currentStatus,
+  className = '',
+  productName,
+}: WorkflowStepperProps) {
   const currentPhase = getPhaseForStatus(currentStatus);
   const progress = calculateProgress(currentStatus);
   const statusConfig = STATUS_CONFIG[currentStatus] || {
@@ -146,7 +152,7 @@ export function WorkflowStepper({ currentStatus, className = '' }: WorkflowStepp
       </div>
 
       {/* Status-specific messages */}
-      {currentStatus === 'KYC_PENDING' && (
+      {currentStatus === 'PENDING_KYC' && (
         <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
           <div className="flex items-start gap-3">
             <span className="text-orange-500 text-xl">⚠️</span>
@@ -161,7 +167,7 @@ export function WorkflowStepper({ currentStatus, className = '' }: WorkflowStepp
         </div>
       )}
 
-      {currentStatus === 'REFERRED_TO_UNDERWRITER' && (
+      {currentStatus === 'REFERRED_TO_SENIOR' && (
         <div className="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
           <div className="flex items-start gap-3">
             <span className="text-yellow-500 text-xl">👤</span>
@@ -176,7 +182,7 @@ export function WorkflowStepper({ currentStatus, className = '' }: WorkflowStepp
         </div>
       )}
 
-      {currentStatus === 'AWAITING_SIGNATURE' && (
+      {currentStatus === 'PENDING_ESIGN' && (
         <div className="mt-6 p-4 bg-cyan-50 rounded-lg border border-cyan-200">
           <div className="flex items-start gap-3">
             <span className="text-cyan-500 text-xl">✍️</span>
@@ -190,14 +196,17 @@ export function WorkflowStepper({ currentStatus, className = '' }: WorkflowStepp
         </div>
       )}
 
-      {currentStatus === 'BOOKING_PENDING' && (
+      {currentStatus === 'PENDING_BOOKING' && (
         <div className="mt-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
           <div className="flex items-start gap-3">
             <span className="text-amber-500 text-xl">⏳</span>
             <div>
-              <h4 className="text-sm font-medium text-amber-800">Loan Booking in Progress</h4>
+              <h4 className="text-sm font-medium text-amber-800">
+                {getProductLabel(productName)} Booking in Progress
+              </h4>
               <p className="text-sm text-amber-700 mt-1">
-                The loan is being booked in the core banking system. This may take a few minutes.
+                The {getProductLabel(productName).toLowerCase()} is being booked in the core banking
+                system. This may take a few minutes.
               </p>
             </div>
           </div>
@@ -209,10 +218,12 @@ export function WorkflowStepper({ currentStatus, className = '' }: WorkflowStepp
           <div className="flex items-start gap-3">
             <span className="text-emerald-500 text-xl">🎉</span>
             <div>
-              <h4 className="text-sm font-medium text-emerald-800">Loan Successfully Booked</h4>
+              <h4 className="text-sm font-medium text-emerald-800">
+                {getProductLabel(productName)} Successfully Booked
+              </h4>
               <p className="text-sm text-emerald-700 mt-1">
-                The loan has been successfully booked. Disbursement will be processed according to
-                the loan terms.
+                The {getProductLabel(productName).toLowerCase()} has been successfully booked.
+                Disbursement will be processed according to the terms.
               </p>
             </div>
           </div>

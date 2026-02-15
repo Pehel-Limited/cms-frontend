@@ -11,6 +11,7 @@ import {
   OfferCondition,
   AuditEvent,
   LoanBooking,
+  getProductLabel,
 } from '@/types/loms';
 import { lomsService } from '@/services/api/lomsService';
 import { applicationService } from '@/services/api/applicationService';
@@ -30,6 +31,7 @@ interface ApplicationWorkflowPanelProps {
   approvedAmount?: number;
   currency?: string;
   kycVerified?: boolean;
+  productName?: string;
   onStatusChange?: () => void;
 }
 
@@ -47,6 +49,7 @@ export function ApplicationWorkflowPanel({
   approvedAmount = 0,
   currency = 'EUR',
   kycVerified = false,
+  productName,
   onStatusChange,
 }: ApplicationWorkflowPanelProps) {
   const [statusInfo, setStatusInfo] = useState<StatusInfo | null>(null);
@@ -66,9 +69,6 @@ export function ApplicationWorkflowPanel({
   // Use the LOMS status directly - we now receive the effective status from the parent
   const lomsStatus = statusInfo?.status || applicationStatus;
 
-  // Map to backend status (for API calls) - some UI statuses have different backend names
-  const backendStatus = mapToBackendStatus(lomsStatus);
-
   // Load workflow data
   useEffect(() => {
     loadWorkflowData();
@@ -79,7 +79,7 @@ export function ApplicationWorkflowPanel({
       setLoading(true);
 
       // Load status info - backend will read actual status from database
-      const status = await lomsService.getApplicationStatus(applicationId, backendStatus);
+      const status = await lomsService.getApplicationStatus(applicationId, lomsStatus);
       setStatusInfo(status);
 
       // Load tasks (if any)
@@ -93,11 +93,15 @@ export function ApplicationWorkflowPanel({
       // Load offer if in offer phase
       if (
         [
-          'APPROVED_PENDING_OFFER',
+          'APPROVED',
           'OFFER_GENERATED',
-          'AWAITING_SIGNATURE',
-          'SIGNED',
-          'BOOKING_PENDING',
+          'OFFER_SENT',
+          'OFFER_ACCEPTED',
+          'PENDING_ESIGN',
+          'ESIGN_IN_PROGRESS',
+          'ESIGN_COMPLETED',
+          'PENDING_BOOKING',
+          'BOOKING_IN_PROGRESS',
           'BOOKED',
         ].includes(lomsStatus)
       ) {
@@ -114,7 +118,7 @@ export function ApplicationWorkflowPanel({
       }
 
       // Load booking status if applicable
-      if (['BOOKING_PENDING', 'BOOKED'].includes(lomsStatus)) {
+      if (['PENDING_BOOKING', 'BOOKING_IN_PROGRESS', 'BOOKED'].includes(lomsStatus)) {
         try {
           const bookingStatus = await lomsService.getBooking(applicationId);
           setBooking(bookingStatus);
@@ -187,6 +191,16 @@ export function ApplicationWorkflowPanel({
           toast.success('Documents sent for e-signature');
           break;
 
+        case 'CONFIRM_ESIGN':
+          await lomsService.transitionStatus(applicationId, {
+            currentStatus: 'PENDING_ESIGN',
+            targetStatus: 'ESIGN_COMPLETED',
+            actorId: currentUserId,
+            reason: 'E-signature manually confirmed',
+          });
+          toast.success('E-signature confirmed — ready for booking');
+          break;
+
         case 'INITIATE_BOOKING':
           // Open the booking modal to configure disbursement
           setShowBookingModal(true);
@@ -196,7 +210,7 @@ export function ApplicationWorkflowPanel({
           // Use backend status for API call
           await lomsService.cancelApplication(
             applicationId,
-            backendStatus,
+            lomsStatus,
             currentUserId,
             'User cancelled'
           );
@@ -207,7 +221,7 @@ export function ApplicationWorkflowPanel({
           // Use backend status for API call
           await lomsService.cancelApplication(
             applicationId,
-            backendStatus,
+            lomsStatus,
             currentUserId,
             'Application withdrawn'
           );
@@ -276,7 +290,10 @@ export function ApplicationWorkflowPanel({
   return (
     <div className="space-y-6">
       {/* Workflow Stepper */}
-      <WorkflowStepper currentStatus={lomsStatus as LomsApplicationStatus} />
+      <WorkflowStepper
+        currentStatus={lomsStatus as LomsApplicationStatus}
+        productName={productName}
+      />
 
       {/* Tab Navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -327,6 +344,7 @@ export function ApplicationWorkflowPanel({
               onAction={handleAction}
               loading={loading}
               kycVerified={kycVerified}
+              productName={productName}
             />
           )}
 
@@ -429,16 +447,17 @@ export function ApplicationWorkflowPanel({
                   conditions={conditions}
                   onAccept={() => handleAction('ACCEPT_OFFER')}
                   loading={loading}
+                  productName={productName}
                 />
               ) : (
                 <div className="text-center py-8">
                   <span className="text-4xl">💰</span>
                   <p className="text-gray-500 mt-2">
-                    {lomsStatus === 'APPROVED_PENDING_OFFER'
+                    {lomsStatus === 'APPROVED'
                       ? 'Ready to generate offer'
                       : 'No offer available yet'}
                   </p>
-                  {lomsStatus === 'APPROVED_PENDING_OFFER' && (
+                  {lomsStatus === 'APPROVED' && (
                     <button
                       onClick={() => handleAction('GENERATE_OFFER')}
                       disabled={loading}
@@ -492,6 +511,7 @@ export function ApplicationWorkflowPanel({
         approvedAmount={offer?.amount || approvedAmount}
         currency={offer?.currency || currency}
         loading={loading}
+        productName={productName}
       />
     </div>
   );
@@ -516,37 +536,23 @@ export function ApplicationWorkflowPanel({
       // Book the loan with disbursement details
       await lomsService.bookLoanWithDisbursements(applicationId, currentUserId, disbursements);
 
-      toast.success('Loan booked successfully! Disbursement initiated.');
+      const label = getProductLabel(productName);
+      toast.success(`${label} booked successfully! Disbursement initiated.`);
       setShowBookingModal(false);
 
       // Reload workflow data
       await loadWorkflowData();
       onStatusChange?.();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to book loan';
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : `Failed to book ${getProductLabel(productName).toLowerCase()}`;
       toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   }
-}
-
-/**
- * Map UI status back to backend status for API calls
- * The backend uses standard status names, while UI may use display variants
- */
-function mapToBackendStatus(uiStatus: string): string {
-  const reverseMapping: Record<string, string> = {
-    // UI display status -> Backend status
-    APPROVED_PENDING_OFFER: 'APPROVED',
-    AWAITING_SIGNATURE: 'PENDING_ESIGN',
-    SIGNED: 'ESIGN_COMPLETED',
-    DECISIONING_PENDING: 'PENDING_CREDIT_CHECK',
-    BOOKING_PENDING: 'PENDING_BOOKING',
-    // All other statuses pass through
-  };
-
-  return reverseMapping[uiStatus] || uiStatus;
 }
 
 export default ApplicationWorkflowPanel;

@@ -552,21 +552,16 @@ export default function ApplicationDetailPage() {
       RETURNED_FOR_CORRECTIONS: 'bg-amber-100 text-amber-800',
       DISBURSED: 'bg-emerald-100 text-emerald-800',
       // LOMS statuses
-      KYC_PENDING: 'bg-orange-100 text-orange-800',
-      DECISIONING_PENDING: 'bg-purple-100 text-purple-800',
+      PENDING_KYC: 'bg-orange-100 text-orange-800',
       PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-800',
-      REFERRED_TO_UNDERWRITER: 'bg-yellow-100 text-yellow-800',
+      REFERRED_TO_SENIOR: 'bg-yellow-100 text-yellow-800',
       PENDING_UNDERWRITING: 'bg-indigo-100 text-indigo-800',
-      APPROVED_PENDING_OFFER: 'bg-green-100 text-green-800',
       DECLINED: 'bg-red-100 text-red-800',
       OFFER_GENERATED: 'bg-indigo-100 text-indigo-800',
       OFFER_SENT: 'bg-indigo-100 text-indigo-800',
-      AWAITING_SIGNATURE: 'bg-cyan-100 text-cyan-800',
       PENDING_ESIGN: 'bg-cyan-100 text-cyan-800',
       ESIGN_IN_PROGRESS: 'bg-cyan-100 text-cyan-800',
       ESIGN_COMPLETED: 'bg-teal-100 text-teal-800',
-      SIGNED: 'bg-teal-100 text-teal-800',
-      BOOKING_PENDING: 'bg-amber-100 text-amber-800',
       PENDING_BOOKING: 'bg-amber-100 text-amber-800',
       BOOKING_IN_PROGRESS: 'bg-amber-100 text-amber-800',
       BOOKED: 'bg-emerald-100 text-emerald-800',
@@ -602,10 +597,9 @@ export default function ApplicationDetailPage() {
     'UNDERWRITING',
     'MANAGER_APPROVAL',
     // LOMS statuses that indicate review in progress
-    'KYC_PENDING',
-    'DECISIONING_PENDING',
+    'PENDING_KYC',
     'PENDING_CREDIT_CHECK',
-    'REFERRED_TO_UNDERWRITER',
+    'REFERRED_TO_SENIOR',
     'PENDING_UNDERWRITING',
   ].includes(effectiveStatus);
 
@@ -618,7 +612,6 @@ export default function ApplicationDetailPage() {
   // Application creator (RM) can withdraw non-draft applications before final decision
   const isNotFinalStatus = ![
     'APPROVED',
-    'APPROVED_PENDING_OFFER',
     'REJECTED',
     'DECLINED',
     'WITHDRAWN',
@@ -637,9 +630,9 @@ export default function ApplicationDetailPage() {
       'UNDER_REVIEW',
       'CREDIT_CHECK',
       'UNDERWRITING',
-      'REFERRED_TO_UNDERWRITER',
+      'REFERRED_TO_SENIOR',
       'PENDING_UNDERWRITING',
-      'KYC_PENDING',
+      'PENDING_KYC',
     ].includes(effectiveStatus) && isAssignedReviewer;
 
   // Application creator can add notes while under review (to send info to reviewer)
@@ -654,7 +647,7 @@ export default function ApplicationDetailPage() {
       'CREDIT_CHECK',
       'UNDERWRITING',
       'SUBMITTED',
-      'KYC_PENDING',
+      'PENDING_KYC',
     ].includes(effectiveStatus) && isApplicationCreator;
 
   if (loading) {
@@ -1178,14 +1171,13 @@ export default function ApplicationDetailPage() {
               {application.decisionMadeAt &&
                 [
                   'APPROVED',
-                  'APPROVED_PENDING_OFFER',
                   'OFFER_GENERATED',
+                  'OFFER_SENT',
                   'PENDING_ESIGN',
-                  'AWAITING_SIGNATURE',
+                  'ESIGN_IN_PROGRESS',
                   'ESIGN_COMPLETED',
-                  'SIGNED',
                   'PENDING_BOOKING',
-                  'BOOKING_PENDING',
+                  'BOOKING_IN_PROGRESS',
                   'BOOKED',
                 ].includes(effectiveStatus) && (
                   <div className="flex items-start gap-3">

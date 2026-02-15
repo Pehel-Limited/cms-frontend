@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { LomsApplicationStatus, STATUS_CONFIG } from '@/types/loms';
+import { LomsApplicationStatus, STATUS_CONFIG, getProductLabel } from '@/types/loms';
 
 interface WorkflowActionsProps {
   currentStatus: LomsApplicationStatus;
@@ -14,6 +14,7 @@ interface WorkflowActionsProps {
   onAction: (action: WorkflowAction) => void;
   loading?: boolean;
   kycVerified?: boolean;
+  productName?: string;
 }
 
 export type WorkflowAction =
@@ -32,7 +33,8 @@ export type WorkflowAction =
   | 'VIEW_OFFER'
   | 'VIEW_DOCUMENTS'
   | 'VIEW_AUDIT'
-  | 'COMPLETE_KYC';
+  | 'COMPLETE_KYC'
+  | 'CONFIRM_ESIGN';
 
 interface ActionConfig {
   action: WorkflowAction;
@@ -52,8 +54,10 @@ function getAvailableActions(
   validTransitions: LomsApplicationStatus[],
   isAssignedReviewer: boolean,
   isApplicationCreator: boolean,
-  kycVerified: boolean = true
+  kycVerified: boolean = true,
+  productName?: string
 ): ActionConfig[] {
+  const label = getProductLabel(productName);
   const actions: ActionConfig[] = [];
 
   // Add KYC action if not verified and not in draft
@@ -86,7 +90,7 @@ function getAvailableActions(
       break;
 
     case 'SUBMITTED':
-      if (validTransitions.includes('DECISIONING_PENDING')) {
+      if (validTransitions.includes('PENDING_CREDIT_CHECK')) {
         actions.push({
           action: 'SUBMIT_FOR_DECISIONING',
           label: 'Start Decisioning',
@@ -97,15 +101,15 @@ function getAvailableActions(
       }
       break;
 
-    case 'KYC_PENDING':
+    case 'PENDING_KYC':
       // Waiting for KYC completion - show info only
       break;
 
-    case 'DECISIONING_PENDING':
+    case 'PENDING_CREDIT_CHECK':
       // Automated decisioning in progress
       break;
 
-    case 'REFERRED_TO_UNDERWRITER':
+    case 'REFERRED_TO_SENIOR':
       if (isAssignedReviewer) {
         actions.push({
           action: 'APPROVE',
@@ -126,11 +130,11 @@ function getAvailableActions(
       }
       break;
 
-    case 'APPROVED_PENDING_OFFER':
+    case 'APPROVED':
       actions.push({
         action: 'GENERATE_OFFER',
         label: 'Generate Offer',
-        description: 'Create loan offer',
+        description: `Create ${label.toLowerCase()} offer`,
         icon: '📋',
         variant: 'primary',
       });
@@ -160,7 +164,14 @@ function getAvailableActions(
       });
       break;
 
-    case 'AWAITING_SIGNATURE':
+    case 'PENDING_ESIGN':
+      actions.push({
+        action: 'CONFIRM_ESIGN',
+        label: 'Confirm E-Signature',
+        description: 'Manually confirm customer has signed',
+        icon: '✅',
+        variant: 'success',
+      });
       actions.push({
         action: 'VIEW_DOCUMENTS',
         label: 'View Documents',
@@ -170,11 +181,10 @@ function getAvailableActions(
       });
       break;
 
-    case 'SIGNED':
     case 'ESIGN_COMPLETED':
       actions.push({
         action: 'INITIATE_BOOKING',
-        label: 'Book Loan',
+        label: `Book ${label}`,
         description: 'Book in core banking',
         icon: '📚',
         variant: 'primary',
@@ -182,7 +192,6 @@ function getAvailableActions(
       break;
 
     case 'PENDING_BOOKING':
-    case 'BOOKING_PENDING':
       actions.push({
         action: 'INITIATE_BOOKING',
         label: 'Complete Booking',
@@ -220,13 +229,15 @@ export function WorkflowActions({
   onAction,
   loading = false,
   kycVerified = true,
+  productName,
 }: WorkflowActionsProps) {
   const actions = getAvailableActions(
     currentStatus,
     validTransitions,
     isAssignedReviewer,
     isApplicationCreator,
-    kycVerified
+    kycVerified,
+    productName
   );
 
   // Filter actions based on user role
@@ -285,17 +296,17 @@ export function WorkflowActions({
           <span className="text-2xl">{statusConfig.icon}</span>
           <div>
             <p className="text-sm font-medium text-gray-700">
-              {currentStatus === 'DECISIONING_PENDING'
+              {currentStatus === 'PENDING_CREDIT_CHECK'
                 ? 'Credit decisioning in progress...'
-                : currentStatus === 'KYC_PENDING'
+                : currentStatus === 'PENDING_KYC'
                   ? 'Waiting for KYC verification...'
-                  : currentStatus === 'BOOKING_PENDING'
-                    ? 'Loan booking in progress...'
-                    : currentStatus === 'AWAITING_SIGNATURE'
+                  : currentStatus === 'PENDING_BOOKING'
+                    ? 'Booking in progress...'
+                    : currentStatus === 'PENDING_ESIGN'
                       ? 'Waiting for customer signature...'
                       : 'No actions available at this stage'}
             </p>
-            {['DECISIONING_PENDING', 'KYC_PENDING', 'BOOKING_PENDING'].includes(currentStatus) && (
+            {['PENDING_CREDIT_CHECK', 'PENDING_KYC', 'PENDING_BOOKING'].includes(currentStatus) && (
               <div className="flex items-center gap-2 mt-2">
                 <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full" />
                 <span className="text-xs text-gray-500">Processing...</span>

@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { accountService, AccountSummaryResponse } from '@/services/api/accountService';
+import { getProductLabel } from '@/types/loms';
 
 interface DisbursementAccount {
   id: string;
@@ -26,6 +27,7 @@ interface BookingModalProps {
   approvedAmount: number;
   currency?: string;
   loading?: boolean;
+  productName?: string;
 }
 
 export function BookingModal({
@@ -37,6 +39,7 @@ export function BookingModal({
   approvedAmount,
   currency = 'EUR',
   loading = false,
+  productName,
 }: BookingModalProps) {
   const [customerAccounts, setCustomerAccounts] = useState<AccountSummaryResponse[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
@@ -214,7 +217,9 @@ export function BookingModal({
           <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-emerald-600 to-emerald-700">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-white">Complete Loan Booking</h2>
+                <h2 className="text-xl font-semibold text-white">
+                  Complete {getProductLabel(productName)} Booking
+                </h2>
                 <p className="text-emerald-100 text-sm mt-1">
                   Configure disbursement accounts for Application #{applicationId.slice(0, 8)}
                 </p>

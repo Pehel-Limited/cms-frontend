@@ -174,7 +174,7 @@ export default function EditApplicationPage() {
       'CREDIT_CHECK',
       'UNDERWRITING',
       'SUBMITTED',
-      'KYC_PENDING',
+      'PENDING_KYC',
     ].includes(effectiveStatus) &&
     currentUser?.userId === application.createdByUserId;
 

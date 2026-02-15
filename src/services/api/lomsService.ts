@@ -308,7 +308,7 @@ export class LomsService {
   async submitForDecisioning(applicationId: string, userId: string): Promise<void> {
     await this.transitionStatus(applicationId, {
       currentStatus: 'SUBMITTED',
-      targetStatus: 'DECISIONING_PENDING',
+      targetStatus: 'PENDING_CREDIT_CHECK',
       actorId: userId,
       reason: 'Submitting for credit decisioning',
     });
@@ -337,7 +337,6 @@ export class LomsService {
 
   /**
    * Generate offer for approved application
-   * Note: Backend uses 'APPROVED' status, not 'APPROVED_PENDING_OFFER'
    */
   async generateOffer(applicationId: string, userId: string): Promise<void> {
     await this.transitionStatus(applicationId, {
@@ -350,7 +349,6 @@ export class LomsService {
 
   /**
    * Send offer for e-signature
-   * Note: Backend uses 'PENDING_ESIGN' instead of 'AWAITING_SIGNATURE'
    */
   async sendForSignature(applicationId: string, userId: string): Promise<void> {
     await this.initiateEsign(applicationId);
@@ -364,7 +362,6 @@ export class LomsService {
 
   /**
    * Book the loan after signature (simple version without disbursement details)
-   * Note: Backend uses 'ESIGN_COMPLETED' instead of 'SIGNED'
    */
   async bookLoan(applicationId: string, userId: string): Promise<void> {
     await this.initiateBooking(applicationId);

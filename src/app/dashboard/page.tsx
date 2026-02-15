@@ -117,7 +117,6 @@ export default function DashboardPage() {
       IN_REVIEW: 'bg-yellow-100 text-yellow-800',
       UNDERWRITING: 'bg-orange-100 text-orange-800',
       APPROVED: 'bg-green-100 text-green-800',
-      APPROVED_PENDING_OFFER: 'bg-green-100 text-green-800',
       AWAITING_BOOKING: 'bg-purple-100 text-purple-800',
       BOOKED: 'bg-green-200 text-green-900',
       DECLINED: 'bg-red-100 text-red-800',
@@ -304,7 +303,7 @@ export default function DashboardPage() {
                   <option value="DOCUMENTS_PENDING">Documents Pending</option>
                   <option value="DOCUMENTS_RECEIVED">Documents Received</option>
                   <option value="CREDIT_CHECK_INITIATED">Credit Check Initiated</option>
-                  <option value="REFERRED_TO_UNDERWRITER">Referred to Underwriter</option>
+                  <option value="REFERRED_TO_SENIOR">Referred to Senior</option>
                   <option value="UNDER_UNDERWRITING">Under Underwriting</option>
                   <option value="UNDERWRITING_APPROVED">Underwriting Approved</option>
                   <option value="APPROVED">Approved</option>
@@ -455,15 +454,36 @@ export default function DashboardPage() {
                           {kycLoadingId === item.applicationId ? (
                             <>
                               <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                />
                               </svg>
                               Completing...
                             </>
                           ) : (
                             <>
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M5 13l4 4L19 7"
+                                />
                               </svg>
                               Complete KYC
                             </>
@@ -472,11 +492,23 @@ export default function DashboardPage() {
                       ) : (
                         <div
                           className="text-sm text-blue-600 font-medium flex items-center gap-1 cursor-pointer hover:underline"
-                          onClick={() => router.push(`/dashboard/applications/${item.applicationId}`)}
+                          onClick={() =>
+                            router.push(`/dashboard/applications/${item.applicationId}`)
+                          }
                         >
                           <span>{item.nextAction?.replace(/_/g, ' ')}</span>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 7l5 5m0 0l-5 5m5-5H6"
+                            />
                           </svg>
                         </div>
                       )}

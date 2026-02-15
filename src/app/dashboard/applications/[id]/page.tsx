@@ -746,6 +746,7 @@ export default function ApplicationDetailPage() {
           approvedAmount={application.approvedAmount || application.requestedAmount || 0}
           currency="EUR"
           kycVerified={application.kycCompleted}
+          productName={application.product?.productName}
           onStatusChange={fetchApplication}
         />
       </div>

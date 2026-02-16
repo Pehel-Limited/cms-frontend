@@ -110,11 +110,12 @@ function getAvailableActions(
       break;
 
     case 'REFERRED_TO_SENIOR':
+    case 'REFERRED_TO_UNDERWRITER':
       if (isAssignedReviewer) {
         actions.push({
           action: 'APPROVE',
           label: 'Approve',
-          description: 'Approve application',
+          description: 'Approve application after underwriting review',
           icon: '✅',
           variant: 'success',
           requiresReviewer: true,
@@ -304,7 +305,10 @@ export function WorkflowActions({
                     ? 'Booking in progress...'
                     : currentStatus === 'PENDING_ESIGN'
                       ? 'Waiting for customer signature...'
-                      : 'No actions available at this stage'}
+                      : currentStatus === 'REFERRED_TO_UNDERWRITER' ||
+                          currentStatus === 'REFERRED_TO_SENIOR'
+                        ? 'Awaiting underwriter decision — only the assigned reviewer can approve or decline.'
+                        : 'No actions available at this stage'}
             </p>
             {['PENDING_CREDIT_CHECK', 'PENDING_KYC', 'PENDING_BOOKING'].includes(currentStatus) && (
               <div className="flex items-center gap-2 mt-2">

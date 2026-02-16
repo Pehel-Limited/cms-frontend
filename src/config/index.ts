@@ -19,7 +19,8 @@ const config = {
     analytics: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true',
   },
   bank: {
-    defaultBankId: process.env.NEXT_PUBLIC_DEFAULT_BANK_ID || '123e4567-e89b-12d3-a456-426614174000',
+    defaultBankId:
+      process.env.NEXT_PUBLIC_DEFAULT_BANK_ID || '123e4567-e89b-12d3-a456-426614174000',
     defaultBankCode: process.env.NEXT_PUBLIC_DEFAULT_BANK_CODE || 'DEMO001',
   },
 };

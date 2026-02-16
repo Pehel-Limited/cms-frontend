@@ -64,6 +64,9 @@ export function ApplicationWorkflowPanel({
     'workflow'
   );
 
+  const [showDecisionModal, setShowDecisionModal] = useState<'approve' | 'decline' | null>(null);
+  const [decisionNotes, setDecisionNotes] = useState('');
+
   const isAssignedReviewer = currentUserId === assignedToUserId;
 
   // Use the LOMS status directly - we now receive the effective status from the parent
@@ -163,16 +166,14 @@ export function ApplicationWorkflowPanel({
           break;
 
         case 'APPROVE':
-          // This would open a modal to collect approval details
-          toast.info('Opening approval dialog...');
-          // TODO: Implement approval modal
-          break;
+          setShowDecisionModal('approve');
+          setDecisionNotes('');
+          return; // Don't reload data yet - wait for modal confirmation
 
         case 'DECLINE':
-          // This would open a modal to collect decline reason
-          toast.info('Opening decline dialog...');
-          // TODO: Implement decline modal
-          break;
+          setShowDecisionModal('decline');
+          setDecisionNotes('');
+          return; // Don't reload data yet - wait for modal confirmation
 
         case 'GENERATE_OFFER':
           await lomsService.generateOffer(applicationId, currentUserId);
@@ -513,8 +514,113 @@ export function ApplicationWorkflowPanel({
         loading={loading}
         productName={productName}
       />
+
+      {/* Underwriting Decision Modal */}
+      {showDecisionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div
+              className={`px-6 py-4 ${showDecisionModal === 'approve' ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'}`}
+            >
+              <h3
+                className={`text-lg font-semibold ${showDecisionModal === 'approve' ? 'text-green-900' : 'text-red-900'}`}
+              >
+                {showDecisionModal === 'approve'
+                  ? '✅ Approve Application'
+                  : '❌ Decline Application'}
+              </h3>
+              <p
+                className={`text-sm mt-1 ${showDecisionModal === 'approve' ? 'text-green-700' : 'text-red-700'}`}
+              >
+                {showDecisionModal === 'approve'
+                  ? 'This will approve the application and move it to the offer stage.'
+                  : 'This will decline the application. This action cannot be undone.'}
+              </p>
+            </div>
+            <div className="px-6 py-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {showDecisionModal === 'approve' ? 'Approval Notes' : 'Reason for Decline'}{' '}
+                {showDecisionModal === 'decline' && <span className="text-red-500">*</span>}
+              </label>
+              <textarea
+                value={decisionNotes}
+                onChange={e => setDecisionNotes(e.target.value)}
+                placeholder={
+                  showDecisionModal === 'approve'
+                    ? 'Optional notes for approval...'
+                    : 'Provide reason for declining...'
+                }
+                className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                rows={4}
+              />
+            </div>
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowDecisionModal(null)}
+                disabled={loading}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDecisionConfirm(showDecisionModal)}
+                disabled={loading || (showDecisionModal === 'decline' && !decisionNotes.trim())}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 inline-flex items-center gap-2 ${
+                  showDecisionModal === 'approve'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {loading && (
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                )}
+                {showDecisionModal === 'approve' ? 'Confirm Approval' : 'Confirm Decline'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  // Handle underwriting decision (approve/decline)
+  async function handleDecisionConfirm(decision: 'approve' | 'decline') {
+    try {
+      setLoading(true);
+
+      const targetStatus = decision === 'approve' ? 'APPROVED' : 'UNDERWRITING_DECLINED';
+
+      await lomsService.transitionStatus(applicationId, {
+        currentStatus: lomsStatus,
+        targetStatus,
+        actorId: currentUserId,
+        reason:
+          decisionNotes ||
+          (decision === 'approve'
+            ? 'Application approved by underwriter'
+            : 'Application declined by underwriter'),
+      });
+
+      toast.success(
+        decision === 'approve'
+          ? 'Application approved — ready for offer generation'
+          : 'Application has been declined'
+      );
+
+      setShowDecisionModal(null);
+      setDecisionNotes('');
+
+      // Reload workflow data
+      await loadWorkflowData();
+      onStatusChange?.();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : `Failed to ${decision} application`;
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Handle booking confirmation with disbursement details
   async function handleBookingConfirm(

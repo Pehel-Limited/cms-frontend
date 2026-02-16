@@ -26,6 +26,7 @@ export type LomsApplicationStatus =
   | 'UNDERWRITING_APPROVED'
   | 'UNDERWRITING_DECLINED'
   | 'REFERRED_TO_SENIOR'
+  | 'REFERRED_TO_UNDERWRITER'
   // Decision/Offer States
   | 'PENDING_DECISION'
   | 'APPROVED'
@@ -397,6 +398,14 @@ export const STATUS_CONFIG: Record<
     borderColor: 'border-yellow-300',
     icon: '👤',
   },
+  REFERRED_TO_UNDERWRITER: {
+    label: 'Under Review',
+    description: 'Assigned to underwriter for review',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-100',
+    borderColor: 'border-amber-300',
+    icon: '🔎',
+  },
   DECLINED: {
     label: 'Declined',
     description: 'Application declined',
@@ -707,6 +716,7 @@ export const WORKFLOW_PHASES: {
       'UNDERWRITING_APPROVED',
       'UNDERWRITING_DECLINED',
       'REFERRED_TO_SENIOR',
+      'REFERRED_TO_UNDERWRITER',
       'PENDING_DECISION',
       'APPROVED',
       'DECLINED',
@@ -773,6 +783,7 @@ export function calculateProgress(status: LomsApplicationStatus): number {
     UNDERWRITING_APPROVED: 50,
     UNDERWRITING_DECLINED: 100,
     REFERRED_TO_SENIOR: 48,
+    REFERRED_TO_UNDERWRITER: 48,
     PENDING_DECISION: 52,
     APPROVED: 55,
     DECLINED: 100,

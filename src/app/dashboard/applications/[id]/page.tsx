@@ -556,6 +556,7 @@ export default function ApplicationDetailPage() {
       PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-800',
       REFERRED_TO_SENIOR: 'bg-yellow-100 text-yellow-800',
       PENDING_UNDERWRITING: 'bg-indigo-100 text-indigo-800',
+      REFERRED_TO_UNDERWRITER: 'bg-amber-100 text-amber-800',
       DECLINED: 'bg-red-100 text-red-800',
       OFFER_GENERATED: 'bg-indigo-100 text-indigo-800',
       OFFER_SENT: 'bg-indigo-100 text-indigo-800',
@@ -600,6 +601,7 @@ export default function ApplicationDetailPage() {
     'PENDING_KYC',
     'PENDING_CREDIT_CHECK',
     'REFERRED_TO_SENIOR',
+    'REFERRED_TO_UNDERWRITER',
     'PENDING_UNDERWRITING',
   ].includes(effectiveStatus);
 

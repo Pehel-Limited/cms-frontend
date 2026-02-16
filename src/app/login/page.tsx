@@ -14,7 +14,7 @@ export default function LoginPage() {
   const { isLoading, error } = useAppSelector(state => state.auth);
 
   const [credentials, setCredentials] = useState({
-    bankId: config.bank.defaultBankId,
+    bankCode: config.bank.defaultBankCode,
     username: '',
     password: '',
   });

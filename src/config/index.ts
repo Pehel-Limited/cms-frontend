@@ -20,6 +20,7 @@ const config = {
   },
   bank: {
     defaultBankId: process.env.NEXT_PUBLIC_DEFAULT_BANK_ID || '',
+    defaultBankCode: process.env.NEXT_PUBLIC_DEFAULT_BANK_CODE || 'DEMO001',
   },
 };
 

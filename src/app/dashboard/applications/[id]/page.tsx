@@ -76,7 +76,10 @@ function ActionModal({
     try {
       setSearchLoading(true);
       const users = await userService.getUnderwriters(search);
-      setUnderwriters(users);
+      // Segregation of duties: exclude the application creator from the underwriter list
+      const creatorId = application?.createdByUserId;
+      const filtered = creatorId ? users.filter(u => u.userId !== creatorId) : users;
+      setUnderwriters(filtered);
     } catch (error) {
       console.error('Failed to load underwriters:', error);
       setUnderwriters([]);
@@ -587,8 +590,11 @@ export default function ApplicationDetailPage() {
     (effectiveStatus === 'SUBMITTED' || effectiveStatus === 'RETURNED') && isApplicationCreator;
 
   // Check if current user is the assigned reviewer
+  // Segregation of duties: even if assigned, the creator cannot review their own application
   const isAssignedReviewer =
-    application?.assignedToUserId && currentUser?.userId === application.assignedToUserId;
+    application?.assignedToUserId &&
+    currentUser?.userId === application.assignedToUserId &&
+    !isApplicationCreator;
 
   // Only the assigned reviewer can approve/reject/return when under review
   // Include both legacy and LOMS statuses for review states

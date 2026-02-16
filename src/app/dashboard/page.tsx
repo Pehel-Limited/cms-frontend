@@ -122,6 +122,7 @@ function getSmartAction(item: WorklistItem): { label: string; actionable: boolea
     IN_UNDERWRITING: 'Awaiting Decision',
     UNDERWRITING_APPROVED: 'Review Decision',
     REFERRED_TO_SENIOR: 'Senior Review',
+    REFERRED_TO_UNDERWRITER: 'Underwriter Review',
     PENDING_DECISION: 'Make Decision',
     APPROVED: 'Generate Offer',
     OFFER_GENERATED: 'Send Offer',

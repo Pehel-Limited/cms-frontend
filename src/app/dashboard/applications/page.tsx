@@ -80,13 +80,13 @@ export default function ApplicationsPage() {
       if (userDataStr) {
         try {
           const userData = JSON.parse(userDataStr);
-          return userData.bankId || '';
-        } catch (e) {
-          console.error('Failed to parse user data:', e);
+          return userData.bankId || config.bank.defaultBankId;
+        } catch {
+          return config.bank.defaultBankId;
         }
       }
     }
-    return '';
+    return config.bank.defaultBankId;
   };
 
   const bankId = getBankId();

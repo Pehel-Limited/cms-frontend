@@ -27,7 +27,8 @@ export interface AuthTokens {
 }
 
 export interface LoginRequest {
-  bankId: string;
+  bankId?: string;
+  bankCode?: string;
   username: string;
   password: string;
 }

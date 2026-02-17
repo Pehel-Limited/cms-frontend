@@ -90,8 +90,7 @@ const FEATURES = [
 const STATS = [
   { value: '99.9%', label: 'Uptime SLA' },
   { value: '<200ms', label: 'Avg Response' },
-  { value: 'SOC 2', label: 'Certified' },
-  { value: 'EU / IE', label: 'Compliant' },
+  { value: 'GDPR', label: 'Compliant' },
 ];
 
 export default function HomePage() {

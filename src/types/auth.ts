@@ -47,7 +47,7 @@ export interface RegisterBankUserRequest {
 
 export interface RegisterCustomerRequest {
   bankId: string;
-  customerId: string;
+  customerId?: string;
   username: string;
   email: string;
   password: string;

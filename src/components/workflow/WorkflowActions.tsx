@@ -307,7 +307,9 @@ export function WorkflowActions({
                       ? 'Waiting for customer signature...'
                       : currentStatus === 'REFERRED_TO_UNDERWRITER' ||
                           currentStatus === 'REFERRED_TO_SENIOR'
-                        ? 'Awaiting underwriter decision — only the assigned reviewer can approve or decline.'
+                        ? isApplicationCreator
+                          ? 'You cannot review your own application — segregation of duties. Another reviewer must approve or decline.'
+                          : 'Awaiting underwriter decision — only the assigned reviewer can approve or decline.'
                         : 'No actions available at this stage'}
             </p>
             {['PENDING_CREDIT_CHECK', 'PENDING_KYC', 'PENDING_BOOKING'].includes(currentStatus) && (

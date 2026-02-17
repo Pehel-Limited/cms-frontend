@@ -36,7 +36,7 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081',
     NEXT_PUBLIC_IDENTITY_URL: process.env.NEXT_PUBLIC_IDENTITY_URL || 'http://localhost:8082',
     NEXT_PUBLIC_GRAPHQL_URL: process.env.NEXT_PUBLIC_GRAPHQL_URL || 'http://localhost:8081/graphql',
-    NEXT_PUBLIC_APP_NAME: 'CMS Banking Platform',
+    NEXT_PUBLIC_APP_NAME: 'Rayva',
   },
   // Disable rewrites in production (frontend calls backend directly via env vars)
   async rewrites() {

@@ -11,7 +11,8 @@
     @apply border-gray-200;
   }
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-slate-100 text-gray-900 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
   body.dark {
     @apply bg-gray-900 text-gray-50;
@@ -21,11 +22,11 @@
 @layer components {
   /* Button styles */
   .btn {
-    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+    @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-sm;
   }
 
   .btn-secondary {
@@ -38,16 +39,16 @@
 
   /* Card styles */
   .card {
-    @apply bg-white rounded-xl shadow-soft p-6 border border-gray-100;
+    @apply bg-white rounded-2xl shadow-sm p-6 border border-slate-200/80;
   }
 
   .card-hover {
-    @apply transition-all duration-300 hover:shadow-medium hover:-translate-y-1;
+    @apply transition-all duration-300 hover:shadow-md hover:-translate-y-0.5;
   }
 
   /* Input styles */
   .input {
-    @apply w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-colors;
+    @apply w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-colors;
   }
 
   .input-error {
@@ -86,35 +87,46 @@
   .animate-slide-up {
     animation: slideUp 0.3s ease-out;
   }
+
+  /* Hide scrollbar utility for horizontal scroll sections */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Sidebar scrollbar */
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  @apply bg-transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-full;
+  @apply bg-gray-300/60 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
-}
-
-/* Dark mode scrollbar */
-.dark ::-webkit-scrollbar-track {
-  @apply bg-gray-800;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  @apply bg-gray-600;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-500;
+  @apply bg-gray-400/80;
 }

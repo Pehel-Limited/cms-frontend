@@ -67,7 +67,8 @@ export function ApplicationWorkflowPanel({
   const [showDecisionModal, setShowDecisionModal] = useState<'approve' | 'decline' | null>(null);
   const [decisionNotes, setDecisionNotes] = useState('');
 
-  const isAssignedReviewer = currentUserId === assignedToUserId;
+  // Segregation of duties: creator cannot review their own application
+  const isAssignedReviewer = currentUserId === assignedToUserId && !isApplicationCreator;
 
   // Use the LOMS status directly - we now receive the effective status from the parent
   const lomsStatus = statusInfo?.status || applicationStatus;

@@ -6,7 +6,7 @@ const config = {
     timeout: 30000,
   },
   app: {
-    name: process.env.NEXT_PUBLIC_APP_NAME || 'CMS Banking Platform',
+    name: process.env.NEXT_PUBLIC_APP_NAME || 'Rayva',
     url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   },
   auth: {

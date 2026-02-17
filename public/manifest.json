@@ -1,6 +1,6 @@
 {
-  "name": "CMS Banking Platform",
-  "short_name": "CMS Banking",
+  "name": "Rayva",
+  "short_name": "Rayva",
   "description": "Digital Banking Credit Management System",
   "start_url": "/",
   "display": "standalone",

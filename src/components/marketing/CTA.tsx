@@ -7,8 +7,8 @@ export function CTA() {
         <div className="text-center text-white">
           <h2 className="text-4xl font-bold mb-4">Ready to transform your credit management?</h2>
           <p className="text-xl mb-8 opacity-90 max-w-2xl mx-auto">
-            Join leading banks and financial institutions using CMS Banking Platform to streamline
-            their operations.
+            Join leading banks and financial institutions using Rayva to streamline their
+            operations.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link

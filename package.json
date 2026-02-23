@@ -1,54 +1,28 @@
 {
   "name": "cms-frontend",
   "version": "1.0.0",
-  "description": "Digital Banking CMS Platform - Frontend",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "dev": "turbo dev",
+    "dev:bank": "turbo dev --filter=@cms/bank-ops",
+    "dev:cust": "turbo dev --filter=@cms/cust-portal",
+    "build": "turbo build",
+    "build:bank": "turbo build --filter=@cms/bank-ops",
+    "build:cust": "turbo build --filter=@cms/cust-portal",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
-    "type-check": "tsc --noEmit",
-    "analyze": "ANALYZE=true next build"
-  },
-  "dependencies": {
-    "@apollo/client": "^3.8.8",
-    "@emotion/react": "^11.11.1",
-    "@emotion/styled": "^11.11.0",
-    "@reduxjs/toolkit": "^1.9.7",
-    "axios": "^1.6.2",
-    "clsx": "^2.0.0",
-    "graphql": "^16.8.1",
-    "jwt-decode": "^4.0.0",
-    "next": "14.0.4",
-    "next-pwa": "^5.6.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-hook-form": "^7.48.2",
-    "react-redux": "^8.1.3",
-    "react-toastify": "^9.1.3",
-    "zod": "^3.22.4",
-    "zustand": "^4.4.7"
+    "clean": "turbo clean && rm -rf node_modules"
   },
   "devDependencies": {
-    "@tailwindcss/forms": "^0.5.10",
-    "@tailwindcss/typography": "^0.5.19",
-    "@types/node": "^20.10.5",
-    "@types/react": "^18.2.45",
-    "@types/react-dom": "^18.2.18",
-    "@typescript-eslint/eslint-plugin": "^6.15.0",
-    "@typescript-eslint/parser": "^6.15.0",
-    "autoprefixer": "^10.4.16",
-    "eslint": "^8.56.0",
-    "eslint-config-next": "14.0.4",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-react": "^7.33.2",
-    "postcss": "^8.4.32",
     "prettier": "^3.1.1",
-    "tailwindcss": "^3.4.0",
-    "typescript": "^5.3.3"
+    "turbo": "^2.4.0"
   },
+  "packageManager": "npm@10.9.3",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"

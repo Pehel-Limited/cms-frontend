@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: 'Inter', system-ui, sans-serif;
+  --color-brand: #7f2b7b;
+  --color-brand-light: #ae3fa9;
+  --color-brand-dark: #582057;
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  body {
+    @apply bg-slate-50 text-gray-900 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+  body.dark {
+    @apply bg-gray-900 text-gray-50;
+  }
+}
+
+@layer components {
+  /* ─── Buttons ─── */
+  .btn {
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-primary-700 text-white hover:bg-primary-800 focus:ring-primary-500 shadow-sm hover:shadow-md;
+  }
+  .btn-secondary {
+    @apply bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-400;
+  }
+  .btn-outline {
+    @apply border-2 border-primary-700 text-primary-700 hover:bg-primary-50 focus:ring-primary-500;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-gray-300;
+  }
+
+  /* ─── Cards ─── */
+  .card {
+    @apply bg-white rounded-2xl shadow-soft p-6 border border-slate-200/80;
+  }
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-medium hover:-translate-y-0.5;
+  }
+  .card-interactive {
+    @apply card card-hover cursor-pointer hover:border-primary-200;
+  }
+
+  /* ─── Inputs ─── */
+  .input {
+    @apply w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-colors;
+  }
+  .input-error {
+    @apply border-error focus:border-error focus:ring-error/20;
+  }
+
+  /* ─── Layout helpers ─── */
+  .container-custom {
+    @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  .page-header {
+    @apply mb-8 pb-4 border-b border-gray-200;
+  }
+  .page-title {
+    @apply text-3xl font-bold text-gray-900;
+  }
+
+  /* ─── Badge ─── */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .badge-primary {
+    @apply bg-primary-100 text-primary-800;
+  }
+  .badge-success {
+    @apply bg-emerald-100 text-emerald-800;
+  }
+  .badge-warning {
+    @apply bg-amber-100 text-amber-800;
+  }
+  .badge-error {
+    @apply bg-red-100 text-red-800;
+  }
+
+  /* ─── Spinner ─── */
+  .spinner {
+    @apply inline-block h-6 w-6 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite];
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .glass {
+    @apply bg-white/80 backdrop-blur-md;
+  }
+}
+
+/* ─── Sidebar scrollbar (thin, translucent on gradient) ─── */
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ─── Global thin scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

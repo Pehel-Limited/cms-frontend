@@ -47,3 +47,6 @@ public/worker-*.js.map
 *.swp
 *.swo
 *~
+
+# Turborepo
+.turbo

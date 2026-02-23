@@ -8,13 +8,13 @@ import 'react-toastify/dist/ReactToastify.css';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'CMS Banking Platform',
-  description: 'Digital Banking Credit Management System',
+  title: 'Rayva',
+  description: 'Modern Credit Management Platform',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'CMS Banking',
+    title: 'Rayva',
   },
 };
 

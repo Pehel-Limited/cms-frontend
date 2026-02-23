@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link href="/dashboard" className="text-2xl font-bold text-primary-600">
-                CMS Banking Dashboard
+                Rayva Dashboard
               </Link>
             </div>
             <div className="flex items-center space-x-4">

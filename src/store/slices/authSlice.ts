@@ -23,15 +23,24 @@ export const loginUser = createAsyncThunk(
   }
 );
 
-export const loadStoredAuth = createAsyncThunk('auth/loadStored', async () => {
-  const user = authService.getStoredUser();
-  const tokens = authService.getStoredTokens();
+export const loadStoredAuth = createAsyncThunk(
+  'auth/loadStored',
+  async (_, { rejectWithValue }) => {
+    try {
+      const user = authService.getStoredUser();
+      const tokens = authService.getStoredTokens();
 
-  if (user && tokens) {
-    return { user, tokens };
+      if (user && tokens && tokens.accessToken) {
+        // Tokens exist, consider user authenticated
+        return { user, tokens };
+      }
+
+      return rejectWithValue('No stored auth data');
+    } catch (error) {
+      return rejectWithValue('Failed to load stored auth');
+    }
   }
-  throw new Error('No stored auth data');
-});
+);
 
 export const logoutUser = createAsyncThunk('auth/logout', async () => {
   await authService.logout();
@@ -83,12 +92,17 @@ const authSlice = createSlice({
     });
 
     // Load stored auth
+    builder.addCase(loadStoredAuth.pending, state => {
+      state.isLoading = true;
+    });
     builder.addCase(loadStoredAuth.fulfilled, (state, action) => {
+      state.isLoading = false;
       state.user = action.payload.user;
       state.tokens = action.payload.tokens;
       state.isAuthenticated = true;
     });
     builder.addCase(loadStoredAuth.rejected, state => {
+      state.isLoading = false;
       state.isAuthenticated = false;
     });
 

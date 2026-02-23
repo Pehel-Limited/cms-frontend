@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import apiClient from '@/lib/api-client';
 
 interface User {
@@ -89,7 +90,7 @@ export default function PendingUsersPage() {
       await apiClient.put(`/api/v1/admin/users/${userId}/activate`);
 
       // Show success message
-      alert(`User "${username}" has been activated successfully!`);
+      toast.success(`User "${username}" has been activated successfully!`);
 
       // Refresh the list
       await fetchPendingUsers();
@@ -97,7 +98,7 @@ export default function PendingUsersPage() {
       console.error('Error activating user:', err);
       const error = err as { response?: { data?: { message?: string } } };
       const errorMessage = error.response?.data?.message || 'Failed to activate user';
-      alert(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setActionLoading(null);
     }
@@ -117,7 +118,7 @@ export default function PendingUsersPage() {
       await apiClient.put(`/api/v1/admin/users/${userId}/deactivate`);
 
       // Show success message
-      alert(`User "${username}" has been rejected.`);
+      toast.warning(`User "${username}" has been rejected.`);
 
       // Refresh the list
       await fetchPendingUsers();
@@ -125,7 +126,7 @@ export default function PendingUsersPage() {
       console.error('Error rejecting user:', err);
       const error = err as { response?: { data?: { message?: string } } };
       const errorMessage = error.response?.data?.message || 'Failed to reject user';
-      alert(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setActionLoading(null);
     }

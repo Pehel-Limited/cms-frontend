@@ -34,6 +34,7 @@ const STATUS_BG: Record<string, string> = {
 
 /* ── Pipeline bar colors ──────────────────────────────────── */
 const PIPELINE_COLORS: Record<string, string> = {
+  DRAFT: 'from-slate-400 to-slate-300',
   SUBMITTED: 'from-blue-500 to-blue-400',
   IN_REVIEW: 'from-amber-500 to-amber-400',
   UNDERWRITING: 'from-orange-500 to-orange-400',

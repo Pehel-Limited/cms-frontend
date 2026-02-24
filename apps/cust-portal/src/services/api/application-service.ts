@@ -2,69 +2,150 @@ import { apiClient } from './client';
 
 // ─── Status ────────────────────────────────────────────────────
 
+// Single comprehensive status (matches backend LomsApplicationStatus)
 export type ApplicationStatus =
+  // Initiation
   | 'DRAFT'
   | 'SUBMITTED'
-  | 'UNDER_REVIEW'
-  | 'DOCUMENTS_PENDING'
+  // KYC
+  | 'PENDING_KYC'
+  | 'KYC_APPROVED'
+  | 'KYC_REJECTED'
+  // Documents
+  | 'PENDING_DOCUMENTS'
   | 'DOCUMENTS_RECEIVED'
-  | 'CREDIT_CHECK_INITIATED'
-  | 'CREDIT_CHECK_COMPLETED'
-  | 'UNDER_UNDERWRITING'
+  // Credit
+  | 'PENDING_CREDIT_CHECK'
+  | 'CREDIT_APPROVED'
+  | 'CREDIT_DECLINED'
+  // Underwriting
+  | 'PENDING_UNDERWRITING'
+  | 'IN_UNDERWRITING'
   | 'UNDERWRITING_APPROVED'
-  | 'UNDERWRITING_REJECTED'
-  | 'PENDING_APPROVAL'
-  | 'CONDITIONALLY_APPROVED'
+  | 'UNDERWRITING_DECLINED'
+  | 'REFERRED_TO_SENIOR'
+  | 'REFERRED_TO_UNDERWRITER'
+  // Decision
+  | 'PENDING_DECISION'
   | 'APPROVED'
-  | 'REJECTED'
+  | 'DECLINED'
+  // Offer
+  | 'OFFER_GENERATED'
+  | 'OFFER_SENT'
+  | 'OFFER_ACCEPTED'
+  | 'OFFER_REJECTED'
+  | 'OFFER_EXPIRED'
+  | 'OFFER_COUNTERED'
+  // Conditions
+  | 'PENDING_CONDITIONS'
+  | 'CONDITIONS_MET'
+  // E-Sign
+  | 'PENDING_ESIGN'
+  | 'ESIGN_IN_PROGRESS'
+  | 'ESIGN_COMPLETED'
+  // Booking & Disbursement
+  | 'PENDING_BOOKING'
+  | 'BOOKING_IN_PROGRESS'
+  | 'BOOKED'
+  | 'PENDING_DISBURSEMENT'
+  | 'DISBURSEMENT_IN_PROGRESS'
+  | 'DISBURSED'
+  // Misc
+  | 'RETURNED'
+  | 'CANCELLED'
   | 'WITHDRAWN'
   | 'EXPIRED'
-  | 'ON_HOLD'
-  | 'CANCELLED'
-  | 'RETURNED';
+  | 'ACTIVE'
+  | 'CLOSED';
 
-export const STATUS_LABELS: Record<ApplicationStatus, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Draft',
   SUBMITTED: 'Submitted',
-  UNDER_REVIEW: 'Under Review',
-  DOCUMENTS_PENDING: 'Documents Pending',
+  PENDING_KYC: 'Pending KYC',
+  KYC_APPROVED: 'KYC Approved',
+  KYC_REJECTED: 'KYC Rejected',
+  PENDING_DOCUMENTS: 'Documents Pending',
   DOCUMENTS_RECEIVED: 'Documents Received',
-  CREDIT_CHECK_INITIATED: 'Credit Check Started',
-  CREDIT_CHECK_COMPLETED: 'Credit Check Done',
-  UNDER_UNDERWRITING: 'Under Underwriting',
+  PENDING_CREDIT_CHECK: 'Credit Check Pending',
+  CREDIT_APPROVED: 'Credit Approved',
+  CREDIT_DECLINED: 'Credit Declined',
+  PENDING_UNDERWRITING: 'Pending Underwriting',
+  IN_UNDERWRITING: 'In Underwriting',
   UNDERWRITING_APPROVED: 'Underwriting Approved',
-  UNDERWRITING_REJECTED: 'Underwriting Rejected',
-  PENDING_APPROVAL: 'Pending Approval',
-  CONDITIONALLY_APPROVED: 'Conditionally Approved',
+  UNDERWRITING_DECLINED: 'Underwriting Declined',
+  REFERRED_TO_SENIOR: 'Referred to Senior',
+  REFERRED_TO_UNDERWRITER: 'Referred to Underwriter',
+  PENDING_DECISION: 'Pending Decision',
   APPROVED: 'Approved',
-  REJECTED: 'Rejected',
+  DECLINED: 'Declined',
+  OFFER_GENERATED: 'Offer Generated',
+  OFFER_SENT: 'Offer Sent',
+  OFFER_ACCEPTED: 'Offer Accepted',
+  OFFER_REJECTED: 'Offer Rejected',
+  OFFER_EXPIRED: 'Offer Expired',
+  OFFER_COUNTERED: 'Offer Countered',
+  PENDING_CONDITIONS: 'Pending Conditions',
+  CONDITIONS_MET: 'Conditions Met',
+  PENDING_ESIGN: 'Pending E-Sign',
+  ESIGN_IN_PROGRESS: 'E-Sign In Progress',
+  ESIGN_COMPLETED: 'E-Sign Completed',
+  PENDING_BOOKING: 'Pending Booking',
+  BOOKING_IN_PROGRESS: 'Booking In Progress',
+  BOOKED: 'Booked',
+  PENDING_DISBURSEMENT: 'Pending Disbursement',
+  DISBURSEMENT_IN_PROGRESS: 'Disbursement In Progress',
+  DISBURSED: 'Disbursed',
+  RETURNED: 'Returned for Corrections',
+  CANCELLED: 'Cancelled',
   WITHDRAWN: 'Withdrawn',
   EXPIRED: 'Expired',
-  ON_HOLD: 'On Hold',
-  CANCELLED: 'Cancelled',
-  RETURNED: 'Returned for Corrections',
+  ACTIVE: 'Active',
+  CLOSED: 'Closed',
 };
 
-export const STATUS_COLORS: Record<ApplicationStatus, string> = {
+export const STATUS_COLORS: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-700',
   SUBMITTED: 'bg-blue-100 text-blue-700',
-  UNDER_REVIEW: 'bg-indigo-100 text-indigo-700',
-  DOCUMENTS_PENDING: 'bg-yellow-100 text-yellow-700',
+  PENDING_KYC: 'bg-yellow-100 text-yellow-700',
+  KYC_APPROVED: 'bg-teal-100 text-teal-700',
+  KYC_REJECTED: 'bg-red-100 text-red-700',
+  PENDING_DOCUMENTS: 'bg-yellow-100 text-yellow-700',
   DOCUMENTS_RECEIVED: 'bg-teal-100 text-teal-700',
-  CREDIT_CHECK_INITIATED: 'bg-purple-100 text-purple-700',
-  CREDIT_CHECK_COMPLETED: 'bg-purple-100 text-purple-700',
-  UNDER_UNDERWRITING: 'bg-orange-100 text-orange-700',
+  PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-700',
+  CREDIT_APPROVED: 'bg-emerald-100 text-emerald-700',
+  CREDIT_DECLINED: 'bg-red-100 text-red-700',
+  PENDING_UNDERWRITING: 'bg-orange-100 text-orange-700',
+  IN_UNDERWRITING: 'bg-orange-100 text-orange-700',
   UNDERWRITING_APPROVED: 'bg-emerald-100 text-emerald-700',
-  UNDERWRITING_REJECTED: 'bg-red-100 text-red-700',
-  PENDING_APPROVAL: 'bg-amber-100 text-amber-700',
-  CONDITIONALLY_APPROVED: 'bg-lime-100 text-lime-700',
+  UNDERWRITING_DECLINED: 'bg-red-100 text-red-700',
+  REFERRED_TO_SENIOR: 'bg-indigo-100 text-indigo-700',
+  REFERRED_TO_UNDERWRITER: 'bg-indigo-100 text-indigo-700',
+  PENDING_DECISION: 'bg-amber-100 text-amber-700',
   APPROVED: 'bg-green-100 text-green-700',
-  REJECTED: 'bg-red-100 text-red-700',
+  DECLINED: 'bg-red-100 text-red-700',
+  OFFER_GENERATED: 'bg-cyan-100 text-cyan-700',
+  OFFER_SENT: 'bg-cyan-100 text-cyan-700',
+  OFFER_ACCEPTED: 'bg-green-100 text-green-700',
+  OFFER_REJECTED: 'bg-red-100 text-red-700',
+  OFFER_EXPIRED: 'bg-gray-100 text-gray-500',
+  OFFER_COUNTERED: 'bg-amber-100 text-amber-700',
+  PENDING_CONDITIONS: 'bg-yellow-100 text-yellow-700',
+  CONDITIONS_MET: 'bg-teal-100 text-teal-700',
+  PENDING_ESIGN: 'bg-violet-100 text-violet-700',
+  ESIGN_IN_PROGRESS: 'bg-violet-100 text-violet-700',
+  ESIGN_COMPLETED: 'bg-emerald-100 text-emerald-700',
+  PENDING_BOOKING: 'bg-sky-100 text-sky-700',
+  BOOKING_IN_PROGRESS: 'bg-sky-100 text-sky-700',
+  BOOKED: 'bg-green-100 text-green-700',
+  PENDING_DISBURSEMENT: 'bg-lime-100 text-lime-700',
+  DISBURSEMENT_IN_PROGRESS: 'bg-lime-100 text-lime-700',
+  DISBURSED: 'bg-green-100 text-green-700',
+  RETURNED: 'bg-orange-100 text-orange-700',
+  CANCELLED: 'bg-gray-100 text-gray-500',
   WITHDRAWN: 'bg-gray-100 text-gray-600',
   EXPIRED: 'bg-gray-100 text-gray-500',
-  ON_HOLD: 'bg-yellow-100 text-yellow-800',
-  CANCELLED: 'bg-gray-100 text-gray-500',
-  RETURNED: 'bg-orange-100 text-orange-700',
+  ACTIVE: 'bg-green-100 text-green-700',
+  CLOSED: 'bg-gray-100 text-gray-600',
 };
 
 // ─── Loan Purpose ──────────────────────────────────────────────
@@ -126,7 +207,7 @@ export interface LoanApplication {
   applicationNumber: string;
 
   // Status
-  status: ApplicationStatus;
+  status: string;
   lomsStatus?: string;
   channel: string;
   currentStage?: string;
@@ -333,14 +414,19 @@ export interface CustomerStatusInfo {
 
 // ─── Status Flow Steps (for progress tracker) ─────────────────
 
-export const STATUS_FLOW: ApplicationStatus[] = [
+export const STATUS_FLOW: string[] = [
   'DRAFT',
   'SUBMITTED',
-  'UNDER_REVIEW',
-  'DOCUMENTS_PENDING',
-  'UNDER_UNDERWRITING',
-  'PENDING_APPROVAL',
+  'PENDING_KYC',
+  'PENDING_DOCUMENTS',
+  'PENDING_CREDIT_CHECK',
+  'PENDING_UNDERWRITING',
+  'PENDING_DECISION',
   'APPROVED',
+  'OFFER_GENERATED',
+  'PENDING_ESIGN',
+  'PENDING_BOOKING',
+  'DISBURSED',
 ];
 
 // ─── API Functions ─────────────────────────────────────────────

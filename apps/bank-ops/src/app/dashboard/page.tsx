@@ -279,6 +279,13 @@ export default function DashboardPage() {
   const pipelineSummary = useMemo(() => {
     const stages = [
       {
+        key: 'DRAFT',
+        label: 'Draft',
+        color: 'bg-slate-400',
+        lightBg: 'bg-slate-50',
+        textColor: 'text-slate-600',
+      },
+      {
         key: 'SUBMITTED',
         label: 'Submitted',
         color: 'bg-blue-500',

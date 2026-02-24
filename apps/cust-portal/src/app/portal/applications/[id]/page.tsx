@@ -6,7 +6,6 @@ import { formatCurrency } from '@/lib/format';
 import {
   applicationService,
   LoanApplication,
-  ApplicationStatus,
   CustomerStatusInfo,
   CustomerStage,
   CUSTOMER_STAGES,
@@ -87,7 +86,7 @@ function formatDateTime(dateStr: string) {
   });
 }
 
-function StatusBadge({ status }: { status: ApplicationStatus }) {
+function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] || status;
   const color = STATUS_COLORS[status] || 'bg-gray-100 text-gray-700';
   return (
@@ -100,7 +99,18 @@ function StatusBadge({ status }: { status: ApplicationStatus }) {
 }
 
 // Terminal statuses (not in the normal flow)
-const TERMINAL_STATUSES: ApplicationStatus[] = ['REJECTED', 'WITHDRAWN', 'EXPIRED', 'CANCELLED'];
+const TERMINAL_STATUSES: string[] = [
+  'DECLINED',
+  'WITHDRAWN',
+  'EXPIRED',
+  'CANCELLED',
+  'KYC_REJECTED',
+  'CREDIT_DECLINED',
+  'UNDERWRITING_DECLINED',
+  'OFFER_REJECTED',
+  'OFFER_EXPIRED',
+  'CLOSED',
+];
 
 export default function ApplicationDetailPage() {
   const params = useParams();
@@ -417,7 +427,11 @@ export default function ApplicationDetailPage() {
       {isTerminal && !statusInfo && (
         <div
           className={`rounded-xl border p-5 mb-6 ${
-            app.status === 'REJECTED' || app.status === 'CANCELLED'
+            app.status === 'DECLINED' ||
+            app.status === 'CANCELLED' ||
+            app.status === 'KYC_REJECTED' ||
+            app.status === 'CREDIT_DECLINED' ||
+            app.status === 'UNDERWRITING_DECLINED'
               ? 'bg-red-50 border-red-200'
               : 'bg-gray-50 border-gray-200'
           }`}

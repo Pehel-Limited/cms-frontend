@@ -39,13 +39,25 @@ function getGreeting(): string {
 }
 
 function statusCategory(s: string): 'active' | 'approved' | 'declined' | 'other' {
-  const approved = new Set(['APPROVED', 'CONDITIONALLY_APPROVED', 'UNDERWRITING_APPROVED']);
+  const approved = new Set([
+    'APPROVED',
+    'OFFER_ACCEPTED',
+    'UNDERWRITING_APPROVED',
+    'BOOKED',
+    'DISBURSED',
+    'ACTIVE',
+  ]);
   const declined = new Set([
-    'REJECTED',
+    'DECLINED',
     'WITHDRAWN',
     'CANCELLED',
     'EXPIRED',
-    'UNDERWRITING_REJECTED',
+    'UNDERWRITING_DECLINED',
+    'CREDIT_DECLINED',
+    'KYC_REJECTED',
+    'OFFER_REJECTED',
+    'OFFER_EXPIRED',
+    'CLOSED',
   ]);
   if (approved.has(s)) return 'approved';
   if (declined.has(s)) return 'declined';
@@ -150,9 +162,13 @@ export default function PortalDashboard() {
         'WITHDRAWN',
         'CANCELLED',
         'DECLINED',
-        'REJECTED',
         'EXPIRED',
-        'UNDERWRITING_REJECTED',
+        'UNDERWRITING_DECLINED',
+        'CREDIT_DECLINED',
+        'KYC_REJECTED',
+        'OFFER_REJECTED',
+        'OFFER_EXPIRED',
+        'CLOSED',
       ]),
     []
   );

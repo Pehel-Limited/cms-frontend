@@ -163,19 +163,18 @@ export default function EditApplicationPage() {
     }
   };
 
-  // Get effective status - prefer lomsStatus over legacy status
-  const effectiveStatus = application?.lomsStatus || application?.status || '';
+  // Get effective status - status and lomsStatus are now unified
+  const effectiveStatus = application?.status || '';
 
   const canEdit =
     application &&
     [
       'DRAFT',
       'RETURNED',
-      'UNDER_REVIEW',
-      'CREDIT_CHECK',
-      'UNDERWRITING',
       'SUBMITTED',
       'PENDING_KYC',
+      'PENDING_CREDIT_CHECK',
+      'IN_UNDERWRITING',
     ].includes(effectiveStatus) &&
     currentUser?.userId === application.createdByUserId;
 

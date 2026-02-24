@@ -103,12 +103,24 @@ export function getPurposeOptions(category: string) {
 
 // ─── Shared field labels per product category (for amount/term) ─────────
 const FIELD_LABELS: Record<string, { amountLabel: string; termLabel: string }> = {
-  TERM_LOAN: { amountLabel: `Loan Amount (${getCurrencySymbol()})`, termLabel: 'Loan Term (months)' },
-  MORTGAGE: { amountLabel: `Mortgage Amount (${getCurrencySymbol()})`, termLabel: 'Mortgage Term (years)' },
-  VEHICLE_FINANCE: { amountLabel: `Finance Amount (${getCurrencySymbol()})`, termLabel: 'Finance Term (months)' },
+  TERM_LOAN: {
+    amountLabel: `Loan Amount (${getCurrencySymbol()})`,
+    termLabel: 'Loan Term (months)',
+  },
+  MORTGAGE: {
+    amountLabel: `Mortgage Amount (${getCurrencySymbol()})`,
+    termLabel: 'Mortgage Term (years)',
+  },
+  VEHICLE_FINANCE: {
+    amountLabel: `Finance Amount (${getCurrencySymbol()})`,
+    termLabel: 'Finance Term (months)',
+  },
   CREDIT_CARD: { amountLabel: `Credit Limit (${getCurrencySymbol()})`, termLabel: '' },
   OVERDRAFT: { amountLabel: `Overdraft Limit (${getCurrencySymbol()})`, termLabel: '' },
-  BNPL: { amountLabel: `Purchase Amount (${getCurrencySymbol()})`, termLabel: 'Repayment Term (months)' },
+  BNPL: {
+    amountLabel: `Purchase Amount (${getCurrencySymbol()})`,
+    termLabel: 'Repayment Term (months)',
+  },
   INVOICE_ASSET_FINANCE: {
     amountLabel: `Facility Amount (${getCurrencySymbol()})`,
     termLabel: 'Facility Term (months)',

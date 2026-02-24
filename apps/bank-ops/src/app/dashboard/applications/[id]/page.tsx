@@ -399,10 +399,10 @@ const formatRoleName = (role: string): string => {
     .replace(/\b\w/g, c => c.toUpperCase());
 };
 
-// Helper to get effective status - always prefer lomsStatus over legacy status
+// Helper to get effective status - status and lomsStatus are now unified
 const getEffectiveStatus = (app: ApplicationResponse | null): string => {
   if (!app) return '';
-  return app.lomsStatus || app.status || 'DRAFT';
+  return app.status || 'DRAFT';
 };
 
 // Helper to format status for display
@@ -544,35 +544,48 @@ export default function ApplicationDetailPage() {
 
   const getStatusColor = (status: string) => {
     const colors: { [key: string]: string } = {
-      // Legacy statuses
       DRAFT: 'bg-gray-100 text-slate-800',
       SUBMITTED: 'bg-blue-100 text-blue-800',
-      UNDER_REVIEW: 'bg-yellow-100 text-yellow-800',
-      CREDIT_CHECK: 'bg-purple-100 text-purple-800',
-      UNDERWRITING: 'bg-indigo-100 text-indigo-800',
-      MANAGER_APPROVAL: 'bg-orange-100 text-orange-800',
-      APPROVED: 'bg-green-100 text-green-800',
-      REJECTED: 'bg-red-100 text-red-800',
-      RETURNED_FOR_CORRECTIONS: 'bg-amber-100 text-amber-800',
-      DISBURSED: 'bg-emerald-100 text-emerald-800',
-      // LOMS statuses
       PENDING_KYC: 'bg-orange-100 text-orange-800',
+      KYC_APPROVED: 'bg-teal-100 text-teal-800',
+      KYC_REJECTED: 'bg-red-100 text-red-800',
+      PENDING_DOCUMENTS: 'bg-orange-100 text-orange-800',
+      DOCUMENTS_RECEIVED: 'bg-teal-100 text-teal-800',
       PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-800',
-      REFERRED_TO_SENIOR: 'bg-yellow-100 text-yellow-800',
+      CREDIT_APPROVED: 'bg-emerald-100 text-emerald-800',
+      CREDIT_DECLINED: 'bg-red-100 text-red-800',
       PENDING_UNDERWRITING: 'bg-indigo-100 text-indigo-800',
+      IN_UNDERWRITING: 'bg-indigo-100 text-indigo-800',
+      UNDERWRITING_APPROVED: 'bg-emerald-100 text-emerald-800',
+      UNDERWRITING_DECLINED: 'bg-red-100 text-red-800',
+      REFERRED_TO_SENIOR: 'bg-yellow-100 text-yellow-800',
       REFERRED_TO_UNDERWRITER: 'bg-amber-100 text-amber-800',
+      PENDING_DECISION: 'bg-purple-100 text-purple-800',
+      APPROVED: 'bg-green-100 text-green-800',
       DECLINED: 'bg-red-100 text-red-800',
       OFFER_GENERATED: 'bg-indigo-100 text-indigo-800',
       OFFER_SENT: 'bg-indigo-100 text-indigo-800',
+      OFFER_ACCEPTED: 'bg-green-100 text-green-800',
+      OFFER_REJECTED: 'bg-red-100 text-red-800',
+      OFFER_EXPIRED: 'bg-gray-100 text-slate-800',
+      OFFER_COUNTERED: 'bg-amber-100 text-amber-800',
+      PENDING_CONDITIONS: 'bg-amber-100 text-amber-800',
+      CONDITIONS_MET: 'bg-teal-100 text-teal-800',
       PENDING_ESIGN: 'bg-cyan-100 text-cyan-800',
       ESIGN_IN_PROGRESS: 'bg-cyan-100 text-cyan-800',
       ESIGN_COMPLETED: 'bg-teal-100 text-teal-800',
       PENDING_BOOKING: 'bg-amber-100 text-amber-800',
       BOOKING_IN_PROGRESS: 'bg-amber-100 text-amber-800',
       BOOKED: 'bg-emerald-100 text-emerald-800',
+      PENDING_DISBURSEMENT: 'bg-lime-100 text-lime-800',
+      DISBURSEMENT_IN_PROGRESS: 'bg-lime-100 text-lime-800',
+      DISBURSED: 'bg-emerald-100 text-emerald-800',
+      RETURNED: 'bg-orange-100 text-orange-800',
       CANCELLED: 'bg-gray-100 text-slate-800',
       WITHDRAWN: 'bg-gray-100 text-slate-800',
       EXPIRED: 'bg-gray-100 text-slate-800',
+      ACTIVE: 'bg-green-100 text-green-800',
+      CLOSED: 'bg-gray-100 text-slate-800',
     };
     return colors[status] || 'bg-gray-100 text-slate-800';
   };
@@ -600,16 +613,13 @@ export default function ApplicationDetailPage() {
   // Only the assigned reviewer can approve/reject/return when under review
   // Include both legacy and LOMS statuses for review states
   const isUnderReviewStatus = [
-    'UNDER_REVIEW',
-    'CREDIT_CHECK',
-    'UNDERWRITING',
-    'MANAGER_APPROVAL',
-    // LOMS statuses that indicate review in progress
     'PENDING_KYC',
     'PENDING_CREDIT_CHECK',
     'REFERRED_TO_SENIOR',
     'REFERRED_TO_UNDERWRITER',
     'PENDING_UNDERWRITING',
+    'IN_UNDERWRITING',
+    'PENDING_DECISION',
   ].includes(effectiveStatus);
 
   // Only assigned reviewer can approve
@@ -621,13 +631,18 @@ export default function ApplicationDetailPage() {
   // Application creator (RM) can withdraw non-draft applications before final decision
   const isNotFinalStatus = ![
     'APPROVED',
-    'REJECTED',
     'DECLINED',
     'WITHDRAWN',
     'CANCELLED',
     'DISBURSED',
     'BOOKED',
     'EXPIRED',
+    'KYC_REJECTED',
+    'CREDIT_DECLINED',
+    'UNDERWRITING_DECLINED',
+    'OFFER_REJECTED',
+    'OFFER_EXPIRED',
+    'CLOSED',
   ].includes(effectiveStatus);
   const canWithdraw = isNotFinalStatus && isApplicationCreator && effectiveStatus !== 'DRAFT';
 
@@ -636,12 +651,12 @@ export default function ApplicationDetailPage() {
 
   const canReturn =
     [
-      'UNDER_REVIEW',
-      'CREDIT_CHECK',
-      'UNDERWRITING',
+      'PENDING_KYC',
+      'PENDING_CREDIT_CHECK',
       'REFERRED_TO_SENIOR',
       'PENDING_UNDERWRITING',
-      'PENDING_KYC',
+      'IN_UNDERWRITING',
+      'PENDING_DECISION',
     ].includes(effectiveStatus) && isAssignedReviewer;
 
   // Application creator can add notes while under review (to send info to reviewer)
@@ -652,11 +667,10 @@ export default function ApplicationDetailPage() {
     [
       'DRAFT',
       'RETURNED',
-      'UNDER_REVIEW',
-      'CREDIT_CHECK',
-      'UNDERWRITING',
       'SUBMITTED',
       'PENDING_KYC',
+      'PENDING_CREDIT_CHECK',
+      'IN_UNDERWRITING',
     ].includes(effectiveStatus) && isApplicationCreator;
 
   if (loading) {
@@ -1252,17 +1266,20 @@ export default function ApplicationDetailPage() {
                   </div>
                 )}
 
-              {application.decisionMadeAt && ['REJECTED', 'DECLINED'].includes(effectiveStatus) && (
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-red-600 mt-2"></div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Rejected</p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(application.decisionMadeAt).toLocaleString()}
-                    </p>
+              {application.decisionMadeAt &&
+                ['DECLINED', 'UNDERWRITING_DECLINED', 'CREDIT_DECLINED'].includes(
+                  effectiveStatus
+                ) && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 rounded-full bg-red-600 mt-2"></div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">Rejected</p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(application.decisionMadeAt).toLocaleString()}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           </div>
 

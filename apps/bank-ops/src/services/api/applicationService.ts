@@ -399,29 +399,29 @@ export class ApplicationService {
     myApplications: number;
     pendingReview: number;
     approved: number;
-    rejected: number;
-    underReview: number;
+    declined: number;
+    inUnderwriting: number;
     draft: number;
   }> {
     try {
-      // Get counts for different statuses
-      const [myCreated, pending, approved, rejected, underReview, draft] = await Promise.all([
+      // Get counts for different statuses (using LOMS status values)
+      const [myCreated, pending, approved, declined, inUnderwriting, draft] = await Promise.all([
         this.getMyCreatedApplications(0, 1)
           .then(r => r.totalElements)
           .catch(() => 0),
         this.getApplicationCount(bankId, 'SUBMITTED').catch(() => 0),
         this.getApplicationCount(bankId, 'APPROVED').catch(() => 0),
-        this.getApplicationCount(bankId, 'REJECTED').catch(() => 0),
-        this.getApplicationCount(bankId, 'UNDER_REVIEW').catch(() => 0),
+        this.getApplicationCount(bankId, 'DECLINED').catch(() => 0),
+        this.getApplicationCount(bankId, 'IN_UNDERWRITING').catch(() => 0),
         this.getApplicationCount(bankId, 'DRAFT').catch(() => 0),
       ]);
 
       return {
         myApplications: myCreated,
-        pendingReview: pending + underReview,
+        pendingReview: pending + inUnderwriting,
         approved,
-        rejected,
-        underReview,
+        declined,
+        inUnderwriting,
         draft,
       };
     } catch (error) {
@@ -431,8 +431,8 @@ export class ApplicationService {
         myApplications: 0,
         pendingReview: 0,
         approved: 0,
-        rejected: 0,
-        underReview: 0,
+        declined: 0,
+        inUnderwriting: 0,
         draft: 0,
       };
     }

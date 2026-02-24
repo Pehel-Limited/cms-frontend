@@ -94,14 +94,8 @@ export default function ApplicationsPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [isReviewer, setIsReviewer] = useState(false);
-  const [filterCustomerId, setFilterCustomerId] = useState<string | null>(null);
+  const filterCustomerId = searchParams.get('customerId');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: '', direction: null });
-
-  // Check for customerId in URL params
-  useEffect(() => {
-    const customerId = searchParams.get('customerId');
-    setFilterCustomerId(customerId);
-  }, [searchParams]);
 
   // Get bankId from user object or localStorage fallback
   const getBankId = (): string => {

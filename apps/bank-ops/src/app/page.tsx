@@ -174,10 +174,10 @@ export default function HomePage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
-                href="/register"
+                href="/enquiry"
                 className="inline-flex items-center justify-center gap-2 px-7 py-3 bg-white text-blue-700 rounded-xl font-semibold text-base hover:bg-blue-50 transition-colors shadow-lg shadow-blue-900/20"
               >
-                Start Free Trial
+                Schedule Demo
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
@@ -265,21 +265,18 @@ export default function HomePage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href="/register"
+              href="/enquiry"
               className="inline-flex items-center justify-center gap-2 px-7 py-3 bg-white text-blue-700 rounded-xl font-semibold hover:bg-blue-50 transition-colors shadow-lg shadow-blue-900/20"
             >
-              Start Free Trial
+              Schedule Demo
             </Link>
             <Link
               href="#features"
               className="inline-flex items-center justify-center gap-2 px-7 py-3 bg-white/10 border border-white/20 rounded-xl font-semibold text-white hover:bg-white/20 transition-colors"
             >
-              Schedule Demo
+              Explore Features
             </Link>
           </div>
-          <p className="mt-8 text-sm text-blue-300/60">
-            No credit card required &middot; 14-day free trial &middot; Cancel anytime
-          </p>
         </div>
       </section>
 

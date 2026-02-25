@@ -12,21 +12,18 @@ export function CTA() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href="/register"
+              href="/enquiry"
               className="bg-white text-primary-600 hover:bg-gray-100 px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl"
-            >
-              Start Free Trial
-            </Link>
-            <Link
-              href="#contact"
-              className="border-2 border-white text-white hover:bg-white/10 px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-200"
             >
               Schedule Demo
             </Link>
+            <Link
+              href="#features"
+              className="border-2 border-white text-white hover:bg-white/10 px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-200"
+            >
+              Explore Features
+            </Link>
           </div>
-          <p className="mt-6 text-sm opacity-75">
-            ✨ No credit card required • 14-day free trial • Cancel anytime
-          </p>
         </div>
       </div>
     </section>

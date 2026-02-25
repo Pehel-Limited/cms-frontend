@@ -47,7 +47,7 @@ function ActionModal({
         setFormData({
           approvedAmount: application.requestedAmount || '',
           approvedTermMonths: application.requestedTermMonths || '',
-          interestRate: '',
+          approvedInterestRate: application.requestedInterestRate || '',
           notes: '',
         });
       } else if (type === 'assign') {

@@ -294,21 +294,99 @@ export default function ApplicationsPage() {
             />
           </div>
 
-          {/* Status filter pills */}
-          <div className="flex flex-wrap gap-2">
-            {APPLICATION_STATUSES.map(status => (
+          {/* ── Status lifecycle pipeline ── */}
+          <div className="pt-1">
+            <div className="flex items-center gap-1 mb-3">
               <button
-                key={status}
-                onClick={() => handleStatusChange(status)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 ${
-                  selectedStatus === status
+                onClick={() => handleStatusChange('ALL')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                  selectedStatus === 'ALL'
                     ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
                 }`}
               >
-                {status.replace(/_/g, ' ')}
+                All
               </button>
-            ))}
+              <span className="text-slate-300 text-[10px] ml-1 mr-0.5">|</span>
+              <p className="text-[11px] text-slate-400 font-medium tracking-wide uppercase">
+                Application Lifecycle
+              </p>
+            </div>
+
+            <div className="overflow-x-auto py-1 -mx-1 px-1">
+              <div className="flex items-stretch min-w-max">
+                {APPLICATION_STATUSES.filter(s => s !== 'ALL').map((status, idx, arr) => {
+                  const isActive = selectedStatus === status;
+                  const style = getStatusStyle(status);
+                  const isTerminal = status === 'APPROVED' || status === 'DECLINED';
+                  const isLast = idx === arr.length - 1;
+
+                  return (
+                    <div key={status} className="flex items-stretch">
+                      <button
+                        onClick={() => handleStatusChange(status)}
+                        className={`relative flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl text-center transition-all duration-200 group min-w-[90px] ${
+                          isActive
+                            ? `${style.bg} ring-2 ring-offset-1 ring-current ${style.text} shadow-sm`
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        {/* Status dot / icon */}
+                        <div
+                          className={`w-3 h-3 rounded-full border-2 transition-all duration-200 ${
+                            isActive
+                              ? `${style.dot} border-current scale-110`
+                              : 'border-slate-300 bg-white group-hover:border-slate-400'
+                          }`}
+                        >
+                          {isActive && (
+                            <div className="w-full h-full rounded-full animate-ping opacity-30 bg-current" />
+                          )}
+                        </div>
+
+                        {/* Status label */}
+                        <span
+                          className={`text-[11px] font-semibold leading-tight whitespace-nowrap transition-colors ${
+                            isActive ? style.text : 'text-slate-500 group-hover:text-slate-700'
+                          }`}
+                        >
+                          {status.replace(/_/g, ' ')}
+                        </span>
+
+                        {/* Step number */}
+                        <span
+                          className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full leading-none ${
+                            isActive ? `${style.bg} ${style.text}` : 'text-slate-400 bg-slate-50'
+                          }`}
+                        >
+                          Step {idx + 1}
+                        </span>
+                      </button>
+
+                      {/* Connector arrow */}
+                      {!isLast && (
+                        <div className="flex items-center px-0.5 self-center -mt-2">
+                          <div className="w-4 h-px bg-slate-300" />
+                          <svg
+                            className="w-2.5 h-2.5 text-slate-300 -ml-0.5 shrink-0"
+                            viewBox="0 0 8 12"
+                            fill="none"
+                          >
+                            <path
+                              d="M1.5 1L6.5 6L1.5 11"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 

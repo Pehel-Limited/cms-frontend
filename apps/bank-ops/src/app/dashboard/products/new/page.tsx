@@ -795,17 +795,6 @@ export default function NewProductPage() {
                         />
                         <span className="ml-2 text-sm text-gray-700">Auto-Approval Enabled</span>
                       </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="isFeatured"
-                          checked={formData.isFeatured || false}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Featured Product</span>
-                      </label>
                     </div>
                   </div>
 

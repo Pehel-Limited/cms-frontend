@@ -8,7 +8,7 @@ import { useAppSelector } from '@/store';
 import config from '@/config';
 import { formatCurrency } from '@/lib/format';
 
-type FilterType = 'all' | 'active' | 'inactive' | 'featured';
+type FilterType = 'all' | 'active' | 'inactive';
 type CategoryFilter = 'all' | 'PERSONAL_CONSUMER' | 'BUSINESS_SME' | 'SPECIALIZED_IRISH';
 type CustomerTypeFilter = 'all' | 'INDIVIDUAL' | 'BUSINESS';
 type ViewMode = 'table' | 'card';
@@ -135,8 +135,6 @@ export default function ProductsPage() {
       result = result.filter(p => p.productStatus === 'ACTIVE');
     } else if (statusFilter === 'inactive') {
       result = result.filter(p => p.productStatus === 'INACTIVE');
-    } else if (statusFilter === 'featured') {
-      result = result.filter(p => p.isFeatured);
     }
 
     if (categoryFilter !== 'all') {
@@ -248,28 +246,6 @@ export default function ProductsPage() {
         </div>
       ),
       color: 'text-emerald-600',
-    },
-    {
-      label: 'Featured',
-      value: products.filter(p => p.isFeatured).length,
-      icon: (
-        <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center mx-auto">
-          <svg
-            className="w-4 h-4 text-amber-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-            />
-          </svg>
-        </div>
-      ),
-      color: 'text-amber-600',
     },
     {
       label: 'Categories',
@@ -386,7 +362,6 @@ export default function ProductsPage() {
               <option value="all">All Status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
-              <option value="featured">Featured</option>
             </select>
             <select
               value={categoryFilter}
@@ -578,11 +553,6 @@ export default function ProductsPage() {
                             <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
                               {product.productName}
                             </p>
-                            {product.isFeatured && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
-                                ★
-                              </span>
-                            )}
                           </div>
                           <p className="text-xs text-slate-400 mt-0.5">{product.productCode}</p>
                           {product.shortDescription && (
@@ -771,11 +741,6 @@ export default function ProductsPage() {
                           <h3 className="text-base font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
                             {product.productName}
                           </h3>
-                          {product.isFeatured && (
-                            <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
-                              ★ Featured
-                            </span>
-                          )}
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">{product.productCode}</p>
                       </div>

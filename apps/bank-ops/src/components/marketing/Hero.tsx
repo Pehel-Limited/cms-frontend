@@ -19,34 +19,12 @@ export function Hero() {
               next-generation banking platform. Built for scale, designed for speed.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/register" className="btn btn-primary px-8 py-3 text-lg">
-                Start Free Trial
+              <Link href="/enquiry" className="btn btn-primary px-8 py-3 text-lg">
+                Schedule Demo
               </Link>
               <Link href="#features" className="btn btn-outline px-8 py-3 text-lg">
                 Learn More
               </Link>
-            </div>
-            <div className="mt-8 flex items-center space-x-8 text-sm text-gray-600">
-              <div className="flex items-center">
-                <svg className="w-5 h-5 text-success mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                No credit card required
-              </div>
-              <div className="flex items-center">
-                <svg className="w-5 h-5 text-success mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                14-day free trial
-              </div>
             </div>
           </div>
           <div className="relative animate-slide-up">

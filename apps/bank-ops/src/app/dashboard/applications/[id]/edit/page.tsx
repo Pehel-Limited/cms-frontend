@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAppSelector } from '@/store';
 import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
@@ -8,6 +8,10 @@ import { productService, type Product } from '@/services/api/productService';
 import { customerService, type Customer } from '@/services/api/customerService';
 import config from '@/config';
 import { formatCurrency } from '@/lib/format';
+import DynamicProductFields, {
+  type FormValues,
+} from '@/components/applications/DynamicProductFields';
+import { getProductFieldConfig } from '@/config/productFieldConfig';
 
 export default function EditApplicationPage() {
   const router = useRouter();
@@ -32,12 +36,8 @@ export default function EditApplicationPage() {
   const [loanPurpose, setLoanPurpose] = useState('');
   const [loanPurposeDescription, setLoanPurposeDescription] = useState('');
 
-  // Property info (for home loans)
-  const [propertyAddress, setPropertyAddress] = useState('');
-  const [propertyCity, setPropertyCity] = useState('');
-  const [propertyState, setPropertyState] = useState('');
-  const [propertyValue, setPropertyValue] = useState('');
-  const [downPaymentAmount, setDownPaymentAmount] = useState('');
+  // Product-specific additional fields (key-value map driven by productFieldConfig)
+  const [additionalData, setAdditionalData] = useState<FormValues>({});
 
   useEffect(() => {
     loadData();
@@ -77,11 +77,35 @@ export default function EditApplicationPage() {
       setLoanPurpose(appData.loanPurpose || '');
       setLoanPurposeDescription(appData.loanPurposeDescription || '');
 
-      setPropertyAddress(appData.propertyAddress || '');
-      setPropertyCity(appData.propertyCity || '');
-      setPropertyState(appData.propertyState || '');
-      setPropertyValue(appData.propertyValue?.toString() || '');
-      setDownPaymentAmount(appData.downPaymentAmount?.toString() || '');
+      // Populate product-specific additional data from known application fields
+      const productType =
+        productsData.find(p => p.productId === appData.productId)?.productType || '';
+      const initialAdditional: FormValues = {};
+
+      // Map known ApplicationResponse fields into additionalData keys used by productFieldConfig
+      const fieldMappings: Array<{ key: string; value: string | number | undefined | null }> = [
+        { key: 'propertyAddress', value: appData.propertyAddress },
+        { key: 'propertyCity', value: appData.propertyCity },
+        { key: 'propertyState', value: appData.propertyState },
+        { key: 'propertyValue', value: appData.propertyValue },
+        { key: 'deposit_amount', value: appData.downPaymentAmount },
+        { key: 'employmentStatus', value: appData.employmentStatus },
+        { key: 'employerName', value: appData.employerName },
+        { key: 'annualIncome', value: appData.statedAnnualIncome },
+      ];
+
+      for (const { key, value } of fieldMappings) {
+        if (value != null && value !== '') {
+          initialAdditional[key] = value.toString();
+        }
+      }
+
+      // Also load any previously-saved additionalData from the response
+      if ((appData as any).additionalData && typeof (appData as any).additionalData === 'object') {
+        Object.assign(initialAdditional, (appData as any).additionalData);
+      }
+
+      setAdditionalData(initialAdditional);
     } catch (err: any) {
       setError(err.message || 'Failed to load application');
     } finally {
@@ -98,7 +122,7 @@ export default function EditApplicationPage() {
       const updateData: any = {
         productId: selectedProductId,
         requestedAmount: parseFloat(requestedAmount),
-        requestedTermMonths: parseInt(requestedTermMonths),
+        requestedTermMonths: parseInt(requestedTermMonths) || undefined,
         loanPurpose,
       };
 
@@ -109,20 +133,65 @@ export default function EditApplicationPage() {
       if (loanPurposeDescription) {
         updateData.loanPurposeDescription = loanPurposeDescription;
       }
-      if (propertyAddress) {
-        updateData.propertyAddress = propertyAddress;
+
+      // Map product-specific fields back to known backend columns
+      const knownPropertyKeys = [
+        'propertyAddress',
+        'propertyCity',
+        'propertyState',
+        'propertyPostalCode',
+        'propertyType',
+      ];
+      for (const k of knownPropertyKeys) {
+        if (additionalData[k]) updateData[k] = additionalData[k];
       }
-      if (propertyCity) {
-        updateData.propertyCity = propertyCity;
+      if (additionalData['propertyValue']) {
+        updateData.propertyValue = parseFloat(additionalData['propertyValue']);
       }
-      if (propertyState) {
-        updateData.propertyState = propertyState;
+      if (additionalData['deposit_amount'] || additionalData['downPaymentAmount']) {
+        updateData.downPaymentAmount = parseFloat(
+          additionalData['deposit_amount'] || additionalData['downPaymentAmount'] || '0'
+        );
       }
-      if (propertyValue) {
-        updateData.propertyValue = parseFloat(propertyValue);
+      // Vehicle fields
+      if (additionalData['vehicleMake']) updateData.vehicleMake = additionalData['vehicleMake'];
+      if (additionalData['vehicleModel']) updateData.vehicleModel = additionalData['vehicleModel'];
+      if (additionalData['vehicleYear'])
+        updateData.vehicleYear = parseInt(additionalData['vehicleYear']);
+      if (additionalData['vehicleCondition'])
+        updateData.vehicleCondition = additionalData['vehicleCondition'];
+      if (additionalData['vehicleValue'])
+        updateData.vehicleValue = parseFloat(additionalData['vehicleValue']);
+      // Employment / income
+      if (additionalData['employmentStatus'])
+        updateData.employmentStatus = additionalData['employmentStatus'];
+      if (additionalData['employerName']) updateData.employerName = additionalData['employerName'];
+      if (additionalData['annualIncome'])
+        updateData.statedAnnualIncome = parseFloat(additionalData['annualIncome']);
+
+      // Store remaining product-specific fields as additionalData JSON (for backend extension)
+      const backendMappedKeys = new Set([
+        ...knownPropertyKeys,
+        'propertyValue',
+        'deposit_amount',
+        'downPaymentAmount',
+        'vehicleMake',
+        'vehicleModel',
+        'vehicleYear',
+        'vehicleCondition',
+        'vehicleValue',
+        'employmentStatus',
+        'employerName',
+        'annualIncome',
+      ]);
+      const extraData: Record<string, string> = {};
+      for (const [k, v] of Object.entries(additionalData)) {
+        if (!backendMappedKeys.has(k) && v) {
+          extraData[k] = v;
+        }
       }
-      if (downPaymentAmount) {
-        updateData.downPaymentAmount = parseFloat(downPaymentAmount);
+      if (Object.keys(extraData).length > 0) {
+        updateData.additionalData = extraData;
       }
 
       await applicationService.updateApplication(applicationId, updateData);
@@ -153,6 +222,21 @@ export default function EditApplicationPage() {
       'IN_UNDERWRITING',
     ].includes(effectiveStatus) &&
     currentUser?.userId === application.createdByUserId;
+
+  // Hooks must be called unconditionally (before any early returns)
+  const selectedProduct = products.find(p => p.productId === selectedProductId);
+  const productType = selectedProduct?.productType || '';
+  const fieldConfig = useMemo(() => getProductFieldConfig(productType), [productType]);
+
+  // Dynamic labels from product config
+  const amountLabel = fieldConfig.amountLabel || 'Requested Amount';
+  const termLabel = fieldConfig.termLabel;
+  const hideTerm = termLabel === '';
+
+  // Handler for product-specific field changes
+  const handleAdditionalChange = useCallback((key: string, value: string) => {
+    setAdditionalData(prev => ({ ...prev, [key]: value }));
+  }, []);
 
   if (loading) {
     return (
@@ -193,8 +277,6 @@ export default function EditApplicationPage() {
       </div>
     );
   }
-
-  const selectedProduct = products.find(p => p.productId === selectedProductId);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -526,15 +608,39 @@ export default function EditApplicationPage() {
         )}
 
         {/* Loan Request Section */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Loan Request Details</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border border-slate-200 dark:border-gray-700">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <svg
+              className="w-5 h-5 text-slate-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            Loan Request Details
+          </h2>
+
+          {/* Common fields: Product, Amount, Term, Rate, Purpose */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Product Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Product
+              </label>
               <select
                 value={selectedProductId}
-                onChange={e => setSelectedProductId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={e => {
+                  setSelectedProductId(e.target.value);
+                  // Reset purpose when product changes since options differ per product
+                  setLoanPurpose('');
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select a product</option>
                 {products.map(product => (
@@ -545,15 +651,16 @@ export default function EditApplicationPage() {
               </select>
             </div>
 
+            {/* Amount (dynamic label) */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Requested Amount
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {amountLabel}
               </label>
               <input
                 type="number"
                 value={requestedAmount}
                 onChange={e => setRequestedAmount(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter amount"
               />
               {selectedProduct && (
@@ -564,24 +671,30 @@ export default function EditApplicationPage() {
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Term (Months)</label>
-              <input
-                type="number"
-                value={requestedTermMonths}
-                onChange={e => setRequestedTermMonths(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter term in months"
-              />
-              {selectedProduct && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Range: {selectedProduct.minTermMonths} - {selectedProduct.maxTermMonths} months
-                </p>
-              )}
-            </div>
+            {/* Term (hidden for credit cards / overdrafts) */}
+            {!hideTerm && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {termLabel || 'Term (Months)'}
+                </label>
+                <input
+                  type="number"
+                  value={requestedTermMonths}
+                  onChange={e => setRequestedTermMonths(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter term"
+                />
+                {selectedProduct && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Range: {selectedProduct.minTermMonths} – {selectedProduct.maxTermMonths} months
+                  </p>
+                )}
+              </div>
+            )}
 
+            {/* Interest Rate */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Interest Rate (%)
               </label>
               <input
@@ -589,114 +702,54 @@ export default function EditApplicationPage() {
                 step="0.01"
                 value={requestedInterestRate}
                 onChange={e => setRequestedInterestRate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter interest rate"
               />
             </div>
 
+            {/* Purpose (dynamic options per product) */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Loan Purpose</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Loan Purpose
+              </label>
               <select
                 value={loanPurpose}
                 onChange={e => setLoanPurpose(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select purpose</option>
-                <option value="HOME_PURCHASE">Home Purchase</option>
-                <option value="HOME_CONSTRUCTION">Home Construction</option>
-                <option value="HOME_RENOVATION">Home Renovation</option>
-                <option value="VEHICLE_PURCHASE">Vehicle Purchase</option>
-                <option value="BUSINESS_EXPANSION">Business Expansion</option>
-                <option value="WORKING_CAPITAL">Working Capital</option>
-                <option value="EQUIPMENT_PURCHASE">Equipment Purchase</option>
-                <option value="DEBT_CONSOLIDATION">Debt Consolidation</option>
-                <option value="EDUCATION">Education</option>
-                <option value="PERSONAL_USE">Personal Use</option>
-                <option value="OTHER">Other</option>
+                {fieldConfig.purposeOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </div>
 
+            {/* Purpose Description */}
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Purpose Description
               </label>
               <textarea
                 value={loanPurposeDescription}
                 onChange={e => setLoanPurposeDescription(e.target.value)}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Additional details about the loan purpose"
               />
             </div>
           </div>
+
+          {/* Product-specific dynamic fields */}
+          {productType && (
+            <DynamicProductFields
+              productType={productType}
+              values={additionalData}
+              onChange={handleAdditionalChange}
+            />
+          )}
         </div>
-
-        {/* Property Information (for home loans) */}
-        {selectedProduct?.productType === 'HOME_LOAN' && (
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Property Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Address
-                </label>
-                <input
-                  type="text"
-                  value={propertyAddress}
-                  onChange={e => setPropertyAddress(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter property address"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                <input
-                  type="text"
-                  value={propertyCity}
-                  onChange={e => setPropertyCity(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter city"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                <input
-                  type="text"
-                  value={propertyState}
-                  onChange={e => setPropertyState(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter state"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Property Value
-                </label>
-                <input
-                  type="number"
-                  value={propertyValue}
-                  onChange={e => setPropertyValue(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter property value"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Down Payment</label>
-                <input
-                  type="number"
-                  value={downPaymentAmount}
-                  onChange={e => setDownPaymentAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter down payment"
-                />
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Action Buttons */}
         <div className="flex justify-end gap-4">
@@ -708,7 +761,7 @@ export default function EditApplicationPage() {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !requestedAmount || !requestedTermMonths || !selectedProductId}
+            disabled={saving || !requestedAmount || !selectedProductId}
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : 'Save Changes'}

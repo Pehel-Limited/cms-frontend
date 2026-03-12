@@ -184,11 +184,20 @@ export const INITIAL_FORM_DATA: ProductFormData = {
   assetDescription: '',
 };
 
+// ─── Customer profile snapshot type ─────────────────────────────────────
+export interface CustomerProfileSnapshot {
+  employmentStatus: string;
+  employerName: string;
+  occupation: string;
+  annualIncome: string;
+}
+
 // ─── Props ───────────────────────────────────────────────────────────────
 interface ProductFormFieldsProps {
   product: Product;
   formData: ProductFormData;
   onChange: (field: keyof ProductFormData, value: string) => void;
+  customerProfile?: CustomerProfileSnapshot;
 }
 
 // ─── Shared input styling ───────────────────────────────────────────────
@@ -306,56 +315,48 @@ function AmountRateFields({
   );
 }
 
-// ─── Employment & Income section ────────────────────────────────────────
-function EmploymentIncomeFields({
-  formData,
-  onChange,
-}: {
-  formData: ProductFormData;
-  onChange: ProductFormFieldsProps['onChange'];
-}) {
+// ─── Employment & Income – read-only from customer profile ─────────────
+const EMPLOYMENT_LABELS: Record<string, string> = {
+  EMPLOYED: 'Employed',
+  SELF_EMPLOYED: 'Self-Employed',
+  BUSINESS_OWNER: 'Business Owner',
+  RETIRED: 'Retired',
+  STUDENT: 'Student',
+  HOMEMAKER: 'Homemaker',
+  UNEMPLOYED: 'Unemployed',
+};
+
+function CustomerIncomeSnapshot({ profile }: { profile: CustomerProfileSnapshot }) {
+  const viewField = (label: string, value: string | undefined | null) => (
+    <div>
+      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
+      <p className="text-sm text-slate-900 py-2">{value || '—'}</p>
+    </div>
+  );
+
   return (
-    <Section title="Employment & Income">
-      <div>
-        <label className={labelCls}>Employment Status</label>
-        <select
-          value={formData.employmentStatus}
-          onChange={e => onChange('employmentStatus', e.target.value)}
-          className={inputCls}
-        >
-          <option value="">Select status</option>
-          <option value="EMPLOYED">Employed</option>
-          <option value="SELF_EMPLOYED">Self-Employed</option>
-          <option value="BUSINESS_OWNER">Business Owner</option>
-          <option value="RETIRED">Retired</option>
-          <option value="STUDENT">Student</option>
-          <option value="HOMEMAKER">Homemaker</option>
-          <option value="UNEMPLOYED">Unemployed</option>
-        </select>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+        <h3 className="text-base font-semibold text-gray-900">Employment & Income</h3>
+        <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+          From customer profile
+        </span>
       </div>
-
-      <div>
-        <label className={labelCls}>Employer Name</label>
-        <input
-          type="text"
-          value={formData.employerName}
-          onChange={e => onChange('employerName', e.target.value)}
-          className={inputCls}
-          placeholder="Enter employer name"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 rounded-lg p-4">
+        {viewField(
+          'Employment Status',
+          EMPLOYMENT_LABELS[profile.employmentStatus] || profile.employmentStatus
+        )}
+        {viewField('Employer Name', profile.employerName)}
+        {viewField('Occupation', profile.occupation)}
+        {viewField(
+          'Annual Income',
+          profile.annualIncome
+            ? `${getCurrencySymbol()}${Number(profile.annualIncome).toLocaleString()}`
+            : ''
+        )}
       </div>
-
-      <div>
-        <label className={labelCls}>Annual Income ({getCurrencySymbol()})</label>
-        <input
-          type="number"
-          value={formData.annualIncome}
-          onChange={e => onChange('annualIncome', e.target.value)}
-          className={inputCls}
-          placeholder="Enter gross annual income"
-        />
-      </div>
-    </Section>
+    </div>
   );
 }
 
@@ -574,7 +575,12 @@ function InvoiceAssetFields({
 }
 
 // ─── Main composing component ───────────────────────────────────────────
-export default function ProductFormFields({ product, formData, onChange }: ProductFormFieldsProps) {
+export default function ProductFormFields({
+  product,
+  formData,
+  onChange,
+  customerProfile,
+}: ProductFormFieldsProps) {
   const category = getProductCategory(product.productType);
 
   return (
@@ -587,61 +593,19 @@ export default function ProductFormFields({ product, formData, onChange }: Produ
         category={category}
       />
 
-      {/* Mortgage: property + income */}
-      {category === 'MORTGAGE' && (
-        <>
-          <PropertyFields formData={formData} onChange={onChange} />
-          <EmploymentIncomeFields formData={formData} onChange={onChange} />
-        </>
-      )}
+      {/* Mortgage: property details */}
+      {category === 'MORTGAGE' && <PropertyFields formData={formData} onChange={onChange} />}
 
       {/* Vehicle Finance: vehicle details */}
       {category === 'VEHICLE_FINANCE' && <VehicleFields formData={formData} onChange={onChange} />}
 
-      {/* Term Loans: employment & income */}
-      {category === 'TERM_LOAN' && (
-        <EmploymentIncomeFields formData={formData} onChange={onChange} />
-      )}
-
-      {/* Credit Card / Overdraft: income only */}
-      {(category === 'CREDIT_CARD' || category === 'OVERDRAFT') && (
-        <Section title="Income Information">
-          <div>
-            <label className={labelCls}>Annual Income ({getCurrencySymbol()})</label>
-            <input
-              type="number"
-              value={formData.annualIncome}
-              onChange={e => onChange('annualIncome', e.target.value)}
-              className={inputCls}
-              placeholder="Enter gross annual income"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Employment Status</label>
-            <select
-              value={formData.employmentStatus}
-              onChange={e => onChange('employmentStatus', e.target.value)}
-              className={inputCls}
-            >
-              <option value="">Select status</option>
-              <option value="EMPLOYED">Employed</option>
-              <option value="SELF_EMPLOYED">Self-Employed</option>
-              <option value="BUSINESS_OWNER">Business Owner</option>
-              <option value="RETIRED">Retired</option>
-            </select>
-          </div>
-        </Section>
-      )}
-
       {/* Invoice / Asset Finance: asset details */}
       {category === 'INVOICE_ASSET_FINANCE' && (
-        <>
-          <InvoiceAssetFields product={product} formData={formData} onChange={onChange} />
-          <EmploymentIncomeFields formData={formData} onChange={onChange} />
-        </>
+        <InvoiceAssetFields product={product} formData={formData} onChange={onChange} />
       )}
 
-      {/* BNPL: minimal — just notes */}
+      {/* Employment & Income – read-only from customer profile (all products) */}
+      {customerProfile && <CustomerIncomeSnapshot profile={customerProfile} />}
 
       {/* Notes — all products */}
       <div>

@@ -962,18 +962,36 @@ export default function ApplicationDetailPage() {
             </div>
           </div>
 
-          {/* Customer Details */}
+          {/* Customer & Financial Profile */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-900">Customer Details</h2>
-              <Link
-                href={`/dashboard/applications?customerId=${application.customerId}`}
-                className="text-sm text-[#7f2b7b] hover:text-[#6b2568] font-medium"
-              >
-                View All Applications →
-              </Link>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold text-slate-900">Customer & Financial Profile</h2>
+              <div className="flex items-center gap-3">
+                <Link
+                  href={`/dashboard/applications?customerId=${application.customerId}`}
+                  className="text-sm text-slate-500 hover:text-slate-700 font-medium"
+                >
+                  All Applications →
+                </Link>
+                <Link
+                  href={`/dashboard/customers/${application.customerId}`}
+                  className="inline-flex items-center gap-1.5 text-sm text-[#7f2b7b] hover:text-[#6b2568] font-medium bg-purple-50 px-3 py-1.5 rounded-lg hover:bg-purple-100 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                  View Full Profile →
+                </Link>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            {/* Basic Details */}
+            <div className="grid grid-cols-2 gap-4 mb-5">
               {application.customer ? (
                 <>
                   <div>
@@ -1016,6 +1034,63 @@ export default function ApplicationDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* Financial & Employment — combined sub-section */}
+            {(application.statedAnnualIncome ||
+              application.statedMonthlyIncome ||
+              application.employmentStatus) && (
+              <div className="border-t border-slate-100 pt-5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 rounded-xl p-4">
+                  {application.statedAnnualIncome && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 mb-0.5">Annual Income</p>
+                      <p className="text-slate-900 font-semibold">
+                        {formatCurrency(application.statedAnnualIncome)}
+                      </p>
+                    </div>
+                  )}
+                  {application.statedMonthlyIncome && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 mb-0.5">Monthly Income</p>
+                      <p className="text-slate-900 font-semibold">
+                        {formatCurrency(application.statedMonthlyIncome)}
+                      </p>
+                    </div>
+                  )}
+                  {application.statedMonthlyExpenses && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 mb-0.5">Monthly Expenses</p>
+                      <p className="text-slate-900 font-semibold">
+                        {formatCurrency(application.statedMonthlyExpenses)}
+                      </p>
+                    </div>
+                  )}
+                  {application.employmentStatus && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 mb-0.5">Employment</p>
+                      <p className="text-slate-900 font-semibold">
+                        {application.employmentStatus.replace(/_/g, ' ')}
+                      </p>
+                    </div>
+                  )}
+                  {application.employerName && (
+                    <div>
+                      <p className="text-xs font-medium text-slate-500 mb-0.5">Employer</p>
+                      <p className="text-slate-900 font-semibold">{application.employerName}</p>
+                    </div>
+                  )}
+                  {application.yearsWithEmployer !== undefined &&
+                    application.yearsWithEmployer > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 mb-0.5">Tenure</p>
+                        <p className="text-slate-900 font-semibold">
+                          {application.yearsWithEmployer} years
+                        </p>
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Loan Request */}
@@ -1111,66 +1186,6 @@ export default function ApplicationDetailPage() {
                   <div>
                     <p className="text-sm text-red-700">Category</p>
                     <p className="text-red-900 font-medium">{application.rejectionCategory}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Financial Information */}
-          {(application.statedMonthlyIncome || application.statedAnnualIncome) && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Financial Information</h2>
-              <div className="grid grid-cols-2 gap-4">
-                {application.statedAnnualIncome && (
-                  <div>
-                    <p className="text-sm text-slate-500">Annual Income</p>
-                    <p className="text-slate-900 font-medium">
-                      {formatCurrency(application.statedAnnualIncome)}
-                    </p>
-                  </div>
-                )}
-                {application.statedMonthlyIncome && (
-                  <div>
-                    <p className="text-sm text-slate-500">Monthly Income</p>
-                    <p className="text-slate-900 font-medium">
-                      {formatCurrency(application.statedMonthlyIncome)}
-                    </p>
-                  </div>
-                )}
-                {application.statedMonthlyExpenses && (
-                  <div>
-                    <p className="text-sm text-slate-500">Monthly Expenses</p>
-                    <p className="text-slate-900 font-medium">
-                      {formatCurrency(application.statedMonthlyExpenses)}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Employment Information */}
-          {application.employmentStatus && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Employment Information</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-slate-500">Employment Status</p>
-                  <p className="text-slate-900 font-medium">{application.employmentStatus}</p>
-                </div>
-                {application.employerName && (
-                  <div>
-                    <p className="text-sm text-slate-500">Employer</p>
-                    <p className="text-slate-900 font-medium">{application.employerName}</p>
-                  </div>
-                )}
-                {application.yearsWithEmployer !== undefined && (
-                  <div>
-                    <p className="text-sm text-slate-500">Years with Employer</p>
-                    <p className="text-slate-900 font-medium">
-                      {application.yearsWithEmployer} years
-                    </p>
                   </div>
                 )}
               </div>

@@ -38,6 +38,9 @@ export interface CreateApplicationRequest {
   vehicleYear?: number;
   vehicleCondition?: string;
   vehicleValue?: number;
+
+  // Product-specific additional data (JSON payload for extended fields)
+  additionalData?: Record<string, string>;
 }
 
 export interface ApplicationResponse {

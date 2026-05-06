@@ -1,0 +1,34 @@
+
+> cms-frontend@1.0.0 dev:bank
+> turbo dev --filter=@cms/bank-ops
+
+• turbo 2.8.9
+• Packages in scope: @cms/bank-ops
+• Running dev in 1 packages
+• Remote caching disabled
+@cms/bank-ops:dev: cache bypass, force executing 1d2e9b34e4b085f9
+@cms/bank-ops:dev: 
+@cms/bank-ops:dev: > @cms/bank-ops@1.0.0 dev
+@cms/bank-ops:dev: > next dev --port 3000
+@cms/bank-ops:dev: 
+@cms/bank-ops:dev: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+@cms/bank-ops:dev: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+@cms/bank-ops:dev:    ▲ Next.js 14.0.4
+@cms/bank-ops:dev:    - Local:        http://localhost:3000
+@cms/bank-ops:dev:    - Environments: .env.local
+@cms/bank-ops:dev: 
+@cms/bank-ops:dev: > [PWA] PWA support is disabled
+@cms/bank-ops:dev: > [PWA] PWA support is disabled
+@cms/bank-ops:dev:  ✓ Ready in 3s
+@cms/bank-ops:dev:  ○ Compiling / ...
+@cms/bank-ops:dev: Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+@cms/bank-ops:dev:   npx update-browserslist-db@latest
+@cms/bank-ops:dev:   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+@cms/bank-ops:dev:  ✓ Compiled / in 6.9s (1360 modules)
+@cms/bank-ops:dev:  ✓ Compiled in 823ms (637 modules)
+@cms/bank-ops:dev:  ○ Compiling /not-found ...
+@cms/bank-ops:dev:  ✓ Compiled /not-found in 5s (1329 modules)
+@cms/bank-ops:dev:  ○ Compiling /login ...
+@cms/bank-ops:dev:  ✓ Compiled /login in 2.4s (1339 modules)
+@cms/bank-ops:dev:  ○ Compiling /dashboard ...
+@cms/bank-ops:dev:  ✓ Compiled /dashboard in 6.8s (1359 modules)

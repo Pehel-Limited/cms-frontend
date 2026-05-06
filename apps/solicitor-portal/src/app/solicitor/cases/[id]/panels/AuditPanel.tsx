@@ -6,12 +6,14 @@ import { toast } from 'react-toastify';
 
 interface AuditEvent {
   id: string;
-  eventType: string;
-  description?: string;
-  actorName?: string;
+  action: string;
+  actorUserId?: string;
   actorType?: string;
+  entityType?: string;
+  oldValue?: string;
+  newValue?: string;
+  reason?: string;
   createdAt?: string;
-  metadata?: Record<string, unknown>;
 }
 
 interface PagedAudit {
@@ -62,19 +64,21 @@ export default function AuditPanel({ caseId }: { caseId: string }) {
               <div className="ml-4 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium text-gray-800">
-                    {event.eventType.replace(/_/g, ' ')}
+                    {event.action?.replace(/_/g, ' ') ?? '—'}
                   </p>
                   <span className="text-xs text-gray-400">
                     {event.createdAt ? new Date(event.createdAt).toLocaleString() : ''}
                   </span>
                 </div>
-                {event.description && (
-                  <p className="text-xs text-gray-600 mt-0.5">{event.description}</p>
+                {event.newValue && (
+                  <p className="text-xs text-gray-600 mt-0.5 font-mono truncate max-w-xs">
+                    {event.newValue}
+                  </p>
                 )}
-                {event.actorName && (
+                {(event.actorType || event.actorUserId) && (
                   <p className="text-xs text-gray-400 mt-0.5">
-                    By {event.actorName}
-                    {event.actorType && ` (${event.actorType})`}
+                    {event.actorType && <span>{event.actorType.replace(/_/g, ' ')}</span>}
+                    {event.reason && <span className="ml-1 italic">— {event.reason}</span>}
                   </p>
                 )}
               </div>

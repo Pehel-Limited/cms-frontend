@@ -78,7 +78,7 @@ export default function ChecklistPanel({
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-medium text-gray-800 text-sm">{item.itemName}</span>
+                <span className="font-medium text-gray-900 text-base">{item.itemName}</span>
                 {item.isMandatory && (
                   <span className="text-xs text-red-500 font-medium">Required</span>
                 )}
@@ -87,9 +87,9 @@ export default function ChecklistPanel({
                 )}
               </div>
               {item.description && (
-                <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                <p className="text-sm text-gray-600 mt-0.5">{item.description}</p>
               )}
-              {item.dueDate && <p className="text-xs text-gray-400 mt-1">Due: {item.dueDate}</p>}
+              {item.dueDate && <p className="text-sm text-gray-500 mt-1">Due: {item.dueDate}</p>}
             </div>
             <div className="flex items-center gap-2">
               <span

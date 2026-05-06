@@ -3664,3 +3664,11 @@
 @cms/solicitor-portal:dev:  ✓ Compiled /solicitor/firm/users in 283ms (430 modules)
 @cms/solicitor-portal:dev:  ✓ Compiled /solicitor/notifications in 141ms (432 modules)
 @cms/solicitor-portal:dev:  ✓ Compiled in 1126ms (953 modules)
+@cms/solicitor-portal:dev:  ✓ Compiled in 871ms (947 modules)
+@cms/solicitor-portal:dev:  ○ Compiling /not-found ...
+@cms/solicitor-portal:dev:  ✓ Compiled /not-found in 523ms (938 modules)
+@cms/solicitor-portal:dev:  ✓ Compiled in 612ms (947 modules)
+@cms/solicitor-portal:dev:  ✓ Compiled /solicitor/cases in 114ms (430 modules)
+@cms/solicitor-portal:dev:  ✓ Compiled in 2.1s (947 modules)
+@cms/solicitor-portal:dev:  ✓ Compiled in 701ms (947 modules)
+@cms/solicitor-portal:dev:  ✓ Compiled in 853ms (947 modules)

@@ -34,11 +34,16 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* ──── Left panel: Branding ──── */}
-      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-gradient-to-br from-[#0f2847] via-[#1a3a7a] to-[#2563eb]">
-        {/* Decorative blobs */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-sky-400/5 rounded-full blur-2xl" />
+      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-gradient-to-br from-[#0a1628] via-[#132952] to-[#1a3a7a]">
+        {/* Animated decorative blobs — floating effect */}
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500/15 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-0 right-0 w-80 h-80 bg-indigo-400/15 rounded-full blur-3xl animate-float-delayed" />
+        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-sky-400/10 rounded-full blur-2xl animate-float" />
+        <div className="absolute top-1/2 left-1/4 w-48 h-48 bg-violet-500/10 rounded-full blur-3xl animate-float-delayed" />
+
+        {/* Gradient mesh orbs */}
+        <div className="absolute top-20 right-20 w-32 h-32 rounded-full bg-gradient-to-br from-cyan-400/20 to-blue-600/10 blur-2xl animate-float" />
+        <div className="absolute bottom-32 left-16 w-40 h-40 rounded-full bg-gradient-to-br from-violet-500/15 to-fuchsia-500/5 blur-2xl animate-float-delayed" />
 
         {/* Grid pattern overlay */}
         <div
@@ -84,13 +89,13 @@ export default function LoginPage() {
             </p>
 
             {/* Feature pills */}
-            <div className="flex flex-wrap gap-3 pt-2">
+            <div className="flex flex-wrap gap-3 pt-2 stagger-children">
               {['Loan Origination', 'Risk Analytics', 'KYC / AML', 'Portfolio Mgmt'].map(f => (
                 <span
                   key={f}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-sm text-blue-100"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-sm text-blue-100 hover:bg-white/20 hover:border-white/25 transition-all duration-300 cursor-default group"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 group-hover:bg-sky-300 group-hover:shadow-[0_0_8px_rgba(56,189,248,0.6)] transition-all" />
                   {f}
                 </span>
               ))}
@@ -107,7 +112,7 @@ export default function LoginPage() {
       </div>
 
       {/* ──── Right panel: Login form ──── */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-6 py-12">
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/30 px-6 py-12">
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
@@ -240,7 +245,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#1a3a7a] to-[#2563eb] text-white rounded-xl font-semibold text-sm hover:from-[#15306a] hover:to-[#1d4ed8] transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-[#1a3a7a] via-[#2563eb] to-[#3b82f6] text-white rounded-xl font-semibold text-sm hover:from-[#15306a] hover:via-[#1d4ed8] hover:to-[#2563eb] transition-all duration-300 shadow-lg shadow-blue-600/25 hover:shadow-xl hover:shadow-blue-600/35 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-lg"
             >
               {isLoading ? (
                 <>
@@ -279,7 +284,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => toast.info('SSO integration coming soon')}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
           >
             <svg
               className="w-4 h-4 text-slate-500"

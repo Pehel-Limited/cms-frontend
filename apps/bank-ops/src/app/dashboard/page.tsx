@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/format';
+import AnimatedCounter, { AnimatedCurrency } from '@/components/AnimatedCounter';
 import {
   dashboardService,
   DashboardKpis,
@@ -349,12 +350,13 @@ export default function DashboardPage() {
 
   /* ─── render ─── */
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-100">
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50/30">
       {/* ──── Hero banner ──── */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-[#1a3a7a] via-[#1e4da0] to-[#3b82f6]">
-        {/* decorative shapes */}
-        <div className="absolute -top-20 -right-20 w-80 h-80 bg-white/5 rounded-full blur-3xl" />
-        <div className="absolute -bottom-16 left-1/3 w-64 h-64 bg-blue-400/10 rounded-full blur-2xl" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#0a1628] via-[#132952] to-[#1a3a7a]">
+        {/* Animated decorative shapes */}
+        <div className="absolute -top-20 -right-20 w-80 h-80 bg-cyan-400/8 rounded-full blur-3xl animate-float" />
+        <div className="absolute -bottom-16 left-1/3 w-64 h-64 bg-blue-400/10 rounded-full blur-2xl animate-float-delayed" />
+        <div className="absolute top-1/2 right-1/4 w-48 h-48 bg-violet-500/6 rounded-full blur-3xl animate-float" />
         <svg
           className="absolute bottom-0 left-0 right-0 text-slate-100"
           viewBox="0 0 1440 60"
@@ -363,7 +365,7 @@ export default function DashboardPage() {
           <path fill="currentColor" d="M0,60 L0,30 Q360,0 720,30 Q1080,60 1440,30 L1440,60 Z" />
         </svg>
 
-        <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16">
+        <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16 animate-fade-in">
           {/* Top row: timeframe + refresh */}
           <div className="flex items-center justify-between mb-6">
             <p className="text-blue-100 text-sm">
@@ -398,24 +400,24 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* KPI strip — like VTB's balance/account cards */}
+          {/* KPI strip — glassmorphism cards with animated counters */}
           {kpis && (
-            <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+            <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar stagger-children">
               {/* Total Pipeline */}
-              <div className="min-w-[200px] flex-shrink-0 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-5">
-                <p className="text-blue-200 text-xs font-medium uppercase tracking-wider mb-1">
+              <div className="min-w-[200px] flex-shrink-0 bg-white/8 backdrop-blur-xl border border-white/15 rounded-2xl p-5 hover:bg-white/12 hover:border-white/25 transition-all duration-300 group">
+                <p className="text-blue-300/80 text-xs font-medium uppercase tracking-wider mb-1">
                   Total Pipeline
                 </p>
-                <p className="text-3xl font-bold text-white tabular-nums">
-                  {formatCurrency(kpis.inProgressValue)}
+                <p className="text-3xl font-bold text-white">
+                  <AnimatedCurrency value={kpis.inProgressValue} />
                 </p>
-                <p className="text-blue-200 text-xs mt-1">
-                  {kpis.inProgressCount} active applications
+                <p className="text-blue-300/60 text-xs mt-1">
+                  <AnimatedCounter value={kpis.inProgressCount} /> active applications
                 </p>
               </div>
               {/* In Progress */}
-              <div className="min-w-[160px] flex-shrink-0 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-5 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-blue-400/30 flex items-center justify-center shrink-0">
+              <div className="min-w-[160px] flex-shrink-0 bg-white/8 backdrop-blur-xl border border-white/15 rounded-2xl p-5 flex items-center gap-4 hover:bg-white/12 hover:border-white/25 transition-all duration-300">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400/30 to-cyan-400/20 flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/10">
                   <svg
                     className="w-5 h-5 text-white"
                     fill="none"
@@ -431,18 +433,18 @@ export default function DashboardPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white tabular-nums">
-                    {kpis.inProgressCount}
+                  <p className="text-2xl font-bold text-white">
+                    <AnimatedCounter value={kpis.inProgressCount} />
                   </p>
-                  <p className="text-blue-200 text-xs">In Progress</p>
+                  <p className="text-blue-300/60 text-xs">In Progress</p>
                 </div>
               </div>
               {/* Needs Action */}
               <div
                 onClick={() => setActiveTab('action')}
-                className="min-w-[160px] flex-shrink-0 bg-amber-400/20 backdrop-blur-md border border-amber-300/30 rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:bg-amber-400/30 transition-colors"
+                className="min-w-[160px] flex-shrink-0 bg-amber-400/10 backdrop-blur-xl border border-amber-300/20 rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:bg-amber-400/20 hover:border-amber-300/30 transition-all duration-300 group"
               >
-                <div className="w-10 h-10 rounded-xl bg-amber-400/30 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400/30 to-orange-400/20 flex items-center justify-center shrink-0 group-hover:shadow-lg group-hover:shadow-amber-500/20 transition-shadow">
                   <svg
                     className="w-5 h-5 text-amber-200"
                     fill="none"
@@ -458,15 +460,15 @@ export default function DashboardPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white tabular-nums">
-                    {kpis.needsActionCount}
+                  <p className="text-2xl font-bold text-white">
+                    <AnimatedCounter value={kpis.needsActionCount} />
                   </p>
-                  <p className="text-amber-200 text-xs">Needs Action</p>
+                  <p className="text-amber-300/70 text-xs">Needs Action</p>
                 </div>
               </div>
               {/* At Risk */}
-              <div className="min-w-[160px] flex-shrink-0 bg-red-400/20 backdrop-blur-md border border-red-300/30 rounded-2xl p-5 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-red-400/30 flex items-center justify-center shrink-0">
+              <div className="min-w-[160px] flex-shrink-0 bg-red-400/10 backdrop-blur-xl border border-red-300/20 rounded-2xl p-5 flex items-center gap-4 hover:bg-red-400/15 hover:border-red-300/30 transition-all duration-300">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-400/30 to-rose-400/20 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/10">
                   <svg
                     className="w-5 h-5 text-red-200"
                     fill="none"
@@ -482,15 +484,15 @@ export default function DashboardPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white tabular-nums">
-                    {kpis.stuckAtRiskCount}
+                  <p className="text-2xl font-bold text-white">
+                    <AnimatedCounter value={kpis.stuckAtRiskCount} />
                   </p>
-                  <p className="text-red-200 text-xs">At Risk</p>
+                  <p className="text-red-300/70 text-xs">At Risk</p>
                 </div>
               </div>
               {/* Conversion */}
-              <div className="min-w-[160px] flex-shrink-0 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-5 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-400/30 flex items-center justify-center shrink-0">
+              <div className="min-w-[160px] flex-shrink-0 bg-white/8 backdrop-blur-xl border border-white/15 rounded-2xl p-5 flex items-center gap-4 hover:bg-white/12 hover:border-white/25 transition-all duration-300">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400/30 to-teal-400/20 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/10">
                   <svg
                     className="w-5 h-5 text-emerald-200"
                     fill="none"
@@ -509,7 +511,7 @@ export default function DashboardPage() {
                   <p className="text-2xl font-bold text-white tabular-nums">
                     {kpis.conversionRate30d ? `${Math.round(kpis.conversionRate30d)}%` : '—'}
                   </p>
-                  <p className="text-blue-200 text-xs">Conversion (30d)</p>
+                  <p className="text-blue-300/60 text-xs">Conversion (30d)</p>
                 </div>
               </div>
             </div>
@@ -520,14 +522,17 @@ export default function DashboardPage() {
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-4 pb-8 space-y-6">
         {/* ──── What's New / Alerts — horizontal scrollable strips ──── */}
         {kpis && (
-          <section>
+          <section className="animate-slide-up">
             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
               What&apos;s new
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar" ref={scrollRef}>
+            <div
+              className="flex gap-3 overflow-x-auto pb-1 no-scrollbar stagger-children"
+              ref={scrollRef}
+            >
               {kpis.needsActionCount > 0 && (
                 <div
-                  className="min-w-[220px] flex-shrink-0 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
+                  className="min-w-[220px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300 cursor-pointer group"
                   onClick={() => setActiveTab('action')}
                 >
                   <span className="text-2xl font-bold text-slate-900 tabular-nums">
@@ -551,7 +556,7 @@ export default function DashboardPage() {
                 </div>
               )}
               {kpis.stuckAtRiskCount > 0 && (
-                <div className="min-w-[220px] flex-shrink-0 bg-white rounded-2xl border border-red-100 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
+                <div className="min-w-[220px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-red-100/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
                   <span className="text-2xl font-bold text-red-600 tabular-nums">
                     {kpis.stuckAtRiskCount}
                   </span>
@@ -562,8 +567,8 @@ export default function DashboardPage() {
                   </p>
                 </div>
               )}
-              <div className="min-w-[240px] flex-shrink-0 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <div className="min-w-[240px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0 shadow-sm shadow-emerald-100">
                   <svg
                     className="w-5 h-5 text-emerald-600"
                     fill="none"
@@ -587,8 +592,8 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <div className="min-w-[240px] flex-shrink-0 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+              <div className="min-w-[240px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 shadow-sm shadow-indigo-100">
                   <svg
                     className="w-5 h-5 text-indigo-600"
                     fill="none"
@@ -613,7 +618,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               {kpis.declinedThisMonthCount > 0 && (
-                <div className="min-w-[200px] flex-shrink-0 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
+                <div className="min-w-[200px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
                   <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
                     <svg
                       className="w-5 h-5 text-red-500"
@@ -642,13 +647,13 @@ export default function DashboardPage() {
         )}
 
         {/* ──── Quick Actions — circular icons like "Popular Payments" ──── */}
-        <section>
+        <section className="animate-slide-up" style={{ animationDelay: '100ms' }}>
           <div className="flex items-center gap-3 mb-3">
             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
               Quick Actions
             </h2>
           </div>
-          <div className="flex gap-6 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex gap-6 overflow-x-auto pb-1 no-scrollbar stagger-children">
             {[
               {
                 label: 'New Application',
@@ -762,7 +767,7 @@ export default function DashboardPage() {
                 className="flex flex-col items-center gap-2 group"
               >
                 <div
-                  className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${a.gradient} text-white flex items-center justify-center shadow-lg shadow-blue-900/10 group-hover:scale-110 group-hover:shadow-xl transition-all duration-200`}
+                  className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${a.gradient} text-white flex items-center justify-center shadow-lg shadow-blue-900/10 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-blue-900/15 group-hover:-rotate-3 transition-all duration-300 ease-out-expo`}
                 >
                   {a.icon}
                 </div>
@@ -776,23 +781,26 @@ export default function DashboardPage() {
 
         {/* ──── Pipeline ──── */}
         {pipelineSummary.some(s => s.count > 0) && (
-          <section className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6">
+          <section
+            className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-6 animate-slide-up"
+            style={{ animationDelay: '200ms' }}
+          >
             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-5">
               Pipeline
             </h2>
             <div className="flex items-end gap-4 justify-between">
-              {pipelineSummary.map(stage => {
+              {pipelineSummary.map((stage, index) => {
                 const maxCount = Math.max(...pipelineSummary.map(s => s.count), 1);
                 const height = Math.max((stage.count / maxCount) * 120, 12);
                 return (
-                  <div key={stage.key} className="flex-1 flex flex-col items-center gap-2">
-                    <span className="text-lg font-bold text-slate-900 tabular-nums">
-                      {stage.count}
+                  <div key={stage.key} className="flex-1 flex flex-col items-center gap-2 group">
+                    <span className="text-lg font-bold text-slate-900 tabular-nums group-hover:text-primary-600 transition-colors">
+                      <AnimatedCounter value={stage.count} duration={800} />
                     </span>
                     <div className="w-full flex justify-center">
                       <div
-                        className={`w-full max-w-[48px] rounded-xl ${stage.color} transition-all duration-700 ease-out`}
-                        style={{ height: `${height}px` }}
+                        className={`w-full max-w-[48px] rounded-xl ${stage.color} pipeline-bar group-hover:shadow-lg transition-shadow duration-300`}
+                        style={{ height: `${height}px`, animationDelay: `${index * 100}ms` }}
                       />
                     </div>
                     <span className="text-xs text-slate-500 text-center font-medium">
@@ -811,7 +819,10 @@ export default function DashboardPage() {
         )}
 
         {/* ──── Worklist ──── */}
-        <section className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <section
+          className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft overflow-hidden animate-slide-up"
+          style={{ animationDelay: '300ms' }}
+        >
           {/* Header with tabs */}
           <div className="px-6 py-4 border-b border-slate-100">
             <div className="flex items-center justify-between flex-wrap gap-3">
@@ -841,9 +852,9 @@ export default function DashboardPage() {
                     <button
                       key={tab.key}
                       onClick={() => setActiveTab(tab.key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
                         activeTab === tab.key
-                          ? 'bg-white text-slate-900 shadow-sm'
+                          ? 'bg-white text-slate-900 shadow-md shadow-slate-200/50'
                           : 'text-slate-500 hover:text-slate-700'
                       }`}
                     >
@@ -885,7 +896,7 @@ export default function DashboardPage() {
                 <div className="flex bg-slate-100 rounded-lg p-0.5">
                   <button
                     onClick={() => setViewMode('card')}
-                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`p-1.5 rounded-md transition-all duration-300 ${viewMode === 'card' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-600/20' : 'text-slate-400 hover:text-slate-600'}`}
                     title="Card view"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -899,7 +910,7 @@ export default function DashboardPage() {
                   </button>
                   <button
                     onClick={() => setViewMode('table')}
-                    className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    className={`p-1.5 rounded-md transition-all duration-300 ${viewMode === 'table' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-600/20' : 'text-slate-400 hover:text-slate-600'}`}
                     title="Table view"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -918,7 +929,7 @@ export default function DashboardPage() {
 
           {/* ── Card View ── */}
           {viewMode === 'card' && (
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-grid">
               {sortedWorklist.map(item => {
                 const statusStyle = getStatusStyle(item.status);
                 const action = getSmartAction(item);
@@ -928,7 +939,7 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={item.applicationId}
-                    className="bg-slate-50/50 rounded-2xl border border-slate-100 p-4 hover:bg-white hover:shadow-md hover:border-slate-200 transition-all duration-200 group cursor-pointer"
+                    className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-100/80 p-4 hover:bg-white hover:shadow-medium hover:border-slate-200/80 hover:-translate-y-1 transition-all duration-300 ease-out-expo group cursor-pointer"
                     onClick={() => router.push(`/dashboard/applications/${item.applicationId}`)}
                   >
                     {/* Top row: icon + app number + age */}
@@ -1070,7 +1081,7 @@ export default function DashboardPage() {
                     return (
                       <tr
                         key={item.applicationId}
-                        className="hover:bg-blue-50/40 transition-colors group"
+                        className="hover:bg-blue-50/50 transition-all duration-200 group backdrop-blur-sm"
                       >
                         <td className="px-6 py-3.5">
                           <div className="flex items-center gap-2">

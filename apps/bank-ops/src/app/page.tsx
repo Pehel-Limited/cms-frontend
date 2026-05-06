@@ -136,9 +136,10 @@ export default function HomePage() {
 
       {/* ──── Hero ──── */}
       <section className="relative overflow-hidden pt-16">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0f2847] via-[#1a3a7a] to-[#2563eb]" />
-        <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-sky-400/5 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#132952] to-[#1a3a7a]" />
+        <div className="absolute -top-32 -right-32 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-sky-400/8 rounded-full blur-3xl animate-float-delayed" />
+        <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-violet-500/6 rounded-full blur-3xl animate-float" />
         <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
@@ -158,15 +159,12 @@ export default function HomePage() {
 
         <div className="relative z-10 max-w-6xl mx-auto px-6 pt-24 pb-32 lg:pt-32 lg:pb-40">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-sm text-blue-200 mb-8">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/8 backdrop-blur-xl border border-white/15 text-sm text-blue-200 mb-8 animate-fade-in">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               Future-ready Banking. Secure by design.
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-[1.1] mb-6">
-              Credit Management,{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-300 to-blue-200">
-                Elevated.
-              </span>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-[1.1] mb-6 animate-slide-up">
+              Credit Management, <span className="text-gradient-blue">Elevated.</span>
             </h1>
             <p className="text-lg sm:text-xl text-blue-200/80 leading-relaxed mb-10 max-w-2xl">
               Rayva is a modern, multi-tenant platform for loan origination, underwriting, and
@@ -175,7 +173,7 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
                 href="/enquiry"
-                className="inline-flex items-center justify-center gap-2 px-7 py-3 bg-white text-blue-700 rounded-xl font-semibold text-base hover:bg-blue-50 transition-colors shadow-lg shadow-blue-900/20"
+                className="inline-flex items-center justify-center gap-2 px-7 py-3 bg-white text-blue-700 rounded-xl font-semibold text-base hover:bg-blue-50 hover:-translate-y-0.5 hover:shadow-xl transition-all duration-300 shadow-lg shadow-blue-900/20"
               >
                 Schedule Demo
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,7 +187,7 @@ export default function HomePage() {
               </Link>
               <Link
                 href="#features"
-                className="inline-flex items-center justify-center gap-2 px-7 py-3 bg-white/10 backdrop-blur border border-white/20 rounded-xl font-semibold text-base text-white hover:bg-white/20 transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-7 py-3 bg-white/8 backdrop-blur-xl border border-white/15 rounded-xl font-semibold text-base text-white hover:bg-white/15 hover:-translate-y-0.5 transition-all duration-300"
               >
                 Explore Features
               </Link>
@@ -197,11 +195,11 @@ export default function HomePage() {
           </div>
 
           {/* Stats strip */}
-          <div className="mt-16 flex flex-wrap gap-3 sm:gap-5">
+          <div className="mt-16 flex flex-wrap gap-3 sm:gap-5 stagger-children">
             {STATS.map(s => (
               <div
                 key={s.label}
-                className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10"
+                className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-white/6 backdrop-blur-xl border border-white/12 hover:bg-white/10 hover:border-white/20 transition-all duration-300"
               >
                 <span className="text-xl font-bold text-white">{s.value}</span>
                 <span className="text-xs text-blue-300 uppercase tracking-wider font-medium">
@@ -229,12 +227,13 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {FEATURES.map(f => (
+          {FEATURES.map((f, index) => (
             <div
               key={f.title}
-              className="group bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 hover:shadow-md hover:border-blue-200 transition-all"
+              className="group bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-6 hover:shadow-medium hover:-translate-y-1 hover:border-blue-200/60 transition-all duration-300 ease-out-expo"
+              style={{ animationDelay: `${index * 80}ms` }}
             >
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 group-hover:bg-gradient-to-br group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-blue-600/20 group-hover:scale-110 transition-all duration-300">
                 {f.icon}
               </div>
               <h3 className="text-base font-semibold text-slate-900 mb-2">{f.title}</h3>

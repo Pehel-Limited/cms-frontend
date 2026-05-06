@@ -149,11 +149,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="min-h-screen flex bg-slate-100">
-      {/* ─── Mobile overlay ─── */}
+    <div className="min-h-screen flex bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50/30">
+      {/* ─ Mobile overlay ─ */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
@@ -162,15 +162,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside
         className={`
           fixed md:sticky top-0 left-0 z-50 h-screen flex flex-col
-          bg-gradient-to-b from-[#1a3a7a] via-[#1e4da0] to-[#2563eb]
-          text-white transition-all duration-300 ease-in-out
+          bg-gradient-to-b from-[#0a1628] via-[#132952] to-[#1a3a7a]
+          text-white transition-all duration-500 ease-out-expo
           ${sidebarCollapsed ? 'w-[72px]' : 'w-[220px]'}
           ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-5 h-16 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400/30 to-blue-500/30 backdrop-blur-md flex items-center justify-center shrink-0 ring-1 ring-white/10 shadow-lg shadow-cyan-500/10">
             <svg
               className="w-4 h-4 text-white"
               fill="none"
@@ -201,16 +201,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onClick={() => setMobileSidebarOpen(false)}
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-                  transition-all duration-200 group relative
+                  transition-all duration-300 ease-out-expo group relative
                   ${
                     active
-                      ? 'bg-white/20 text-white shadow-lg shadow-blue-900/20'
-                      : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                      ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
+                      : 'text-blue-200/80 hover:bg-white/8 hover:text-white'
                   }
                 `}
               >
                 {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-r-full" />
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-cyan-400 to-blue-400 rounded-r-full shadow-[0_0_8px_rgba(56,189,248,0.5)]" />
                 )}
                 <span className="shrink-0">
                   <NavIcon name={item.name} />
@@ -248,7 +248,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ─── Main column ─── */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/60 h-16 flex items-center px-4 md:px-8 gap-4">
+        <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-xl border-b border-slate-200/40 h-16 flex items-center px-4 md:px-8 gap-4 shadow-sm shadow-slate-200/20">
           {/* Mobile hamburger */}
           <button
             className="md:hidden p-2 -ml-2 text-slate-600 hover:text-slate-900"
@@ -281,8 +281,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </svg>
             <input
               type="text"
-              placeholder="Search for..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-100 border-0 text-sm text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+              placeholder="Search applications, customers..."
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-100/80 border-0 text-sm text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-blue-500/50 focus:bg-white focus:shadow-lg focus:shadow-blue-500/5 transition-all duration-300"
             />
           </div>
 
@@ -297,8 +297,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </span>
 
           {/* Notifications bell */}
-          <button className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button className="relative p-2 rounded-xl text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-all duration-300 group">
+            <svg
+              className="w-5 h-5 group-hover:scale-110 transition-transform"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -306,7 +311,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
               />
             </svg>
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white notification-pulse" />
           </button>
 
           {/* User avatar & dropdown */}
@@ -315,7 +320,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
             >
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-white shadow">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 via-indigo-500 to-violet-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-white shadow-md shadow-blue-500/20 group-hover:shadow-lg group-hover:shadow-blue-500/30 transition-shadow">
                 {user?.firstName?.charAt(0)}
                 {user?.lastName?.charAt(0)}
               </div>
@@ -418,7 +423,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Content area */}
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto page-enter">{children}</main>
       </div>
     </div>
   );

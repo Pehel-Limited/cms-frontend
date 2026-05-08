@@ -1,0 +1,37 @@
+
+> cms-frontend@1.0.0 dev:cust
+> turbo dev --filter=@cms/cust-portal
+
+• turbo 2.8.9
+• Packages in scope: @cms/cust-portal
+• Running dev in 1 packages
+• Remote caching disabled
+@cms/cust-portal:dev: cache bypass, force executing c18d3cc407fdbc31
+@cms/cust-portal:dev: 
+@cms/cust-portal:dev: > @cms/cust-portal@1.0.0 dev
+@cms/cust-portal:dev: > next dev --port 3001
+@cms/cust-portal:dev: 
+@cms/cust-portal:dev:    ▲ Next.js 14.0.4
+@cms/cust-portal:dev:    - Local:        http://localhost:3001
+@cms/cust-portal:dev: 
+@cms/cust-portal:dev:  ✓ Ready in 2.7s
+@cms/cust-portal:dev:  ○ Compiling / ...
+@cms/cust-portal:dev: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+@cms/cust-portal:dev: Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+@cms/cust-portal:dev:   npx update-browserslist-db@latest
+@cms/cust-portal:dev:   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+@cms/cust-portal:dev:  ✓ Compiled / in 6.2s (598 modules)
+@cms/cust-portal:dev:  ○ Compiling /not-found ...
+@cms/cust-portal:dev:  ✓ Compiled /not-found in 3.2s (567 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/login in 366ms (590 modules)
+@cms/cust-portal:dev:  ○ Compiling /portal ...
+@cms/cust-portal:dev:  ✓ Compiled /portal in 882ms (596 modules)
+@cms/cust-portal:dev:  ✓ Compiled /not-found in 273ms (601 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/profile in 196ms (609 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/company in 232ms (615 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/products in 254ms (623 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/applications in 213ms (629 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/products/[code] in 223ms (635 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/tasks in 286ms (641 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/documents in 275ms (649 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/messages in 211ms (655 modules)

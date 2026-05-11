@@ -6,7 +6,7 @@
 • Packages in scope: @cms/bank-ops
 • Running dev in 1 packages
 • Remote caching disabled
-@cms/bank-ops:dev: cache bypass, force executing 1d2e9b34e4b085f9
+@cms/bank-ops:dev: cache bypass, force executing ccca6e9d8f1095d9
 @cms/bank-ops:dev: 
 @cms/bank-ops:dev: > @cms/bank-ops@1.0.0 dev
 @cms/bank-ops:dev: > next dev --port 3000
@@ -19,45 +19,27 @@
 @cms/bank-ops:dev: 
 @cms/bank-ops:dev: > [PWA] PWA support is disabled
 @cms/bank-ops:dev: > [PWA] PWA support is disabled
-@cms/bank-ops:dev:  ✓ Ready in 3s
-@cms/bank-ops:dev:  ○ Compiling / ...
+@cms/bank-ops:dev:  ✓ Ready in 3.8s
+@cms/bank-ops:dev:  ○ Compiling /dashboard/applications/[id] ...
 @cms/bank-ops:dev: Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
 @cms/bank-ops:dev:   npx update-browserslist-db@latest
 @cms/bank-ops:dev:   Why you should do it regularly: https://github.com/browserslist/update-db#readme
-@cms/bank-ops:dev:  ✓ Compiled / in 6.9s (1360 modules)
-@cms/bank-ops:dev:  ✓ Compiled in 823ms (637 modules)
+@cms/bank-ops:dev:  ✓ Compiled /dashboard/applications/[id] in 5.1s (1381 modules)
+@cms/bank-ops:dev:  ✓ Compiled in 562ms (659 modules)
 @cms/bank-ops:dev:  ○ Compiling /not-found ...
-@cms/bank-ops:dev:  ✓ Compiled /not-found in 5s (1329 modules)
+@cms/bank-ops:dev:  ✓ Compiled /not-found in 562ms (1372 modules)
+@cms/bank-ops:dev:  ○ Compiling / ...
+@cms/bank-ops:dev:  ✓ Compiled / in 1168ms (1373 modules)
+@cms/bank-ops:dev:  ✓ Compiled /not-found in 493ms (1378 modules)
 @cms/bank-ops:dev:  ○ Compiling /login ...
-@cms/bank-ops:dev:  ✓ Compiled /login in 2.4s (1339 modules)
-@cms/bank-ops:dev:  ○ Compiling /dashboard ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard in 6.8s (1359 modules)
-@cms/bank-ops:dev:  ○ Compiling /dashboard/applications ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/applications in 802ms (1359 modules)
-@cms/bank-ops:dev:  ○ Compiling /dashboard/customers ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/customers in 1646ms (1369 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/customers/[id] in 429ms (1375 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/accounts in 448ms (1383 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/kyc in 355ms (1391 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/products in 454ms (1399 modules)
+@cms/bank-ops:dev:  ✓ Compiled /login in 625ms (1374 modules)
+@cms/bank-ops:dev:  ○ Compiling / ...
+@cms/bank-ops:dev:  ✓ Compiled / in 738ms (731 modules)
 @cms/bank-ops:dev:  ○ Compiling /not-found ...
-@cms/bank-ops:dev:  ✓ Compiled /not-found in 729ms (1404 modules)
+@cms/bank-ops:dev:  ✓ Compiled /not-found in 526ms (1384 modules)
 @cms/bank-ops:dev:  ○ Compiling /dashboard ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard in 1136ms (729 modules)
-@cms/bank-ops:dev:  ○ Compiling /dashboard/applications ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/applications in 544ms (733 modules)
-@cms/bank-ops:dev:  ○ Compiling /dashboard/applications/[id] ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/applications/[id] in 1554ms (1417 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/customers in 301ms (749 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/customers/[id] in 221ms (753 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/accounts in 227ms (745 modules)
-@cms/bank-ops:dev:  ○ Compiling /dashboard/accounts/[id] ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/accounts/[id] in 598ms (1418 modules)
+@cms/bank-ops:dev:  ✓ Compiled /dashboard in 2.3s (1396 modules)
+@cms/bank-ops:dev:  ○ Compiling /dashboard/applications/new ...
+@cms/bank-ops:dev:  ✓ Compiled /dashboard/applications/new in 3s (1405 modules)
 @cms/bank-ops:dev:  ○ Compiling /not-found ...
-@cms/bank-ops:dev:  ✓ Compiled /not-found in 660ms (1423 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/kyc in 241ms (747 modules)
-@cms/bank-ops:dev:  ○ Compiling /dashboard/kyc/cases/[caseId] ...
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/kyc/cases/[caseId] in 871ms (1410 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/products in 283ms (738 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard in 330ms (739 modules)
-@cms/bank-ops:dev:  ✓ Compiled /dashboard/applications in 346ms (739 modules)
+@cms/bank-ops:dev:  ✓ Compiled /not-found in 959ms (1410 modules)

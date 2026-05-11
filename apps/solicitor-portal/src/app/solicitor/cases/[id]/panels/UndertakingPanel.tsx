@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 const statusColor: Record<string, string> = {
   NOT_ISSUED: 'bg-gray-100 text-gray-600',
   ISSUED: 'bg-blue-100 text-blue-700',
+  VIEWED: 'bg-indigo-100 text-indigo-700',
   SUBMITTED: 'bg-yellow-100 text-yellow-700',
   ACCEPTED: 'bg-green-100 text-green-700',
   REJECTED: 'bg-red-100 text-red-700',
@@ -100,16 +101,59 @@ export default function UndertakingPanel({
           </button>
         )}
 
-        {/* Solicitor: Submit undertaking */}
-        {!isBankUser && status === 'ISSUED' && (
-          <button
-            onClick={() =>
-              action(() => caseService.submitUndertaking(caseId), 'Undertaking submitted')
-            }
-            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            Submit Undertaking
-          </button>
+        {/* Solicitor: waiting for bank to issue */}
+        {!isBankUser && status === 'NOT_ISSUED' && (
+          <p className="text-sm text-gray-500 italic">
+            The bank has not yet issued the undertaking. It will appear here once issued.
+          </p>
+        )}
+
+        {/* Solicitor: Submit undertaking once issued/viewed */}
+        {!isBankUser && (status === 'ISSUED' || status === 'VIEWED') && (
+          <div className="w-full space-y-2">
+            {data?.contentSnapshot && (
+              <details className="border border-gray-200 rounded-lg mb-2">
+                <summary className="px-4 py-2 text-xs font-medium text-gray-600 cursor-pointer hover:bg-gray-50">
+                  View Undertaking Text
+                </summary>
+                <pre className="px-4 py-3 text-xs text-gray-700 whitespace-pre-wrap border-t border-gray-100 bg-gray-50 max-h-48 overflow-y-auto">
+                  {String(data.contentSnapshot)}
+                </pre>
+              </details>
+            )}
+            <button
+              onClick={() =>
+                action(() => caseService.submitUndertaking(caseId), 'Undertaking submitted to bank')
+              }
+              className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            >
+              Submit Undertaking to Bank
+            </button>
+          </div>
+        )}
+
+        {/* Solicitor: submitted — awaiting bank review */}
+        {!isBankUser && status === 'SUBMITTED' && (
+          <p className="text-sm text-amber-700 font-medium">
+            Undertaking submitted — awaiting bank review.
+          </p>
+        )}
+
+        {/* Solicitor: accepted */}
+        {!isBankUser && status === 'ACCEPTED' && (
+          <p className="text-sm text-green-700 font-medium">✓ Undertaking accepted by the bank.</p>
+        )}
+
+        {/* Solicitor: rejected */}
+        {!isBankUser && status === 'REJECTED' && (
+          <div className="space-y-2">
+            <p className="text-sm text-red-600 font-medium">
+              Undertaking was rejected by the bank.
+            </p>
+            {!!data?.reviewNotes && (
+              <p className="text-sm text-gray-600">Reason: {String(data.reviewNotes)}</p>
+            )}
+          </div>
         )}
 
         {/* Bank User: Review undertaking */}

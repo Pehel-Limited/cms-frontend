@@ -12,6 +12,7 @@ import {
 } from '@/services/api/applicationService';
 import { userService, User } from '@/services/api/userService';
 import { ApplicationWorkflowPanel } from '@/components/workflow';
+import { SolicitorTab } from '@/components/solicitor/SolicitorTab';
 import { formatCurrency } from '@/lib/format';
 
 interface ActionModalProps {
@@ -421,6 +422,7 @@ export default function ApplicationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [mainTab, setMainTab] = useState<'workflow' | 'solicitor'>('workflow');
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -807,21 +809,52 @@ export default function ApplicationDetailPage() {
         </div>
       )}
 
-      {/* LOMS Workflow Panel - Loan Origination Workflow */}
-      <div>
-        <ApplicationWorkflowPanel
-          applicationId={applicationId as string}
-          applicationStatus={effectiveStatus}
-          customerId={application.customerId}
-          currentUserId={currentUser?.userId || ''}
-          isApplicationCreator={isApplicationCreator}
-          assignedToUserId={application.assignedToUserId}
-          approvedAmount={application.approvedAmount || application.requestedAmount || 0}
-          kycVerified={application.kycCompleted}
-          productName={application.product?.productName}
-          onStatusChange={fetchApplication}
-        />
+      {/* Main panel tabs: Workflow | Solicitor / Legal */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setMainTab('workflow')}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mainTab === 'workflow'
+              ? 'bg-white text-[#7f2b7b] shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Loan Workflow
+        </button>
+        <button
+          onClick={() => setMainTab('solicitor')}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mainTab === 'solicitor'
+              ? 'bg-white text-[#7f2b7b] shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Solicitor / Legal
+        </button>
       </div>
+
+      {/* LOMS Workflow Panel - Loan Origination Workflow */}
+      {mainTab === 'workflow' && (
+        <div>
+          <ApplicationWorkflowPanel
+            applicationId={applicationId as string}
+            applicationStatus={effectiveStatus}
+            customerId={application.customerId}
+            currentUserId={currentUser?.userId || ''}
+            isApplicationCreator={isApplicationCreator}
+            assignedToUserId={application.assignedToUserId}
+            approvedAmount={application.approvedAmount || application.requestedAmount || 0}
+            kycVerified={application.kycCompleted}
+            productName={application.product?.productName}
+            onStatusChange={fetchApplication}
+          />
+        </div>
+      )}
+
+      {/* Solicitor / Legal Tab */}
+      {mainTab === 'solicitor' && (
+        <SolicitorTab applicationId={applicationId} applicationStatus={effectiveStatus} />
+      )}
 
       {/* Legacy Actions */}
       {(canSubmit ||

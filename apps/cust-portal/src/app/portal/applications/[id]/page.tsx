@@ -567,7 +567,11 @@ export default function ApplicationDetailPage() {
 
         {/* Loan Offer Actions */}
         {!isDraft && (
-          <OfferSection applicationId={app.applicationId} onAction={() => loadApplication()} />
+          <OfferSection
+            applicationId={app.applicationId}
+            productName={app.product?.productName}
+            onAction={() => loadApplication()}
+          />
         )}
 
         {/* E-Signature */}
@@ -895,9 +899,11 @@ function DocUploadForm({
 
 function OfferSection({
   applicationId,
+  productName,
   onAction,
 }: {
   applicationId: string;
+  productName?: string;
   onAction: () => void;
 }) {
   const [data, setData] = useState<OfferWithConditions | null>(null);
@@ -1034,7 +1040,7 @@ function OfferSection({
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
             />
           </svg>
-          Loan Offer
+          {productName ? productName : 'Loan'} Offer
           {offer.version > 1 && <span className="text-xs text-gray-400">v{offer.version}</span>}
         </h3>
         <div className="flex items-center gap-2">
@@ -1308,6 +1314,7 @@ function ESignSection({
   applicationType?: string;
   onComplete: () => void;
 }) {
+  const router = useRouter();
   const [status, setStatus] = useState<EsignStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -1483,14 +1490,12 @@ function ESignSection({
               <p className="text-sm text-gray-600">
                 Your signing session is ready. Click below to review and sign the agreement.
               </p>
-              <a
-                href={signingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => router.push(signingUrl)}
                 className="block w-full text-center bg-indigo-600 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Open Signing Ceremony
-              </a>
+              </button>
             </div>
           ) : (
             <button

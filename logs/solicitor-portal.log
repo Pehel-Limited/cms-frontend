@@ -6,7 +6,7 @@
 • Packages in scope: @cms/solicitor-portal
 • Running dev in 1 packages
 • Remote caching disabled
-@cms/solicitor-portal:dev: cache bypass, force executing c8f5118a168de227
+@cms/solicitor-portal:dev: cache bypass, force executing 871b21dc15acc3f1
 @cms/solicitor-portal:dev: 
 @cms/solicitor-portal:dev: > @cms/solicitor-portal@1.0.0 dev
 @cms/solicitor-portal:dev: > next dev --port 3002
@@ -14,29 +14,4 @@
 @cms/solicitor-portal:dev:    ▲ Next.js 14.0.4
 @cms/solicitor-portal:dev:    - Local:        http://localhost:3002
 @cms/solicitor-portal:dev: 
-@cms/solicitor-portal:dev:  ✓ Ready in 2.8s
-@cms/solicitor-portal:dev:  ○ Compiling /solicitor/cases/[id] ...
-@cms/solicitor-portal:dev: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
-@cms/solicitor-portal:dev: Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
-@cms/solicitor-portal:dev:   npx update-browserslist-db@latest
-@cms/solicitor-portal:dev:   Why you should do it regularly: https://github.com/browserslist/update-db#readme
-@cms/solicitor-portal:dev:  ✓ Compiled /solicitor/cases/[id] in 2.9s (615 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 317ms (314 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 759ms (615 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 535ms (615 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 414ms (615 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 442ms (615 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 847ms (615 modules)
-@cms/solicitor-portal:dev:  ○ Compiling /solicitor/dashboard ...
-@cms/solicitor-portal:dev:  ✓ Compiled /solicitor/dashboard in 526ms (607 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 1245ms (621 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 372ms (621 modules)
-@cms/solicitor-portal:dev:  ○ Compiling / ...
-@cms/solicitor-portal:dev:  ✓ Compiled / in 1413ms (623 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled /solicitor/login in 457ms (766 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled /solicitor/cases in 456ms (772 modules)
-@cms/solicitor-portal:dev:  ✓ Compiled in 545ms (786 modules)
-@cms/solicitor-portal:dev:  ○ Compiling /solicitor/firm ...
-@cms/solicitor-portal:dev:  ✓ Compiled /solicitor/firm in 2.3s (706 modules)
-@cms/solicitor-portal:dev:  ○ Compiling /solicitor/firm/users ...
-@cms/solicitor-portal:dev:  ✓ Compiled /solicitor/firm/users in 569ms (698 modules)
+@cms/solicitor-portal:dev:  ✓ Ready in 3.4s

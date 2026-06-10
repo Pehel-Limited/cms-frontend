@@ -42,6 +42,46 @@ const NavIcon = ({ name }: { name: string }) => {
         />
       </svg>
     ),
+    Accounts: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.8}
+          d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"
+        />
+      </svg>
+    ),
+    Cards: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.8}
+          d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m0 0a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 9"
+        />
+      </svg>
+    ),
+    Payments: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.8}
+          d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6"
+        />
+      </svg>
+    ),
+    Transactions: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.8}
+          d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+        />
+      </svg>
+    ),
     Products: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -96,15 +136,37 @@ const NavIcon = ({ name }: { name: string }) => {
   return <>{icons[name] || icons['Dashboard']}</>;
 };
 
-const NAV_ITEMS = [
-  { name: 'Dashboard', path: '/portal' },
-  { name: 'My Profile', path: '/portal/profile' },
-  { name: 'My Company', path: '/portal/company' },
-  { name: 'Products', path: '/portal/products' },
-  { name: 'Applications', path: '/portal/applications' },
-  { name: 'Tasks', path: '/portal/tasks' },
-  { name: 'Documents', path: '/portal/documents' },
-  { name: 'Messages', path: '/portal/messages' },
+const NAV_SECTIONS: { heading: string | null; items: { name: string; path: string }[] }[] = [
+  {
+    heading: null,
+    items: [{ name: 'Dashboard', path: '/portal' }],
+  },
+  {
+    heading: 'Banking',
+    items: [
+      { name: 'Accounts', path: '/portal/accounts' },
+      { name: 'Cards', path: '/portal/cards' },
+      { name: 'Payments', path: '/portal/payments' },
+      { name: 'Transactions', path: '/portal/transactions' },
+    ],
+  },
+  {
+    heading: 'Lending',
+    items: [
+      { name: 'Products', path: '/portal/products' },
+      { name: 'Applications', path: '/portal/applications' },
+    ],
+  },
+  {
+    heading: 'More',
+    items: [
+      { name: 'Tasks', path: '/portal/tasks' },
+      { name: 'Documents', path: '/portal/documents' },
+      { name: 'Messages', path: '/portal/messages' },
+      { name: 'My Profile', path: '/portal/profile' },
+      { name: 'My Company', path: '/portal/company' },
+    ],
+  },
 ];
 
 // ─── Layout ──────────────────────────────────────────────────────
@@ -211,33 +273,46 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 mt-4 px-3 space-y-1 overflow-y-auto sidebar-scrollbar">
-          {NAV_ITEMS.map(item => {
-            const active = isActive(item.path);
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                onClick={() => setMobileSidebarOpen(false)}
-                className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-                  transition-all duration-200 group relative
-                  ${
-                    active
-                      ? 'bg-white/20 text-white shadow-lg shadow-purple-900/20'
-                      : 'text-purple-100 hover:bg-white/10 hover:text-white'
-                  }
-                `}
-              >
-                {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-r-full" />
-                )}
-                <span className="shrink-0">
-                  <NavIcon name={item.name} />
-                </span>
-                {!sidebarCollapsed && <span>{item.name}</span>}
-              </Link>
-            );
-          })}
+          {NAV_SECTIONS.map((section, si) => (
+            <div key={si} className={si > 0 ? 'pt-3' : ''}>
+              {section.heading && !sidebarCollapsed && (
+                <p className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider text-purple-300/60">
+                  {section.heading}
+                </p>
+              )}
+              {section.heading && sidebarCollapsed && (
+                <div className="mx-3 mb-1 border-t border-white/10" />
+              )}
+              {section.items.map(item => {
+                const active = isActive(item.path);
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    onClick={() => setMobileSidebarOpen(false)}
+                    title={sidebarCollapsed ? item.name : undefined}
+                    className={`
+                      flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+                      transition-all duration-200 group relative
+                      ${
+                        active
+                          ? 'bg-white/20 text-white shadow-lg shadow-purple-900/20'
+                          : 'text-purple-100 hover:bg-white/10 hover:text-white'
+                      }
+                    `}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-r-full" />
+                    )}
+                    <span className="shrink-0">
+                      <NavIcon name={item.name} />
+                    </span>
+                    {!sidebarCollapsed && <span>{item.name}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Sidebar footer – collapse toggle */}

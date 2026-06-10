@@ -10,8 +10,12 @@ import {
   DashboardKpis,
   WorklistItem,
   PipelineStage,
+  PerformanceMetrics,
+  MissingItem,
 } from '@/services/api/dashboard-service';
 import { applicationService } from '@/services/api/applicationService';
+import PriorityFocus from '@/components/dashboard/PriorityFocus';
+import DashboardInsights from '@/components/dashboard/DashboardInsights';
 import {
   SortableHeader,
   SortConfig,
@@ -178,6 +182,8 @@ export default function DashboardPage() {
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [worklist, setWorklist] = useState<WorklistItem[]>([]);
   const [pipeline, setPipeline] = useState<PipelineStage[]>([]);
+  const [performance, setPerformance] = useState<PerformanceMetrics | null>(null);
+  const [missingItems, setMissingItems] = useState<MissingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<string | undefined>(undefined);
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeFilter>('all');
@@ -239,6 +245,16 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
+
+    // Secondary insights — load independently so a failure never blocks the core dashboard
+    dashboardService
+      .getPerformanceMetrics(bankId)
+      .then(setPerformance)
+      .catch(() => setPerformance(null));
+    dashboardService
+      .getMissingItems(bankId)
+      .then(setMissingItems)
+      .catch(() => setMissingItems([]));
   };
 
   const handleSort = (field: string) => setSortConfig(handleSortToggle(field, sortConfig));
@@ -520,6 +536,13 @@ export default function DashboardPage() {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-4 pb-8 space-y-6">
+        {/* ──── Today's Focus — smart-ranked action queue ──── */}
+        <PriorityFocus
+          items={actionItems}
+          onCompleteKyc={handleCompleteKyc}
+          kycLoadingId={kycLoadingId}
+        />
+
         {/* ──── What's New / Alerts — horizontal scrollable strips ──── */}
         {kpis && (
           <section className="animate-slide-up">
@@ -818,6 +841,9 @@ export default function DashboardPage() {
           </section>
         )}
 
+        {/* ──── Insights — performance + pipeline blockers (real data) ──── */}
+        <DashboardInsights performance={performance} missingItems={missingItems} />
+
         {/* ──── Worklist ──── */}
         <section
           className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft overflow-hidden animate-slide-up"
@@ -971,6 +997,48 @@ export default function DashboardPage() {
                         {formatCurrency(item.requestedAmount)}
                       </span>
                     </div>
+
+                    {/* Readiness: doc progress + KYC/AML chips */}
+                    {!isTerminal && (
+                      <div className="mb-3 flex items-center gap-2">
+                        {item.documentsRequiredCount > 0 && (
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] text-slate-400">Documents</span>
+                              <span className="text-[10px] font-semibold text-slate-500 tabular-nums">
+                                {item.documentsSubmittedCount}/{item.documentsRequiredCount}
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className={`h-full rounded-full ${
+                                  item.documentsSubmittedCount >= item.documentsRequiredCount
+                                    ? 'bg-emerald-400'
+                                    : 'bg-blue-400'
+                                }`}
+                                style={{
+                                  width: `${Math.min(100, Math.round((item.documentsSubmittedCount / item.documentsRequiredCount) * 100))}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex gap-1 shrink-0">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${item.kycVerified ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}
+                            title={item.kycVerified ? 'KYC verified' : 'KYC pending'}
+                          >
+                            KYC {item.kycVerified ? '✓' : '·'}
+                          </span>
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${item.amlCheckPassed ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}
+                            title={item.amlCheckPassed ? 'AML passed' : 'AML pending'}
+                          >
+                            AML {item.amlCheckPassed ? '✓' : '·'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Status badge */}
                     <div className="flex items-center justify-between">

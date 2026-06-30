@@ -85,26 +85,27 @@ export default function CardsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        {/* card carousel */}
-        <div className="space-y-4 lg:col-span-2">
-          {cards.map(card => (
-            <button
-              key={card.id}
-              onClick={() => setActiveId(card.id)}
-              className={`block w-full max-w-[360px] rounded-2xl text-left transition-all ${
-                activeId === card.id ? 'scale-100 ring-2 ring-[#7f2b7b] ring-offset-2' : 'scale-[0.97] opacity-80 hover:opacity-100'
-              }`}
-            >
-              <BankCard card={card} />
-            </button>
-          ))}
-        </div>
+      {/* card strip */}
+      <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-2 no-scrollbar">
+        {cards.map(card => (
+          <button
+            key={card.id}
+            onClick={() => setActiveId(card.id)}
+            className={`block w-[280px] flex-shrink-0 snap-start rounded-2xl text-left transition-all sm:w-[300px] ${
+              activeId === card.id ? 'ring-2 ring-[#7f2b7b] ring-offset-2' : 'opacity-70 hover:opacity-100'
+            }`}
+          >
+            <BankCard card={card} />
+          </button>
+        ))}
+      </div>
 
-        {/* details + controls */}
-        <div className="space-y-6 lg:col-span-3">
+      {/* details + controls */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        {/* left: summary + card details */}
+        <div className="space-y-6">
           {/* summary */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-900">{active.label}</p>
@@ -163,8 +164,28 @@ export default function CardsPage() {
             )}
           </div>
 
-          {/* freeze + controls */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+          {/* card details */}
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
+            <h3 className="mb-4 text-base font-semibold text-slate-900">Card details</h3>
+            <dl className="space-y-3 text-sm">
+              {[
+                ['Card number', `•••• •••• •••• ${active.last4}`],
+                ['Card holder', active.holder],
+                ['Expires', active.expiry],
+                ['Type', `${active.scheme} ${active.type.toLowerCase()}`],
+                ['Linked account', linkedAccount?.name ?? '—'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between gap-3">
+                  <dt className="text-slate-400">{k}</dt>
+                  <dd className="font-semibold text-slate-900">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+
+        {/* freeze + controls */}
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
             <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-slate-50 to-purple-50/50 p-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#7f2b7b] shadow-sm">
@@ -223,7 +244,6 @@ export default function CardsPage() {
             </div>
           </div>
         </div>
-      </div>
 
       <p className="text-center text-xs text-slate-400">
         Card controls are a UI preview.{' '}

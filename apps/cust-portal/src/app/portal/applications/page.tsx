@@ -268,9 +268,9 @@ export default function ApplicationsPage() {
   return (
     <div className="space-y-6">
       {/* ── Hero header ────────────────────────────────────── */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-6 sm:p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-white/5 translate-y-1/2" />
+      <div className="mesh-hero aurora relative rounded-3xl overflow-hidden p-6 sm:p-8 shadow-float">
+        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/10 -translate-y-1/2 translate-x-1/3 blur-2xl" />
+        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-fuchsia-300/20 translate-y-1/2 blur-2xl" />
 
         <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -404,7 +404,7 @@ export default function ApplicationsPage() {
             <button
               key={app.applicationId}
               onClick={() => router.push(`/portal/applications/${app.applicationId}`)}
-              className="w-full text-left bg-white rounded-2xl border border-slate-200/80 p-5 hover:border-[#7f2b7b]/30 hover:shadow-md transition-all duration-200 group"
+              className="w-full text-left bg-white rounded-3xl border border-slate-100 p-5 shadow-sm hover:-translate-y-0.5 hover:border-[#7f2b7b]/30 hover:shadow-premium transition-all duration-200 group"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-4 flex-1 min-w-0">

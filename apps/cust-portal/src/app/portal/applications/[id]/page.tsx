@@ -204,7 +204,7 @@ export default function ApplicationDetailPage() {
   const isDeclined = statusInfo?.declined ?? false;
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       {/* Withdraw Confirmation Dialog */}
       {showWithdrawConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -264,7 +264,7 @@ export default function ApplicationDetailPage() {
 
       {/* Return for corrections banner */}
       {isReturned && (
-        <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
+        <div className="mb-6 bg-orange-50 border border-orange-100 rounded-3xl p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <span className="text-orange-500 text-lg">⚠</span>
             <div>
@@ -280,7 +280,7 @@ export default function ApplicationDetailPage() {
 
       {/* Success banner */}
       {showSuccess && (
-        <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+        <div className="mb-6 bg-green-50 border border-green-100 rounded-3xl p-5 flex items-center gap-3 shadow-sm">
           <svg
             className="w-5 h-5 text-green-500 shrink-0"
             fill="none"
@@ -301,76 +301,93 @@ export default function ApplicationDetailPage() {
       )}
 
       {/* Back + Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <button
-            onClick={() => router.push('/portal/applications')}
-            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 transition-colors mb-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
-            </svg>
-            Applications
-          </button>
-          <h2 className="text-2xl font-bold text-gray-900">
-            {app.applicationNumber || 'Draft Application'}
-          </h2>
-          <div className="flex items-center gap-3 mt-2">
-            <StatusBadge status={app.status} />
-            {app.channel && (
-              <span className="text-xs text-gray-400">
-                Channel: {app.channel.replace(/_/g, ' ')}
+      <button
+        onClick={() => router.push('/portal/applications')}
+        className="mb-3 flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-slate-600"
+      >
+        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Applications
+      </button>
+
+      <section className="mesh-hero aurora relative mb-6 overflow-hidden rounded-3xl p-6 text-white shadow-float md:p-8">
+        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-fuchsia-300/20 blur-3xl" />
+
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
+                {STATUS_LABELS[app.status] || app.status}
               </span>
+              {app.channel && (
+                <span className="text-xs text-white/70">Channel: {app.channel.replace(/_/g, ' ')}</span>
+              )}
+            </div>
+            <h2 className="mt-3 truncate text-2xl font-extrabold tracking-tight md:text-3xl">
+              {app.applicationNumber || 'Draft Application'}
+            </h2>
+            <p className="mt-1 text-sm text-white/75">
+              {LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose}
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-white/60">Requested</p>
+                <p className="text-2xl font-extrabold tracking-tight">{formatCurrency(app.requestedAmount)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-white/60">Term</p>
+                <p className="text-2xl font-extrabold tracking-tight">{app.requestedTermMonths} mo</p>
+              </div>
+              {app.requestedInterestRate && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-white/60">Rate</p>
+                  <p className="text-2xl font-extrabold tracking-tight">{app.requestedInterestRate}%</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-shrink-0 gap-2">
+            {isDraft && (
+              <button
+                onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
+                className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#7f2b7b] shadow-sm transition-transform hover:scale-[1.02]"
+              >
+                Continue Editing
+              </button>
+            )}
+            {isReturned && (
+              <button
+                onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
+                className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-orange-600 shadow-sm transition-transform hover:scale-[1.02]"
+              >
+                Review &amp; Resubmit
+              </button>
+            )}
+            {canWithdraw && (
+              <button
+                onClick={() => setShowWithdrawConfirm(true)}
+                className="rounded-xl border border-white/40 bg-white/10 px-4 py-2.5 text-sm font-medium text-white backdrop-blur transition-colors hover:bg-white/20"
+              >
+                Withdraw
+              </button>
             )}
           </div>
         </div>
-
-        {isDraft && (
-          <button
-            onClick={() =>
-              router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)
-            }
-            className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm"
-          >
-            Continue Editing
-          </button>
-        )}
-
-        {isReturned && (
-          <button
-            onClick={() =>
-              router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)
-            }
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors shadow-sm"
-          >
-            Review &amp; Resubmit
-          </button>
-        )}
-
-        {canWithdraw && (
-          <button
-            onClick={() => setShowWithdrawConfirm(true)}
-            className="border border-red-300 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
-          >
-            Withdraw
-          </button>
-        )}
-      </div>
+      </section>
 
       {/* Customer Status Headline */}
       {statusInfo && (
         <div
-          className={`rounded-xl border p-5 mb-6 ${
+          className={`rounded-3xl border p-6 mb-6 shadow-sm ${
             statusInfo.terminal
               ? isDeclined
-                ? 'bg-red-50 border-red-200'
-                : 'bg-gray-50 border-gray-200'
-              : 'bg-primary-50 border-primary-200'
+                ? 'bg-red-50 border-red-100'
+                : 'bg-slate-50 border-slate-100'
+              : 'mesh-soft border-fuchsia-100/60'
           }`}
         >
           <h3
@@ -407,16 +424,19 @@ export default function ApplicationDetailPage() {
 
       {/* Stage Stepper */}
       {statusInfo && !statusInfo.terminal && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 mb-6 shadow-premium">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-700">Application Progress</h3>
-            <span className="text-xs text-gray-400">{statusInfo.progress}%</span>
+            <h3 className="text-sm font-semibold text-slate-700">Application Progress</h3>
+            <span className="text-sm font-bold text-[#7f2b7b]">{statusInfo.progress}%</span>
           </div>
           {/* Progress bar */}
-          <div className="w-full h-1.5 bg-gray-100 rounded-full mb-5 overflow-hidden">
+          <div className="w-full h-2 bg-slate-100 rounded-full mb-6 overflow-hidden">
             <div
-              className="h-full bg-primary-500 rounded-full transition-all duration-500"
-              style={{ width: `${statusInfo.progress}%` }}
+              className="h-full rounded-full transition-all duration-700"
+              style={{
+                width: `${statusInfo.progress}%`,
+                background: 'linear-gradient(90deg, #ae3fa9, #ec4899)',
+              }}
             />
           </div>
           <StageStepper currentStage={statusInfo.stage as CustomerStage} />
@@ -445,7 +465,7 @@ export default function ApplicationDetailPage() {
 
       {/* Approved terms */}
       {app.approvedAmount && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-5 mb-6">
+        <div className="bg-green-50 border border-green-100 rounded-3xl p-6 mb-6 shadow-sm">
           <h3 className="text-sm font-semibold text-green-800 mb-3">Approved Terms</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
@@ -485,7 +505,7 @@ export default function ApplicationDetailPage() {
 
       {/* Offer */}
       {app.offerValidUntil && !app.offerAccepted && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6">
+        <div className="bg-amber-50 border border-amber-100 rounded-3xl p-6 mb-6 shadow-sm">
           <h3 className="text-sm font-semibold text-amber-800 mb-1">Offer Available</h3>
           <p className="text-sm text-amber-700">
             Valid until <span className="font-medium">{formatDate(app.offerValidUntil)}</span>.
@@ -495,7 +515,7 @@ export default function ApplicationDetailPage() {
       )}
 
       {/* Detail Sections */}
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Loan Request */}
         <DetailSection title="Loan Details">
           <DetailRow label="Requested Amount" value={formatCurrency(app.requestedAmount)} />
@@ -2151,12 +2171,12 @@ function StageStepper({ currentStage }: { currentStage: CustomerStage }) {
           <div key={s.key} className="flex-1 flex items-center">
             <div className="flex flex-col items-center">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
                   isComplete
-                    ? 'border-green-500 bg-green-500 text-white'
+                    ? 'border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-200'
                     : isActive
-                      ? 'border-primary-500 bg-primary-500 text-white ring-4 ring-primary-100'
-                      : 'border-gray-300 bg-white text-gray-400'
+                      ? 'border-transparent bg-gradient-to-br from-[#ae3fa9] to-[#ec4899] text-white ring-4 ring-fuchsia-100 shadow-lg'
+                      : 'border-slate-200 bg-white text-slate-400'
                 }`}
               >
                 {isComplete ? (
@@ -2174,7 +2194,7 @@ function StageStepper({ currentStage }: { currentStage: CustomerStage }) {
               </div>
               <span
                 className={`mt-1.5 text-[10px] font-medium text-center leading-tight ${
-                  isComplete ? 'text-green-600' : isActive ? 'text-primary-700' : 'text-gray-400'
+                  isComplete ? 'text-emerald-600' : isActive ? 'text-[#7f2b7b]' : 'text-slate-400'
                 }`}
               >
                 {s.label}
@@ -2182,7 +2202,7 @@ function StageStepper({ currentStage }: { currentStage: CustomerStage }) {
             </div>
             {i < CUSTOMER_STAGES.length - 1 && (
               <div
-                className={`flex-1 h-0.5 mx-1 ${i < activeIndex ? 'bg-green-400' : 'bg-gray-200'}`}
+                className={`flex-1 h-0.5 mx-1 ${i < activeIndex ? 'bg-emerald-400' : 'bg-slate-200'}`}
               />
             )}
           </div>
@@ -2241,11 +2261,9 @@ function EventTimeline({ events }: { events: TimelineEvent[] }) {
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-3">
-        {title}
-      </h3>
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">{children}</dl>
+    <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-premium">
+      <h3 className="text-base font-semibold text-slate-900 mb-4">{title}</h3>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">{children}</dl>
     </div>
   );
 }
@@ -2260,9 +2278,9 @@ function DetailRow({
   className?: string;
 }) {
   return (
-    <div className="flex justify-between sm:block">
-      <dt className="text-xs text-gray-500">{label}</dt>
-      <dd className={`text-sm font-medium text-gray-900 ${className || ''}`}>{value}</dd>
+    <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50/70 px-4 py-3 sm:flex-col sm:items-start sm:gap-1">
+      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className={`text-sm font-bold text-slate-900 ${className || ''}`}>{value}</dd>
     </div>
   );
 }

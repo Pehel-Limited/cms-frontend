@@ -324,11 +324,16 @@ export default function ProfilePage() {
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
               activeTab === t.key
-                ? 'bg-[#7f2b7b] text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                ? 'text-white shadow-premium'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-100'
             }`}
+            style={
+              activeTab === t.key
+                ? { background: 'linear-gradient(135deg, #ae3fa9, #ec4899)' }
+                : undefined
+            }
           >
             {t.icon}
             {t.label}
@@ -336,8 +341,8 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      {/* ── Tab content ────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 divide-y divide-slate-100">
+      {/* ── Tab content ───────────────────────────── */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-premium">
         {activeTab === 'personal' && (
           <div className="p-6 space-y-6">
             <SectionTitle>Personal Information</SectionTitle>
@@ -491,19 +496,22 @@ export default function ProfilePage() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{children}</h3>
+    <h3 className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+      <span className="h-3.5 w-1 rounded-full" style={{ background: 'linear-gradient(180deg, #ae3fa9, #ec4899)' }} />
+      {children}
+    </h3>
   );
 }
 
 function FieldGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>;
+  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{children}</div>;
 }
 
 function ReadOnlyField({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="bg-slate-50/50 rounded-xl px-4 py-3">
-      <dt className="text-xs font-medium text-slate-400">{label}</dt>
-      <dd className="mt-0.5 text-sm font-medium text-slate-900">{value || '—'}</dd>
+    <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3 transition-colors hover:border-[#7f2b7b]/20 hover:bg-white">
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-1 text-sm font-bold text-slate-900">{value || '—'}</dd>
     </div>
   );
 }

@@ -185,11 +185,11 @@ export default function AccountDetailPage() {
         {/* sidebar: linked cards + details */}
         <div className="space-y-6">
           {linkedCards.length > 0 && (
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-premium">
               <h3 className="mb-4 text-base font-semibold text-slate-900">Linked cards</h3>
               <div className="space-y-4">
                 {linkedCards.map(card => (
-                  <Link key={card.id} href="/portal/cards" className="block transition-transform hover:-translate-y-0.5">
+                  <Link key={card.id} href="/portal/cards" className="mx-auto block max-w-[320px] transition-transform hover:-translate-y-0.5">
                     <BankCard card={card} />
                   </Link>
                 ))}

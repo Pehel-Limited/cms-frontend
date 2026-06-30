@@ -14,9 +14,17 @@ import {
   monthlyInOut,
   totalBalanceGBP,
   balanceTrend,
+  dailySpendSeries,
+  savingsGoal,
   type Transaction,
 } from '@/lib/banking-data';
-import { BankCard, Sparkline } from '@/components/banking/BankCard';
+import {
+  BankCard,
+  Sparkline,
+  BalanceAmount,
+  RadialProgress,
+  SpendBars,
+} from '@/components/banking/BankCard';
 import {
   taskService,
   type TaskCountResponse,
@@ -43,15 +51,6 @@ function fmtGBP(n: number): string {
   return new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency: 'GBP',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-}
-
-function fmtAcct(n: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n);
@@ -100,52 +99,16 @@ function HeroChart({ data }: { data: number[] }) {
   );
 }
 
-/* ─── spend donut ───────────────────────────────────────────── */
-
-function SpendDonut({ segments }: { segments: { total: number; color: string }[] }) {
-  const total = segments.reduce((s, x) => s + x.total, 0) || 1;
-  const r = 54;
-  const c = 2 * Math.PI * r;
-  let offset = 0;
-  return (
-    <svg width="150" height="150" viewBox="0 0 150 150" className="flex-shrink-0 -rotate-90">
-      <circle cx="75" cy="75" r={r} fill="none" stroke="#f1f5f9" strokeWidth="16" />
-      {segments.map((seg, i) => {
-        const dash = (seg.total / total) * c;
-        const el = (
-          <circle
-            key={i}
-            cx="75"
-            cy="75"
-            r={r}
-            fill="none"
-            stroke={seg.color}
-            strokeWidth="16"
-            strokeDasharray={`${dash} ${c - dash}`}
-            strokeDashoffset={-offset}
-            strokeLinecap="round"
-            className="transition-all duration-700"
-          />
-        );
-        offset += dash;
-        return el;
-      })}
-    </svg>
-  );
-}
-
 /* ─── skeleton ──────────────────────────────────────────────── */
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg bg-slate-200 ${className}`} />;
 }
 
-/* ─── quick action button ───────────────────────────────────── */
-function QuickAction({ href, label, icon, accent }: { href: string; label: string; icon: React.ReactNode; accent: string }) {
+/* ─── quick action button (Quantro-style glass circle) ──────── */
+function QuickAction({ href, label, icon }: { href: string; label: string; icon: React.ReactNode }) {
   return (
-    <Link href={href} className="flex flex-col items-center gap-2 group">
-      <span
-        className={`flex h-12 w-12 items-center justify-center rounded-2xl ${accent} text-white shadow-lg transition-transform group-hover:scale-110 group-active:scale-95`}
-      >
+    <Link href={href} className="group flex flex-col items-center gap-2">
+      <span className="glass-dark flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg ring-1 ring-white/20 transition-all duration-300 group-hover:-translate-y-0.5 group-hover:bg-white/20 group-active:scale-95">
         {icon}
       </span>
       <span className="text-xs font-medium text-white/90 group-hover:text-white">{label}</span>
@@ -168,6 +131,9 @@ export default function PortalDashboard() {
   const total = useMemo(() => totalBalanceGBP(), []);
   const trend = useMemo(() => balanceTrend(), []);
   const topSpend = spend.slice(0, 5);
+  const dailySpend = useMemo(() => dailySpendSeries(14), []);
+  const goal = useMemo(() => savingsGoal(), []);
+  const goalPct = Math.min(100, Math.round((goal.saved / goal.target) * 100));
 
   // Lending (real data) — preserved integration
   const [apps, setApps] = useState<LoanApplication[]>([]);
@@ -209,22 +175,23 @@ export default function PortalDashboard() {
   return (
     <div className="space-y-6">
       {/* ════════ HERO: total balance ════════ */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#2d0e2b] via-[#4a1747] to-[#7f2b7b] text-white shadow-2xl">
+      <section className="mesh-hero aurora relative overflow-hidden rounded-[28px] text-white shadow-float animate-rise">
         <HeroChart data={trend} />
-        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/5 blur-2xl" />
-        <div className="absolute right-24 top-10 h-24 w-24 rounded-full bg-fuchsia-400/20 blur-2xl" />
+        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute right-24 top-10 h-24 w-24 rounded-full bg-fuchsia-300/30 blur-2xl" />
+        <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-orange-400/20 blur-3xl" />
 
-        <div className="relative z-10 p-6 md:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-medium text-purple-200">
+        <div className="relative z-10 p-6 md:p-9">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-center lg:text-left">
+              <p className="text-sm font-medium text-white/80">
                 {getGreeting()}, {user?.firstName || 'there'} 👋
               </p>
-              <div className="mt-2 flex items-center gap-3">
-                <p className="text-[11px] uppercase tracking-widest text-purple-200/70">Total balance</p>
+              <div className="mt-3 flex items-center justify-center gap-2 lg:justify-start">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-white/60">Total balance</p>
                 <button
                   onClick={() => setHideBalance(v => !v)}
-                  className="text-purple-200/70 transition-colors hover:text-white"
+                  className="text-white/60 transition-colors hover:text-white"
                   aria-label="Toggle balance visibility"
                 >
                   {hideBalance ? (
@@ -239,59 +206,61 @@ export default function PortalDashboard() {
                   )}
                 </button>
               </div>
-              <h1 className="mt-1 text-4xl font-bold tracking-tight md:text-5xl">
-                {mask(fmtGBP(total))}
+              <h1 className="mt-1 text-5xl font-extrabold tracking-tight drop-shadow-sm md:text-6xl">
+                <BalanceAmount
+                  amount={total}
+                  currency="GBP"
+                  hidden={hideBalance}
+                  symbolClassName="text-2xl md:text-3xl font-bold mr-0.5"
+                  centsClassName="text-xl md:text-2xl font-bold text-white/70"
+                />
               </h1>
-              <div className="mt-3 flex items-center gap-2 text-sm">
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2.5 py-1 font-semibold text-emerald-100">
+              <div className="mt-4 flex items-center justify-center gap-2 text-sm lg:justify-start">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/25 px-3 py-1 font-semibold text-emerald-50 ring-1 ring-emerald-300/30 backdrop-blur">
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l6-6 4 4 8-8m0 0v5m0-5h-5" />
                   </svg>
-                  +4.8%
+                  +£2,184 · 4.8%
                 </span>
-                <span className="text-purple-200/80">vs last month across {accounts.length} accounts</span>
+                <span className="text-white/70">this month</span>
               </div>
             </div>
 
-            {/* quick actions */}
-            <div className="grid grid-cols-4 gap-4 rounded-2xl bg-white/5 p-4 backdrop-blur-sm sm:gap-6">
+            {/* quick actions — glass circular */}
+            <div className="grid grid-cols-4 gap-5 sm:gap-7">
               <QuickAction
                 href="/portal/payments"
-                label="Send"
-                accent="bg-white/15 hover:bg-white/25"
+                label="Transfer"
                 icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
                   </svg>
                 }
               />
               <QuickAction
                 href="/portal/payments"
-                label="Request"
-                accent="bg-white/15 hover:bg-white/25"
+                label="Receive"
                 icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 7.5l9 9m0-9v9h-9" />
-                  </svg>
-                }
-              />
-              <QuickAction
-                href="/portal/accounts"
-                label="Top up"
-                accent="bg-white/15 hover:bg-white/25"
-                icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3.75v12.5m0 0l5-5m-5 5l-5-5M4.75 20.25h14.5" />
                   </svg>
                 }
               />
               <QuickAction
                 href="/portal/payments"
-                label="Pay bills"
-                accent="bg-white/15 hover:bg-white/25"
+                label="Swap"
                 icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 7.5h16.5M3.75 12h16.5m-16.5 4.5h16.5" />
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-9L21 3m0 0l-4.5 4.5M21 3H7.5" />
+                  </svg>
+                }
+              />
+              <QuickAction
+                href="/portal/transactions"
+                label="More"
+                icon={
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                   </svg>
                 }
               />
@@ -313,24 +282,33 @@ export default function PortalDashboard() {
             <Link
               key={acc.id}
               href={`/portal/accounts/${acc.id}`}
-              className="group relative overflow-hidden rounded-2xl p-5 text-white shadow-lg transition-transform hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-3xl p-5 text-white shadow-premium transition-all duration-300 hover:-translate-y-1 hover:shadow-float"
               style={{ background: acc.gradient }}
             >
-              <div className="absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10 blur-lg" />
+              <div className="absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/15 blur-lg" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
               <div className="relative z-10">
                 <div className="flex items-center justify-between">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-lg backdrop-blur">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-lg backdrop-blur">
                     {acc.glyph}
                   </span>
                   {acc.primary && (
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide">
+                    <span className="rounded-full bg-white/25 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide backdrop-blur">
                       Primary
                     </span>
                   )}
                 </div>
-                <p className="mt-3 text-xs text-white/70">{acc.name}</p>
-                <p className="text-xl font-bold">{mask(fmtAcct(acc.balance, acc.currency))}</p>
-                <div className="mt-1 flex items-center justify-between">
+                <p className="mt-3 text-xs text-white/75">{acc.name}</p>
+                <p className="text-2xl font-extrabold tracking-tight">
+                  <BalanceAmount
+                    amount={acc.balance}
+                    currency={acc.currency}
+                    hidden={hideBalance}
+                    symbolClassName="text-base font-bold mr-0.5"
+                    centsClassName="text-sm font-semibold text-white/70"
+                  />
+                </p>
+                <div className="mt-2 flex items-center justify-between">
                   <span className="font-mono text-[10px] text-white/60">{acc.accountNumber}</span>
                   <Sparkline data={acc.spark} width={56} height={20} strokeWidth={1.5} fill={false} />
                 </div>
@@ -345,7 +323,7 @@ export default function PortalDashboard() {
         {/* LEFT 2/3 */}
         <div className="space-y-6 lg:col-span-2">
           {/* Recent transactions */}
-          <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-premium">
             <div className="flex items-center justify-between px-6 pb-3 pt-5">
               <h3 className="text-base font-semibold text-slate-900">Recent activity</h3>
               <Link href="/portal/transactions" className="text-xs font-semibold text-[#7f2b7b] hover:text-[#5e1f5b]">
@@ -355,11 +333,24 @@ export default function PortalDashboard() {
             <div className="divide-y divide-slate-50">
               {txns.map((t: Transaction) => (
                 <div key={t.id} className="flex items-center gap-4 px-6 py-3.5 transition-colors hover:bg-slate-50/60">
-                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-lg">
+                  <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-lg">
                     {t.glyph}
+                    <span
+                      className={`absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full ring-2 ring-white ${
+                        t.direction === 'IN' ? 'bg-emerald-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                        {t.direction === 'IN' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m0 0l6-6m-6 6l-6-6" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 19.5v-15m0 0l6 6m-6-6l-6 6" />
+                        )}
+                      </svg>
+                    </span>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900">{t.merchant}</p>
+                    <p className="truncate text-sm font-semibold text-slate-900">{t.merchant}</p>
                     <p className="text-xs text-slate-400">
                       {txDay(t.date)} · {txTime(t.date)}
                       {t.status === 'PENDING' && (
@@ -370,7 +361,7 @@ export default function PortalDashboard() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-semibold ${t.direction === 'IN' ? 'text-emerald-600' : 'text-slate-900'}`}>
+                    <p className={`text-sm font-bold ${t.direction === 'IN' ? 'text-emerald-600' : 'text-slate-900'}`}>
                       {t.direction === 'IN' ? '+' : '−'}
                       {mask(fmtGBP(t.amount))}
                     </p>
@@ -378,6 +369,38 @@ export default function PortalDashboard() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Spending overview — Smart-Analytics gradient bars */}
+          <div className="overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Spending overview</h3>
+                <p className="mt-1 text-3xl font-extrabold tracking-tight text-slate-900">
+                  {mask(fmtGBP(spending))}
+                </p>
+                <p className="text-xs text-slate-400">Last 14 days · {accounts.length} accounts</p>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7l6 6 4-4 8 8m0 0v-5m0 5h-5" />
+                </svg>
+                12% vs last
+              </span>
+            </div>
+            <div className="mt-5">
+              <SpendBars
+                data={dailySpend.map(d => d.total)}
+                height={84}
+                gradientFrom="#a855f7"
+                gradientTo="#ec4899"
+              />
+              <div className="mt-2 flex justify-between text-[10px] font-medium text-slate-400">
+                <span>2 weeks ago</span>
+                <span>This week</span>
+                <span>Today</span>
+              </div>
             </div>
           </div>
 
@@ -460,7 +483,7 @@ export default function PortalDashboard() {
         {/* RIGHT 1/3 */}
         <div className="space-y-6">
           {/* Cards preview — single featured card with switcher chips */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-slate-900">Your cards</h3>
               <Link href="/portal/cards" className="text-xs font-semibold text-[#7f2b7b] hover:text-[#5e1f5b]">
@@ -502,21 +525,57 @@ export default function PortalDashboard() {
             </div>
           </div>
 
-          {/* Spending insights */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
+          {/* Savings goal — radial progress (Quantro savings style) */}
+          <div className="mesh-soft relative overflow-hidden rounded-3xl border border-rose-100/60 p-6 shadow-premium">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">Savings goal</h3>
+              <Link href="/portal/accounts/acc-savings" className="text-xs font-semibold text-[#7f2b7b] hover:text-[#5e1f5b]">
+                Manage →
+              </Link>
+            </div>
+            <div className="flex flex-col items-center">
+              <RadialProgress
+                size={176}
+                stroke={15}
+                segments={[
+                  { value: goalPct, color: '#f43f5e' },
+                  { value: Math.max(0, 100 - goalPct), color: 'rgba(244,63,94,0.12)' },
+                ]}
+                trackColor="rgba(244,63,94,0.08)"
+              >
+                <span className="text-4xl font-extrabold tracking-tight text-slate-900">{goalPct}%</span>
+                <span className="text-[11px] font-medium text-slate-400">of {fmtGBP(goal.target)}</span>
+              </RadialProgress>
+              <div className="mt-4 flex w-full items-center justify-between rounded-2xl bg-white/70 px-4 py-3 backdrop-blur">
+                <div>
+                  <p className="text-[11px] text-slate-400">Saved so far</p>
+                  <p className="text-lg font-bold text-slate-900">{mask(fmtGBP(goal.saved))}</p>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
+                  🎯 Better than 89%
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Spending insights — segmented radial */}
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
+            <div className="mb-3 flex items-center justify-between">
               <h3 className="text-base font-semibold text-slate-900">Spending</h3>
               <span className="text-xs text-slate-400">This month</span>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <SpendDonut segments={topSpend} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-[10px] text-slate-400">Spent</span>
-                  <span className="text-lg font-bold text-slate-900">{mask(fmtGBP(spending))}</span>
-                </div>
-              </div>
-              <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-5">
+              <RadialProgress
+                size={150}
+                stroke={15}
+                gap={0.03}
+                segments={topSpend.map(s => ({ value: s.total, color: s.color }))}
+                trackColor="#f1f5f9"
+              >
+                <span className="text-[10px] text-slate-400">Spent</span>
+                <span className="text-lg font-extrabold text-slate-900">{mask(fmtGBP(spending))}</span>
+              </RadialProgress>
+              <div className="flex-1 space-y-2.5">
                 {topSpend.map(s => (
                   <div key={s.category} className="flex items-center gap-2 text-xs">
                     <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ background: s.color }} />
@@ -527,20 +586,20 @@ export default function PortalDashboard() {
               </div>
             </div>
             {/* in / out */}
-            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
-              <div>
-                <p className="text-[11px] text-slate-400">Money in</p>
-                <p className="text-sm font-bold text-emerald-600">+{mask(fmtGBP(income))}</p>
+            <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+              <div className="rounded-2xl bg-emerald-50/70 px-4 py-3">
+                <p className="text-[11px] text-emerald-700/70">Money in</p>
+                <p className="text-base font-bold text-emerald-600">+{mask(fmtGBP(income))}</p>
               </div>
-              <div className="text-right">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right">
                 <p className="text-[11px] text-slate-400">Money out</p>
-                <p className="text-sm font-bold text-slate-900">−{mask(fmtGBP(spending))}</p>
+                <p className="text-base font-bold text-slate-900">−{mask(fmtGBP(spending))}</p>
               </div>
             </div>
           </div>
 
           {/* Quick send (beneficiaries) */}
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-slate-900">Quick send</h3>
               <Link href="/portal/payments" className="text-xs font-semibold text-[#7f2b7b] hover:text-[#5e1f5b]">

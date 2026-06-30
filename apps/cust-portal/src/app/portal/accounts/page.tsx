@@ -3,16 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ACCOUNTS, totalBalanceGBP, type BankAccount } from '@/lib/banking-data';
-import { Sparkline } from '@/components/banking/BankCard';
-
-function fmt(n: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-}
+import { Sparkline, BalanceAmount } from '@/components/banking/BankCard';
 
 const TYPE_LABEL: Record<BankAccount['type'], string> = {
   CURRENT: 'Current account',
@@ -24,7 +15,6 @@ const TYPE_LABEL: Record<BankAccount['type'], string> = {
 export default function AccountsPage() {
   const [hide, setHide] = useState(false);
   const total = useMemo(() => totalBalanceGBP(), []);
-  const mask = (s: string) => (hide ? '••••••' : s);
 
   return (
     <div className="space-y-6">
@@ -43,17 +33,25 @@ export default function AccountsPage() {
       </div>
 
       {/* total banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#2d0e2b] via-[#4a1747] to-[#7f2b7b] p-6 text-white shadow-xl md:p-8">
-        <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/5 blur-2xl" />
+      <div className="mesh-hero aurora relative overflow-hidden rounded-3xl p-6 text-white shadow-float md:p-8">
+        <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
         <div className="relative z-10 flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-widest text-purple-200/70">Combined balance (GBP)</p>
-            <p className="mt-1 text-3xl font-bold md:text-4xl">{mask(fmt(total, 'GBP'))}</p>
-            <p className="mt-2 text-sm text-purple-200/80">{ACCOUNTS.length} accounts · updated just now</p>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-white/60">Combined balance (GBP)</p>
+            <p className="mt-1 text-4xl font-extrabold tracking-tight md:text-5xl">
+              <BalanceAmount
+                amount={total}
+                currency="GBP"
+                hidden={hide}
+                symbolClassName="text-2xl font-bold mr-0.5"
+                centsClassName="text-xl font-bold text-white/70"
+              />
+            </p>
+            <p className="mt-2 text-sm text-white/70">{ACCOUNTS.length} accounts · updated just now</p>
           </div>
           <button
             onClick={() => setHide(v => !v)}
-            className="rounded-xl bg-white/10 p-2.5 text-purple-100 transition-colors hover:bg-white/20"
+            className="glass-dark rounded-xl p-2.5 text-white transition-colors hover:bg-white/20"
             aria-label="Toggle balance"
           >
             {hide ? (
@@ -76,10 +74,11 @@ export default function AccountsPage() {
           <Link
             key={acc.id}
             href={`/portal/accounts/${acc.id}`}
-            className="group overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+            className="group overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-premium transition-all hover:-translate-y-1 hover:shadow-float"
           >
             <div className="relative p-5 text-white" style={{ background: acc.gradient }}>
-              <div className="absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10 blur-lg" />
+              <div className="absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/15 blur-lg" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.18),transparent_55%)]" />
               <div className="relative z-10 flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-xl backdrop-blur">
@@ -99,7 +98,15 @@ export default function AccountsPage() {
               <div className="relative z-10 mt-5 flex items-end justify-between">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-white/60">Available</p>
-                  <p className="text-2xl font-bold">{mask(fmt(acc.balance, acc.currency))}</p>
+                  <p className="text-2xl font-extrabold tracking-tight">
+                    <BalanceAmount
+                      amount={acc.balance}
+                      currency={acc.currency}
+                      hidden={hide}
+                      symbolClassName="text-base font-bold mr-0.5"
+                      centsClassName="text-sm font-semibold text-white/70"
+                    />
+                  </p>
                 </div>
                 <Sparkline data={acc.spark} width={90} height={32} strokeWidth={2} />
               </div>

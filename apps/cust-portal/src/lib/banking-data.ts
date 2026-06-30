@@ -411,6 +411,57 @@ export function monthlyInOut(): { income: number; spending: number } {
   return { income, spending };
 }
 
+export interface DailySpend {
+  label: string; // e.g. "Mon"
+  date: string;
+  total: number;
+}
+
+/** Daily OUT-spend for the last `days` days, oldest → newest (for bar charts). */
+export function dailySpendSeries(days = 14): DailySpend[] {
+  const buckets: DailySpend[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    buckets.push({
+      label: d.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 1),
+      date: d.toISOString(),
+      total: 0,
+    });
+  }
+  TRANSACTIONS.filter(t => t.direction === 'OUT').forEach(t => {
+    const d = new Date(t.date);
+    d.setHours(0, 0, 0, 0);
+    const bucket = buckets.find(b => {
+      const bd = new Date(b.date);
+      bd.setHours(0, 0, 0, 0);
+      return bd.getTime() === d.getTime();
+    });
+    if (bucket) bucket.total += t.amount;
+  });
+  return buckets;
+}
+
+/** A simple savings-goal model for the radial progress ring. */
+export interface SavingsGoal {
+  label: string;
+  saved: number;
+  target: number;
+  currency: string;
+}
+
+export function savingsGoal(): SavingsGoal {
+  const pot = ACCOUNTS.find(a => a.id === 'acc-savings');
+  return {
+    label: 'Savings Pot',
+    saved: pot?.balance ?? 0,
+    target: 40000,
+    currency: pot?.currency ?? 'GBP',
+  };
+}
+
 /** A 12-point series approximating account balance over time, for the hero chart. */
 export function balanceTrend(): number[] {
   const base = totalBalanceGBP();

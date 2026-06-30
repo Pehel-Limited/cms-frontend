@@ -243,7 +243,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       <aside
         className={`
           fixed lg:sticky top-0 left-0 z-50 h-screen flex flex-col
-          bg-gradient-to-b from-[#2d0e2b] via-[#4a1747] to-[#7f2b7b]
+          mesh-hero
           text-white transition-all duration-300 ease-in-out
           ${sidebarCollapsed ? 'w-[72px]' : 'w-[220px]'}
           ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}

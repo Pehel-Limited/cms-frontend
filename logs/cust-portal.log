@@ -14,4 +14,94 @@
 @cms/cust-portal:dev:    ▲ Next.js 14.0.4
 @cms/cust-portal:dev:    - Local:        http://localhost:3001
 @cms/cust-portal:dev: 
-@cms/cust-portal:dev:  ✓ Ready in 2.8s
+@cms/cust-portal:dev:  ✓ Ready in 3.2s
+@cms/cust-portal:dev:  ○ Compiling / ...
+@cms/cust-portal:dev: [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+@cms/cust-portal:dev: Browserslist: browsers data (caniuse-lite) is 8 months old. Please run:
+@cms/cust-portal:dev:   npx update-browserslist-db@latest
+@cms/cust-portal:dev:   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+@cms/cust-portal:dev:  ✓ Compiled / in 3s (576 modules)
+@cms/cust-portal:dev:  ○ Compiling /not-found ...
+@cms/cust-portal:dev:  ✓ Compiled /not-found in 1131ms (567 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/login in 329ms (590 modules)
+@cms/cust-portal:dev:  ○ Compiling /portal ...
+@cms/cust-portal:dev:  ✓ Compiled /portal in 550ms (608 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/products in 306ms (611 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/cards in 240ms (617 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/payments in 337ms (623 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/transactions in 360ms (624 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/applications in 284ms (626 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/tasks in 208ms (632 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/documents in 251ms (640 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/messages in 165ms (648 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/profile in 223ms (656 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/company in 255ms (658 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal in 102ms (339 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/accounts in 399ms (641 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/accounts/[id] in 214ms (647 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/login in 182ms (316 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 2s (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 417ms (639 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 651ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 605ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 793ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 508ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 564ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 1615ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 568ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 560ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 894ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 555ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 907ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 585ms (653 modules)
+@cms/cust-portal:dev:  ⨯ ./src/app/portal/page.tsx
+@cms/cust-portal:dev: Error: 
+@cms/cust-portal:dev:   [31mx[0m the name `fmtAcct` is defined multiple times
+@cms/cust-portal:dev:     ,-[[36;1;4m/Users/rajat/Code/project_cms/cms-frontend/apps/cust-portal/src/app/portal/page.tsx[0m:56:1]
+@cms/cust-portal:dev:  [2m56[0m |   }).format(n);
+@cms/cust-portal:dev:  [2m57[0m | }
+@cms/cust-portal:dev:  [2m58[0m | 
+@cms/cust-portal:dev:  [2m59[0m | function fmtAcct(n: number, currency: string): string {
+@cms/cust-portal:dev:     : [31;1m         ^^^|^^^[0m
+@cms/cust-portal:dev:     :             [31;1m`-- [31;1mprevious definition of `fmtAcct` here[0m[0m
+@cms/cust-portal:dev:  [2m60[0m |   return new Intl.NumberFormat('en-GB', {
+@cms/cust-portal:dev:  [2m61[0m |     style: 'currency',
+@cms/cust-portal:dev:  [2m62[0m |     currency,
+@cms/cust-portal:dev:  [2m63[0m |     minimumFractionDigits: 2,
+@cms/cust-portal:dev:  [2m64[0m |     maximumFractionDigits: 2,
+@cms/cust-portal:dev:  [2m65[0m |   }).format(n);
+@cms/cust-portal:dev:  [2m66[0m | }
+@cms/cust-portal:dev:  [2m67[0m | 
+@cms/cust-portal:dev:  [2m68[0m | function fmtAcct(n: number, currency: string): string {
+@cms/cust-portal:dev:     : [33;1m         ^^^|^^^[0m
+@cms/cust-portal:dev:     :             [33;1m`-- [33;1m`fmtAcct` redefined here[0m[0m
+@cms/cust-portal:dev:  [2m69[0m |   return new Intl.NumberFormat('en-GB', {
+@cms/cust-portal:dev:  [2m70[0m |     style: 'currency',
+@cms/cust-portal:dev:  [2m71[0m |     currency,
+@cms/cust-portal:dev:     `----
+@cms/cust-portal:dev: 
+@cms/cust-portal:dev: Import trace for requested module:
+@cms/cust-portal:dev: ./src/app/portal/page.tsx
+@cms/cust-portal:dev:  ✓ Compiled in 587ms (639 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 626ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 886ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 782ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 548ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 524ms (653 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 544ms (653 modules)
+@cms/cust-portal:dev:  ○ Compiling / ...
+@cms/cust-portal:dev:  ✓ Compiled / in 764ms (317 modules)
+@cms/cust-portal:dev:  ○ Compiling /not-found ...
+@cms/cust-portal:dev:  ✓ Compiled /not-found in 1069ms (663 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/login in 121ms (324 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/cards in 254ms (324 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 1498ms (662 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 720ms (657 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/payments in 167ms (318 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/transactions in 98ms (322 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/products in 262ms (320 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/products/[code] in 359ms (649 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/applications/new in 421ms (657 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/applications in 198ms (329 modules)
+@cms/cust-portal:dev:  ✓ Compiled /portal/applications/[id] in 328ms (675 modules)
+@cms/cust-portal:dev:  ✓ Compiled in 612ms (672 modules)

@@ -1,6 +1,7 @@
 'use client';
 
 import { PaymentCard } from '@/lib/banking-data';
+import { getCurrencySymbol } from '@/lib/format';
 
 /* ──────────────────────────────────────────────────────────────────
  * Sparkline — pure SVG mini line chart with gradient fill
@@ -147,6 +148,195 @@ export function BankCard({
           <p className="text-lg font-bold">{showBalance}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * BalanceAmount — big bold figure with superscript cents (fintech hero)
+ * ────────────────────────────────────────────────────────────────── */
+
+export function BalanceAmount({
+  amount,
+  currency,
+  className = '',
+  centsClassName = '',
+  symbolClassName = '',
+  hidden = false,
+}: {
+  amount: number;
+  currency?: string;
+  className?: string;
+  centsClassName?: string;
+  symbolClassName?: string;
+  hidden?: boolean;
+}) {
+  const symbol = getCurrencySymbol(currency);
+  const whole = Math.floor(Math.abs(amount));
+  const cents = Math.round((Math.abs(amount) - whole) * 100)
+    .toString()
+    .padStart(2, '0');
+  const grouped = whole.toLocaleString();
+
+  if (hidden) {
+    return (
+      <span className={`tabular-nums tracking-tight ${className}`}>
+        <span className={symbolClassName}>{symbol}</span>
+        ••••••
+      </span>
+    );
+  }
+
+  return (
+    <span className={`tabular-nums tracking-tight ${className}`}>
+      <span className={`align-top ${symbolClassName}`}>{symbol}</span>
+      {grouped}
+      <span className={`align-top ${centsClassName}`}>.{cents}</span>
+    </span>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * RadialProgress — multi-segment savings ring (Quantro savings style)
+ * ────────────────────────────────────────────────────────────────── */
+
+export function RadialProgress({
+  segments,
+  size = 200,
+  stroke = 16,
+  gap = 0.04,
+  trackColor = 'rgba(0,0,0,0.06)',
+  children,
+}: {
+  segments: { value: number; color: string }[];
+  size?: number;
+  stroke?: number;
+  gap?: number;
+  trackColor?: string;
+  children?: React.ReactNode;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
+
+  let offset = 0;
+  const arcs = segments.map((seg, i) => {
+    const frac = seg.value / total;
+    const len = Math.max(0, frac - gap) * c;
+    const dash = `${len} ${c - len}`;
+    const dashOffset = -offset * c;
+    offset += frac;
+    return (
+      <circle
+        key={i}
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={seg.color}
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={dash}
+        strokeDashoffset={dashOffset}
+      />
+    );
+  });
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={trackColor} strokeWidth={stroke} />
+        {arcs}
+      </svg>
+      {children && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
+      )}
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * SpendBars — gradient bar chart (Smart-Analytics spending overview)
+ * ────────────────────────────────────────────────────────────────── */
+
+export function SpendBars({
+  data,
+  height = 72,
+  gradientFrom = '#a855f7',
+  gradientTo = '#ec4899',
+}: {
+  data: number[];
+  height?: number;
+  gradientFrom?: string;
+  gradientTo?: string;
+}) {
+  const max = Math.max(...data, 1);
+  const peak = data.indexOf(Math.max(...data));
+  return (
+    <div className="flex items-end gap-[3px]" style={{ height }}>
+      {data.map((v, i) => {
+        const h = Math.max(6, (v / max) * height);
+        const isPeak = i === peak;
+        return (
+          <div
+            key={i}
+            className="flex-1 rounded-full transition-all"
+            style={{
+              height: h,
+              background: isPeak
+                ? `linear-gradient(180deg, ${gradientFrom}, ${gradientTo})`
+                : `linear-gradient(180deg, ${gradientFrom}55, ${gradientTo}55)`,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * RingGauge — single-value semicircular gauge (AI-Score style)
+ * ────────────────────────────────────────────────────────────────── */
+
+export function RingGauge({
+  value,
+  max = 100,
+  size = 120,
+  stroke = 10,
+  color = '#a855f7',
+  trackColor = 'rgba(168,85,247,0.15)',
+  label,
+}: {
+  value: number;
+  max?: number;
+  size?: number;
+  stroke?: number;
+  color?: string;
+  trackColor?: string;
+  label?: string;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const frac = Math.min(1, value / max);
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={trackColor} strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${frac * c} ${c}`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-extrabold text-slate-800">{value}</span>
+        {label && <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{label}</span>}
+      </div>
     </div>
   );
 }

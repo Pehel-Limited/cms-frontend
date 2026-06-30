@@ -92,7 +92,7 @@ export default function CardsPage() {
             <button
               key={card.id}
               onClick={() => setActiveId(card.id)}
-              className={`block w-full rounded-2xl text-left transition-all ${
+              className={`block w-full max-w-[360px] rounded-2xl text-left transition-all ${
                 activeId === card.id ? 'scale-100 ring-2 ring-[#7f2b7b] ring-offset-2' : 'scale-[0.97] opacity-80 hover:opacity-100'
               }`}
             >

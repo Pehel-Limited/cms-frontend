@@ -116,6 +116,113 @@
   .glass {
     @apply bg-white/80 backdrop-blur-md;
   }
+
+  /* ─── Premium glassmorphism ─── */
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+  }
+  .glass-dark {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+  }
+
+  /* ─── Signature "aurora" hero gradient (brand purple → fuchsia → warm) ─── */
+  .mesh-hero {
+    background-color: #3b0d39;
+    background-image:
+      radial-gradient(at 12% 18%, rgba(174, 63, 169, 0.85) 0px, transparent 50%),
+      radial-gradient(at 85% 12%, rgba(236, 72, 153, 0.7) 0px, transparent 45%),
+      radial-gradient(at 78% 88%, rgba(251, 146, 60, 0.45) 0px, transparent 45%),
+      radial-gradient(at 25% 92%, rgba(124, 58, 237, 0.55) 0px, transparent 50%),
+      radial-gradient(at 50% 50%, rgba(127, 43, 123, 0.6) 0px, transparent 60%);
+  }
+  .mesh-soft {
+    background-color: #fdf2f8;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(244, 114, 182, 0.18) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(251, 146, 60, 0.14) 0px, transparent 45%),
+      radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.14) 0px, transparent 50%);
+  }
+
+  /* ─── Premium shadows ─── */
+  .shadow-premium {
+    box-shadow:
+      0 10px 30px -10px rgba(88, 28, 87, 0.35),
+      0 4px 12px -6px rgba(88, 28, 87, 0.25);
+  }
+  .shadow-float {
+    box-shadow: 0 20px 50px -20px rgba(59, 13, 57, 0.55);
+  }
+
+  /* ─── Animated aurora shimmer overlay ─── */
+  .aurora::before {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      rgba(255, 255, 255, 0.12) 60deg,
+      transparent 120deg,
+      rgba(236, 72, 153, 0.1) 200deg,
+      transparent 280deg
+    );
+    animation: auroraSpin 14s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes auroraSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ─── Shimmer sweep (for premium cards) ─── */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.18),
+      transparent
+    );
+    animation: shimmerSweep 4.5s ease-in-out infinite;
+  }
+  @keyframes shimmerSweep {
+    0%,
+    60% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* ─── Rise-in entrance ─── */
+  .animate-rise {
+    animation: riseIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes riseIn {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
 }
 
 /* ─── Sidebar scrollbar (thin, translucent on gradient) ─── */

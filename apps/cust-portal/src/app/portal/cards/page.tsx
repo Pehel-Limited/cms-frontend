@@ -5,252 +5,200 @@ import Link from 'next/link';
 import { CARDS, getAccount, type PaymentCard } from '@/lib/banking-data';
 import { BankCard } from '@/components/banking/BankCard';
 
-function fmt(n: number): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+function fmt(n: number) {
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2 }).format(n);
 }
 
-/* small toggle */
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${on ? 'bg-[#7f2b7b]' : 'bg-slate-200'}`}
-      aria-pressed={on}
-    >
-      <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-0.5'}`}
-      />
-    </button>
-  );
-}
+const CARD_TRANSACTIONS: Record<string, { merchant: string; glyph: string; amount: number; dir: 'IN' | 'OUT'; date: string; category: string }[]> = {
+  'card-1': [
+    { merchant: 'Amazon.co.uk', glyph: '📦', amount: 58.99, dir: 'OUT', date: '24 May 2025', category: 'Shopping' },
+    { merchant: 'Tesco Stores', glyph: '🛒', amount: 74.31, dir: 'OUT', date: '23 May 2025', category: 'Groceries' },
+    { merchant: 'Uber Technologies', glyph: '🚗', amount: 18.40, dir: 'OUT', date: '23 May 2025', category: 'Transport' },
+    { merchant: 'Pret A Manger', glyph: '☕', amount: 11.83, dir: 'OUT', date: '22 May 2025', category: 'Dining Out' },
+  ],
+};
 
-function ControlRow({
-  label,
-  desc,
-  on,
-  onChange,
-  icon,
-}: {
-  label: string;
-  desc: string;
-  on: boolean;
-  onChange: (v: boolean) => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-3 py-3">
-      <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-900">{label}</p>
-        <p className="text-xs text-slate-400">{desc}</p>
-      </div>
-      <Toggle on={on} onChange={onChange} />
-    </div>
-  );
-}
+const CARD_CONTROLS = [
+  { id: 'online', label: 'Online payments', desc: 'Allow card to be used for online purchases', enabled: true },
+  { id: 'contactless', label: 'Contactless payments', desc: 'Tap to pay at terminals', enabled: true },
+  { id: 'international', label: 'International use', desc: 'Use card abroad', enabled: false },
+  { id: 'atm', label: 'ATM withdrawals', desc: 'Withdraw cash from ATMs', enabled: true },
+];
 
 export default function CardsPage() {
-  const [cards, setCards] = useState<PaymentCard[]>(CARDS);
-  const [activeId, setActiveId] = useState<string>(CARDS[0].id);
-  const active = cards.find(c => c.id === activeId)!;
+  const [activeCardIdx, setActiveCardIdx] = useState(0);
+  const [controls, setControls] = useState(Object.fromEntries(CARD_CONTROLS.map(c => [c.id, c.enabled])));
+  const [frozen, setFrozen] = useState(false);
 
-  const update = (id: string, patch: Partial<PaymentCard>) =>
-    setCards(cs => cs.map(c => (c.id === id ? { ...c, ...patch } : c)));
-
-  const linkedAccount = getAccount(active.linkedAccountId);
-  const utilization =
-    active.type === 'CREDIT' && active.creditLimit
-      ? Math.min(100, ((active.creditUsed ?? 0) / active.creditLimit) * 100)
-      : 0;
+  const card = CARDS[activeCardIdx];
+  const account = card ? getAccount(card.linkedAccountId) : null;
+  const txns = CARD_TRANSACTIONS[card?.id] ?? CARD_TRANSACTIONS['card-1'] ?? [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cards</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage your debit and credit cards.</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Cards</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Manage your debit and credit cards.</p>
         </div>
-        <button className="inline-flex items-center gap-2 self-start rounded-xl bg-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#5e1f5b]">
+        <button className="inline-flex items-center gap-2 rounded-xl bg-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#5e1f5b]">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          Order a card
+          Apply for card
         </button>
       </div>
 
-      {/* card strip */}
-      <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-2 no-scrollbar">
-        {cards.map(card => (
-          <button
-            key={card.id}
-            onClick={() => setActiveId(card.id)}
-            className={`block w-[280px] flex-shrink-0 snap-start rounded-2xl text-left transition-all sm:w-[300px] ${
-              activeId === card.id ? 'ring-2 ring-[#7f2b7b] ring-offset-2' : 'opacity-70 hover:opacity-100'
-            }`}
-          >
-            <BankCard card={card} />
-          </button>
-        ))}
-      </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
+        {/* Left: card list */}
+        <div className="xl:col-span-2 space-y-4">
+          {/* Card switcher */}
+          <div className="space-y-3">
+            {CARDS.map((c, i) => {
+              const acc = getAccount(c.linkedAccountId);
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setActiveCardIdx(i)}
+                  className="w-full text-left rounded-2xl p-4 transition-all"
+                  style={{
+                    backgroundColor: activeCardIdx === i ? 'rgba(127,43,123,0.08)' : 'var(--surface-card)',
+                    border: `1px solid ${activeCardIdx === i ? '#7f2b7b' : 'var(--surface-border)'}`,
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0 w-14 h-9 rounded-lg overflow-hidden shadow" style={{ background: c.gradient }}>
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-5 h-3 rounded border-2 border-white/60" />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{c.label}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>•••• {c.last4}</p>
+                    </div>
+                    {activeCardIdx === i && (
+                      <svg className="h-5 w-5 text-[#7f2b7b] shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  {acc && (
+                    <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                      {acc.name} · Balance: {fmt(acc.balance)}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-      {/* details + controls */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-        {/* left: summary + card details */}
-        <div className="space-y-6">
-          {/* summary */}
-          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{active.label}</p>
-                <p className="text-xs text-slate-400">
-                  {active.scheme} {active.type.toLowerCase()} · {linkedAccount?.name}
-                </p>
+          {/* Full card render */}
+          {card && (
+            <div className="p-5 rounded-2xl" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
+              <BankCard card={card} />
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {[
+                  { label: frozen ? 'Unfreeze' : 'Freeze', icon: '❄️', action: () => setFrozen(v => !v), danger: false },
+                  { label: 'PIN', icon: '🔐', action: () => {}, danger: false },
+                  { label: 'Report lost', icon: '🚫', action: () => {}, danger: true },
+                ].map(btn => (
+                  <button
+                    key={btn.label}
+                    onClick={btn.action}
+                    className="flex flex-col items-center gap-1.5 py-3 rounded-xl text-xs font-semibold transition-colors"
+                    style={{
+                      backgroundColor: 'var(--surface-input)',
+                      color: btn.danger ? '#ef4444' : 'var(--text-secondary)',
+                      border: btn.danger ? '1px solid rgba(239,68,68,0.2)' : '1px solid var(--surface-border)',
+                    }}
+                  >
+                    <span className="text-base">{btn.icon}</span>
+                    {btn.label}
+                  </button>
+                ))}
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${active.frozen ? 'bg-sky-50 text-sky-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                {active.frozen ? 'Frozen' : 'Active'}
-              </span>
             </div>
+          )}
+        </div>
 
-            {active.type === 'CREDIT' ? (
-              <div className="mt-5">
-                <div className="flex items-end justify-between">
-                  <div>
-                    <p className="text-xs text-slate-400">Balance owed</p>
-                    <p className="text-2xl font-bold text-slate-900">{fmt(active.creditUsed ?? 0)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-400">Limit</p>
-                    <p className="text-sm font-semibold text-slate-700">{fmt(active.creditLimit ?? 0)}</p>
-                  </div>
-                </div>
-                <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className={`h-full rounded-full ${utilization > 75 ? 'bg-red-500' : utilization > 40 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${utilization}%` }}
-                  />
-                </div>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-                  <span>{Math.round(utilization)}% used</span>
-                  <span>{fmt((active.creditLimit ?? 0) - (active.creditUsed ?? 0))} available</span>
-                </div>
-                <div className="mt-4 flex gap-3">
-                  <button className="flex-1 rounded-xl bg-[#7f2b7b] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#5e1f5b]">
-                    Pay balance
-                  </button>
-                  <button className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-[#7f2b7b] hover:text-[#7f2b7b]">
-                    View statement
-                  </button>
-                </div>
-                <p className="mt-3 text-center text-[11px] text-slate-400">Representative APR {active.apr}% (variable)</p>
-              </div>
-            ) : (
-              <div className="mt-5 grid grid-cols-2 gap-4">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs text-slate-400">Spent this month</p>
-                  <p className="text-xl font-bold text-slate-900">{fmt(active.spentThisMonth ?? 0)}</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs text-slate-400">Linked balance</p>
-                  <p className="text-xl font-bold text-slate-900">{fmt(linkedAccount?.balance ?? 0)}</p>
-                </div>
+        {/* Right: controls + transactions */}
+        <div className="xl:col-span-3 space-y-4">
+          {/* Card controls */}
+          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
+            <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Card controls</h2>
+            {frozen && (
+              <div className="mb-4 rounded-xl p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 flex items-center gap-2">
+                <span className="text-amber-600 dark:text-amber-400">⚠️</span>
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Card is frozen. All transactions are blocked.</p>
               </div>
             )}
-          </div>
-
-          {/* card details */}
-          <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
-            <h3 className="mb-4 text-base font-semibold text-slate-900">Card details</h3>
-            <dl className="space-y-3 text-sm">
-              {[
-                ['Card number', `•••• •••• •••• ${active.last4}`],
-                ['Card holder', active.holder],
-                ['Expires', active.expiry],
-                ['Type', `${active.scheme} ${active.type.toLowerCase()}`],
-                ['Linked account', linkedAccount?.name ?? '—'],
-              ].map(([k, v]) => (
-                <div key={k} className="flex items-center justify-between gap-3">
-                  <dt className="text-slate-400">{k}</dt>
-                  <dd className="font-semibold text-slate-900">{v}</dd>
+            <div className="space-y-3">
+              {CARD_CONTROLS.map(c => (
+                <div key={c.id} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{c.label}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.desc}</p>
+                  </div>
+                  <button
+                    onClick={() => setControls(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
+                    className={`relative shrink-0 h-6 w-11 rounded-full transition-colors duration-200 ${controls[c.id] && !frozen ? 'bg-[#7f2b7b]' : 'bg-slate-200 dark:bg-white/20'}`}
+                    aria-checked={controls[c.id]}
+                    role="switch"
+                  >
+                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${controls[c.id] && !frozen ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
                 </div>
               ))}
-            </dl>
+            </div>
           </div>
-        </div>
 
-        {/* freeze + controls */}
-        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-premium">
-            <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-slate-50 to-purple-50/50 p-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#7f2b7b] shadow-sm">
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
-                  </svg>
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Freeze card</p>
-                  <p className="text-xs text-slate-400">Instantly block all spending</p>
-                </div>
-              </div>
-              <Toggle on={active.frozen} onChange={v => update(active.id, { frozen: v })} />
+          {/* Spending limits */}
+          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Spending limits</h2>
+              <button className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">Edit limits</button>
             </div>
-
-            <div className="mt-2 divide-y divide-slate-50">
-              <ControlRow
-                label="Contactless payments"
-                desc="Tap to pay in store"
-                on={active.contactless}
-                onChange={v => update(active.id, { contactless: v })}
-                icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" d="M8.5 8.5a5 5 0 010 7M11.5 6a8 8 0 010 12M5.5 11a2 2 0 010 2" />
-                  </svg>
-                }
-              />
-              <ControlRow
-                label="Online payments"
-                desc="Use card on the web"
-                on={active.online}
-                onChange={v => update(active.id, { online: v })}
-                icon={
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
-                  </svg>
-                }
-              />
-            </div>
-
-            {/* quick links */}
-            <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'View PIN', icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z' },
-                { label: 'Add to wallet', icon: 'M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m0 0a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 9' },
-                { label: 'Report lost', icon: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z' },
-              ].map(q => (
-                <button key={q.label} className="flex flex-col items-center gap-2 rounded-xl border border-slate-100 p-3 text-center transition-colors hover:border-[#7f2b7b]/30 hover:bg-purple-50/40">
-                  <svg className="h-5 w-5 text-[#7f2b7b]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.6}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d={q.icon} />
-                  </svg>
-                  <span className="text-[11px] font-medium text-slate-600">{q.label}</span>
-                </button>
+                { label: 'Daily limit', value: fmt(3000), used: fmt(752.48), pct: 25 },
+                { label: 'Monthly limit', value: fmt(10000), used: fmt(1257.68), pct: 13 },
+              ].map(lim => (
+                <div key={lim.label} className="rounded-xl p-4" style={{ backgroundColor: 'var(--surface-input)' }}>
+                  <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{lim.label}</p>
+                  <p className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{lim.value}</p>
+                  <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--surface-border)' }}>
+                    <div className="h-full rounded-full bg-[#7f2b7b]" style={{ width: `${lim.pct}%` }} />
+                  </div>
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>Used: {lim.used} ({lim.pct}%)</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recent card transactions */}
+          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Recent card transactions</h2>
+              <Link href="/portal/transactions" className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">View all →</Link>
+            </div>
+            <div>
+              {txns.map((t, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors" style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base" style={{ backgroundColor: 'var(--surface-input)' }}>
+                    {t.glyph}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{t.merchant}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.category} · {t.date}</p>
+                  </div>
+                  <p className="text-sm font-bold shrink-0" style={{ color: 'var(--text-primary)' }}>−{fmt(t.amount)}</p>
+                </div>
               ))}
             </div>
           </div>
         </div>
-
-      <p className="text-center text-xs text-slate-400">
-        Card controls are a UI preview.{' '}
-        <Link href="/portal/transactions" className="font-semibold text-[#7f2b7b] hover:underline">
-          View card transactions →
-        </Link>
-      </p>
+      </div>
     </div>
   );
 }

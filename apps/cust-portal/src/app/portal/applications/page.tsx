@@ -362,7 +362,7 @@ export default function ApplicationsPage() {
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center">
+          <div className="bg-white dark:bg-[#161c2d] rounded-2xl border border-slate-200/80 dark:border-white/[0.06] p-12 text-center">
           <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7f2b7b]/10 to-[#a0369b]/10 flex items-center justify-center mb-4">
             <svg
               className="w-8 h-8 text-[#7f2b7b]"
@@ -380,8 +380,8 @@ export default function ApplicationsPage() {
           </div>
           {applications.length === 0 ? (
             <>
-              <h3 className="text-lg font-semibold text-slate-900">No applications yet</h3>
-              <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">No applications yet</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                 Start your first loan application to get started on your financial journey.
               </p>
               <button
@@ -393,8 +393,8 @@ export default function ApplicationsPage() {
             </>
           ) : (
             <>
-              <h3 className="text-lg font-semibold text-slate-900">No matching applications</h3>
-              <p className="text-sm text-slate-500 mt-1">Try changing the filter above.</p>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">No matching applications</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Try changing the filter above.</p>
             </>
           )}
         </div>
@@ -404,7 +404,7 @@ export default function ApplicationsPage() {
             <button
               key={app.applicationId}
               onClick={() => router.push(`/portal/applications/${app.applicationId}`)}
-              className="w-full text-left bg-white rounded-3xl border border-slate-100 p-5 shadow-sm hover:-translate-y-0.5 hover:border-[#7f2b7b]/30 hover:shadow-premium transition-all duration-200 group"
+              className="w-full text-left bg-white dark:bg-[#161c2d] rounded-3xl border border-slate-100 dark:border-white/[0.06] p-5 shadow-sm hover:-translate-y-0.5 hover:border-[#7f2b7b]/30 hover:shadow-premium transition-all duration-200 group"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-4 flex-1 min-w-0">
@@ -425,7 +425,7 @@ export default function ApplicationsPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <h3 className="text-sm font-semibold text-slate-900 group-hover:text-[#7f2b7b] transition-colors">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-[#7f2b7b] transition-colors">
                         {app.applicationNumber || 'Draft Application'}
                       </h3>
                       <StatusBadge status={app.status} />

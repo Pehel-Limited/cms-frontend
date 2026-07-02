@@ -83,12 +83,36 @@
   * {
     border-color: var(--rm-border);
   }
+  html {
+    /* Ensure the Inter variable (declared on <body>) is also the html font,
+       so Preflight's html font-family resolves to Inter everywhere. */
+    font-family: var(--font-inter), system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
   body {
     background-color: var(--rm-bg);
     color: var(--rm-text);
+    font-family: var(--font-inter), system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    letter-spacing: -0.006em;
     @apply antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-synthesis: none;
     transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* Crisper, tighter headings — matches the reference's clean hierarchy */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.018em;
+    line-height: 1.25;
+  }
+
+  /* Tabular figures for numbers keep KPI values aligned and legible */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 
   /* ── Light-mode card depth: subtle shadow on rounded card surfaces ── */

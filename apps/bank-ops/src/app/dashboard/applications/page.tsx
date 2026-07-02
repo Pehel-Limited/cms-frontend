@@ -208,66 +208,36 @@ export default function ApplicationsPage() {
   const pageSubtitle = filterCustomerId ? 'for this customer' : isReviewer ? 'assigned to you' : '';
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50/30">
-      {/* ──── Page header with gradient banner ──── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#0a1628] via-[#132952] to-[#1a3a7a]">
-        <div className="absolute -top-20 -right-20 w-72 h-72 bg-cyan-400/8 rounded-full blur-3xl animate-float" />
-        <div className="absolute -bottom-16 left-1/4 w-56 h-56 bg-blue-400/10 rounded-full blur-2xl animate-float-delayed" />
-        <svg
-          className="absolute bottom-0 left-0 right-0 text-slate-100"
-          viewBox="0 0 1440 48"
-          preserveAspectRatio="none"
-        >
-          <path fill="currentColor" d="M0,48 L0,24 Q360,0 720,24 Q1080,48 1440,24 L1440,48 Z" />
-        </svg>
-
-        <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-14 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">{pageTitle}</h1>
-              <p className="text-blue-200 text-sm mt-1">
-                {totalElements} application{totalElements !== 1 ? 's' : ''} {pageSubtitle}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {filterCustomerId && (
-                <button
-                  onClick={() => router.push('/dashboard/applications')}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur border border-white/20 rounded-xl text-sm text-white hover:bg-white/20 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                  Clear Filter
-                </button>
-              )}
-              {!isReviewer && !filterCustomerId && (
-                <button
-                  onClick={() => router.push('/dashboard/applications/new')}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-blue-700 rounded-xl font-semibold text-sm hover:bg-blue-50 hover:-translate-y-0.5 hover:shadow-xl transition-all duration-300 shadow-lg shadow-blue-900/20"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  New Application
-                </button>
-              )}
-            </div>
-          </div>
+    <div className="space-y-5">
+      {/* Page header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>{pageTitle}</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rm-text-secondary)' }}>
+            {totalElements} application{totalElements !== 1 ? 's' : ''} {pageSubtitle}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {filterCustomerId && (
+            <button onClick={() => router.push('/dashboard/applications')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              Clear Filter
+            </button>
+          )}
+          {!isReviewer && !filterCustomerId && (
+            <button onClick={() => router.push('/dashboard/applications/new')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors hover:opacity-90"
+              style={{ backgroundColor: '#0ea5e9' }}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+              New Application
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-4 pb-8 space-y-4">
+      <div className="space-y-4">
         {/* ──── Search & Filters card ──── */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-5 animate-slide-up">
           {/* Search input */}

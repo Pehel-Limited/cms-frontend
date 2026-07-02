@@ -23,6 +23,7 @@ import {
   sortData,
 } from '@/components/SortableHeader';
 import config from '@/config';
+import { useAppSelector } from '@/store';
 
 /* ───── types & constants (unchanged) ────── */
 
@@ -179,6 +180,7 @@ function getSmartAction(item: WorklistItem): { label: string; actionable: boolea
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { user } = useAppSelector(state => state.auth);
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [worklist, setWorklist] = useState<WorklistItem[]>([]);
   const [pipeline, setPipeline] = useState<PipelineStage[]>([]);
@@ -352,7 +354,7 @@ export default function DashboardPage() {
   /* ─── loading state ─── */
   if (loading && !kpis) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-4rem)] bg-slate-100">
+      <div className="flex items-center justify-center h-[calc(100vh-4rem)]" style={{ backgroundColor: 'var(--rm-bg)' }}>
         <div className="text-center">
           <div className="relative w-16 h-16 mx-auto mb-4">
             <div className="absolute inset-0 rounded-full border-4 border-blue-100" />
@@ -365,1026 +367,543 @@ export default function DashboardPage() {
   }
 
   /* ─── render ─── */
+  /* ─── render ─── */
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-slate-50 via-slate-50 to-blue-50/30">
-      {/* ──── Hero banner ──── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#0a1628] via-[#132952] to-[#1a3a7a]">
-        {/* Animated decorative shapes */}
-        <div className="absolute -top-20 -right-20 w-80 h-80 bg-cyan-400/8 rounded-full blur-3xl animate-float" />
-        <div className="absolute -bottom-16 left-1/3 w-64 h-64 bg-blue-400/10 rounded-full blur-2xl animate-float-delayed" />
-        <div className="absolute top-1/2 right-1/4 w-48 h-48 bg-violet-500/6 rounded-full blur-3xl animate-float" />
-        <svg
-          className="absolute bottom-0 left-0 right-0 text-slate-100"
-          viewBox="0 0 1440 60"
-          preserveAspectRatio="none"
-        >
-          <path fill="currentColor" d="M0,60 L0,30 Q360,0 720,30 Q1080,60 1440,30 L1440,60 Z" />
-        </svg>
+    <div className="space-y-5 p-1" style={{ color: 'var(--rm-text)' }}>
 
-        <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-16 animate-fade-in">
-          {/* Top row: timeframe + refresh */}
-          <div className="flex items-center justify-between mb-6">
-            <p className="text-blue-100 text-sm">
-              Here&apos;s what&apos;s happening with your applications
-            </p>
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedTimeframe}
-                onChange={e => setSelectedTimeframe(e.target.value as TimeframeFilter)}
-                className="px-3 py-1.5 bg-white/10 backdrop-blur border border-white/20 rounded-xl text-sm text-white focus:ring-2 focus:ring-white/40 focus:border-transparent [&>option]:text-gray-900"
-              >
-                {TIMEFRAME_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={loadDashboardData}
-                className="p-2 rounded-xl bg-white/10 backdrop-blur border border-white/20 text-white hover:bg-white/20 transition-colors"
-                title="Refresh"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* KPI strip — glassmorphism cards with animated counters */}
+      {/* ══ PAGE HEADER ══ */}
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>
+            Relationship Manager Dashboard
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rm-text-secondary)' }}>
+            Welcome back, {user?.firstName}. Here&apos;s your portfolio overview.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedTimeframe}
+            onChange={e => setSelectedTimeframe(e.target.value as TimeframeFilter)}
+            className="px-3 py-2 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+            style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
+          >
+            {TIMEFRAME_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={loadDashboardData}
+            className="p-2 rounded-xl transition-colors hover:bg-cyan-500/10"
+            style={{ color: 'var(--rm-text-muted)', border: '1px solid var(--rm-border)' }}
+            title="Refresh data"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
           {kpis && (
-            <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar stagger-children">
-              {/* Total Pipeline */}
-              <div className="min-w-[200px] flex-shrink-0 bg-white/8 backdrop-blur-xl border border-white/15 rounded-2xl p-5 hover:bg-white/12 hover:border-white/25 transition-all duration-300 group">
-                <p className="text-blue-300/80 text-xs font-medium uppercase tracking-wider mb-1">
-                  Total Pipeline
-                </p>
-                <p className="text-3xl font-bold text-white">
-                  <AnimatedCurrency value={kpis.inProgressValue} />
-                </p>
-                <p className="text-blue-300/60 text-xs mt-1">
-                  <AnimatedCounter value={kpis.inProgressCount} /> active applications
-                </p>
-              </div>
-              {/* In Progress */}
-              <div className="min-w-[160px] flex-shrink-0 bg-white/8 backdrop-blur-xl border border-white/15 rounded-2xl p-5 flex items-center gap-4 hover:bg-white/12 hover:border-white/25 transition-all duration-300">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400/30 to-cyan-400/20 flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/10">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white">
-                    <AnimatedCounter value={kpis.inProgressCount} />
-                  </p>
-                  <p className="text-blue-300/60 text-xs">In Progress</p>
-                </div>
-              </div>
-              {/* Needs Action */}
-              <div
-                onClick={() => setActiveTab('action')}
-                className="min-w-[160px] flex-shrink-0 bg-amber-400/10 backdrop-blur-xl border border-amber-300/20 rounded-2xl p-5 flex items-center gap-4 cursor-pointer hover:bg-amber-400/20 hover:border-amber-300/30 transition-all duration-300 group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400/30 to-orange-400/20 flex items-center justify-center shrink-0 group-hover:shadow-lg group-hover:shadow-amber-500/20 transition-shadow">
-                  <svg
-                    className="w-5 h-5 text-amber-200"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white">
-                    <AnimatedCounter value={kpis.needsActionCount} />
-                  </p>
-                  <p className="text-amber-300/70 text-xs">Needs Action</p>
-                </div>
-              </div>
-              {/* At Risk */}
-              <div className="min-w-[160px] flex-shrink-0 bg-red-400/10 backdrop-blur-xl border border-red-300/20 rounded-2xl p-5 flex items-center gap-4 hover:bg-red-400/15 hover:border-red-300/30 transition-all duration-300">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-400/30 to-rose-400/20 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/10">
-                  <svg
-                    className="w-5 h-5 text-red-200"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white">
-                    <AnimatedCounter value={kpis.stuckAtRiskCount} />
-                  </p>
-                  <p className="text-red-300/70 text-xs">At Risk</p>
-                </div>
-              </div>
-              {/* Conversion */}
-              <div className="min-w-[160px] flex-shrink-0 bg-white/8 backdrop-blur-xl border border-white/15 rounded-2xl p-5 flex items-center gap-4 hover:bg-white/12 hover:border-white/25 transition-all duration-300">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400/30 to-teal-400/20 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/10">
-                  <svg
-                    className="w-5 h-5 text-emerald-200"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white tabular-nums">
-                    {kpis.conversionRate30d ? `${Math.round(kpis.conversionRate30d)}%` : '—'}
-                  </p>
-                  <p className="text-blue-300/60 text-xs">Conversion (30d)</p>
-                </div>
-              </div>
-            </div>
+            <span className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+              As of {new Date().toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+            </span>
           )}
         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-4 pb-8 space-y-6">
-        {/* ──── Today's Focus — smart-ranked action queue ──── */}
-        <PriorityFocus
-          items={actionItems}
-          onCompleteKyc={handleCompleteKyc}
-          kycLoadingId={kycLoadingId}
-        />
-
-        {/* ──── What's New / Alerts — horizontal scrollable strips ──── */}
-        {kpis && (
-          <section className="animate-slide-up">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
-              What&apos;s new
-            </h2>
-            <div
-              className="flex gap-3 overflow-x-auto pb-1 no-scrollbar stagger-children"
-              ref={scrollRef}
-            >
-              {kpis.needsActionCount > 0 && (
-                <div
-                  className="min-w-[220px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300 cursor-pointer group"
-                  onClick={() => setActiveTab('action')}
-                >
-                  <span className="text-2xl font-bold text-slate-900 tabular-nums">
-                    {kpis.needsActionCount}
-                  </span>
-                  <p className="text-sm text-slate-600 leading-snug">
-                    applications need
-                    <br />
-                    your action
-                  </p>
-                  <button className="ml-auto text-slate-300 hover:text-slate-500" title="Dismiss">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              )}
-              {kpis.stuckAtRiskCount > 0 && (
-                <div className="min-w-[220px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-red-100/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
-                  <span className="text-2xl font-bold text-red-600 tabular-nums">
-                    {kpis.stuckAtRiskCount}
-                  </span>
-                  <p className="text-sm text-slate-600 leading-snug">
-                    applications
-                    <br />
-                    at risk
-                  </p>
-                </div>
-              )}
-              <div className="min-w-[240px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0 shadow-sm shadow-emerald-100">
-                  <svg
-                    className="w-5 h-5 text-emerald-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {kpis.approvedThisMonthCount} approved
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {formatCurrency(kpis.approvedThisMonthValue)} this month
-                  </p>
-                </div>
+      {/* ══ KPI CARDS — 6-column grid ══ */}
+      {kpis ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+          {/* Total Pipeline */}
+          <div className="rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Total Pipeline</p>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(14,165,233,0.12)' }}>
+                <svg className="w-4 h-4" style={{ color: '#0ea5e9' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
               </div>
-              <div className="min-w-[240px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 shadow-sm shadow-indigo-100">
-                  <svg
-                    className="w-5 h-5 text-indigo-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {kpis.bookedThisMonthCount} booked
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {formatCurrency(kpis.bookedThisMonthValue)} this month
-                  </p>
-                </div>
-              </div>
-              {kpis.declinedThisMonthCount > 0 && (
-                <div className="min-w-[200px] flex-shrink-0 bg-white/90 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-4 flex items-center gap-3 hover:shadow-medium hover:-translate-y-0.5 transition-all duration-300">
-                  <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
-                    <svg
-                      className="w-5 h-5 text-red-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {kpis.declinedThisMonthCount} declined
-                    </p>
-                    <p className="text-xs text-slate-500">this month</p>
-                  </div>
-                </div>
-              )}
             </div>
-          </section>
-        )}
-
-        {/* ──── Quick Actions — circular icons like "Popular Payments" ──── */}
-        <section className="animate-slide-up" style={{ animationDelay: '100ms' }}>
-          <div className="flex items-center gap-3 mb-3">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-              Quick Actions
-            </h2>
+            <p className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>
+              <AnimatedCurrency value={kpis.inProgressValue} />
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              <AnimatedCounter value={kpis.inProgressCount} /> active applications
+            </p>
           </div>
-          <div className="flex gap-6 overflow-x-auto pb-1 no-scrollbar stagger-children">
+
+          {/* In Review */}
+          <div className="rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>In Review</p>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(99,102,241,0.12)' }}>
+                <svg className="w-4 h-4" style={{ color: '#6366f1' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </div>
+            </div>
+            <p className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>
+              <AnimatedCounter value={kpis.inProgressCount} />
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              active applications
+            </p>
+          </div>
+
+          {/* Needs Attention */}
+          <div
+            onClick={() => setActiveTab('action')}
+            className="rounded-2xl p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid rgba(245,158,11,0.35)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Needs Action</p>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(245,158,11,0.15)' }}>
+                <svg className="w-4 h-4" style={{ color: '#f59e0b' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              </div>
+            </div>
+            <p className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>
+              <AnimatedCounter value={kpis.needsActionCount} />
+            </p>
+            <p className="text-xs mt-1" style={{ color: '#d97706' }}>applications</p>
+          </div>
+
+          {/* At Risk */}
+          <div className="rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid rgba(239,68,68,0.35)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>At Risk</p>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(239,68,68,0.15)' }}>
+                <svg className="w-4 h-4" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              </div>
+            </div>
+            <p className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>
+              <AnimatedCounter value={kpis.stuckAtRiskCount} />
+            </p>
+            <p className="text-xs mt-1" style={{ color: '#dc2626' }}>applications</p>
+          </div>
+
+          {/* Conversion MTD */}
+          <div className="rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Conversion (MTD)</p>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(16,185,129,0.12)' }}>
+                <svg className="w-4 h-4" style={{ color: '#10b981' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              </div>
+            </div>
+            <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+              {kpis.conversionRate30d ? `${Math.round(kpis.conversionRate30d)}%` : '—'}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--rm-text-muted)' }}>Target: 40%</p>
+          </div>
+
+          {/* Booked This Month */}
+          <div className="rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Booked (MTD)</p>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(14,165,233,0.12)' }}>
+                <svg className="w-4 h-4" style={{ color: '#0ea5e9' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+            </div>
+            <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+              <AnimatedCurrency value={kpis.bookedThisMonthValue} />
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              <AnimatedCounter value={kpis.bookedThisMonthCount} /> deals
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ backgroundColor: 'var(--rm-card)' }} />
+          ))}
+        </div>
+      )}
+
+      {/* ══ TODAY'S PRIORITIES ══ */}
+      <PriorityFocus
+        items={actionItems}
+        onCompleteKyc={handleCompleteKyc}
+        kycLoadingId={kycLoadingId}
+      />
+
+      {/* ══ SECONDARY STATS + AI INSIGHT ══ */}
+      {kpis && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          {/* 4 stat tiles */}
+          <div className="lg:col-span-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
             {[
               {
-                label: 'New Application',
-                path: '/dashboard/applications/new',
-                gradient: 'from-blue-500 to-blue-600',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.8}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                ),
+                label: 'Upcoming Reviews',
+                value: kpis.needsActionCount,
+                sub: 'Next 7 days',
+                icon: '📅',
+                link: '/dashboard/applications',
+                linkLabel: 'View calendar →',
               },
               {
-                label: 'New Customer',
-                path: '/dashboard/customers/new',
-                gradient: 'from-emerald-500 to-teal-600',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.8}
-                      d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-                    />
-                  </svg>
-                ),
+                label: 'Needs Action',
+                value: kpis.needsActionCount,
+                sub: 'Awaiting your review',
+                icon: '📄',
+                link: '/dashboard/applications',
+                linkLabel: 'Review items →',
               },
               {
-                label: 'All Applications',
-                path: '/dashboard/applications',
-                gradient: 'from-violet-500 to-purple-600',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.8}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                ),
+                label: 'Customer Follow-ups',
+                value: kpis.inProgressCount,
+                sub: 'Due this week',
+                icon: '👥',
+                link: '/dashboard/customers',
+                linkLabel: 'View follow-ups →',
               },
               {
-                label: 'Customers',
-                path: '/dashboard/customers',
-                gradient: 'from-orange-400 to-pink-500',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.8}
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
-                ),
+                label: 'Booked / Approved',
+                value: null,
+                valueCurrency: kpis.approvedThisMonthValue,
+                sub: `${kpis.approvedThisMonthCount} deals`,
+                icon: '✅',
+                link: '/dashboard/applications',
+                linkLabel: 'View deals →',
               },
-              {
-                label: 'KYC / AML',
-                path: '/dashboard/kyc',
-                gradient: 'from-cyan-500 to-blue-500',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.8}
-                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                    />
-                  </svg>
-                ),
-              },
-              {
-                label: 'Products',
-                path: '/dashboard/products',
-                gradient: 'from-indigo-500 to-blue-600',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.8}
-                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                    />
-                  </svg>
-                ),
-              },
-              {
-                label: 'Accounts',
-                path: '/dashboard/accounts',
-                gradient: 'from-pink-500 to-rose-600',
-                icon: (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.8}
-                      d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-                    />
-                  </svg>
-                ),
-              },
-            ].map(a => (
-              <button
-                key={a.path}
-                onClick={() => router.push(a.path)}
-                className="flex flex-col items-center gap-2 group"
-              >
-                <div
-                  className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${a.gradient} text-white flex items-center justify-center shadow-lg shadow-blue-900/10 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-blue-900/15 group-hover:-rotate-3 transition-all duration-300 ease-out-expo`}
-                >
-                  {a.icon}
+            ].map(tile => (
+              <div key={tile.label} className="rounded-2xl p-4 flex flex-col justify-between"
+                style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">{tile.icon}</span>
+                    <p className="text-xs font-medium" style={{ color: 'var(--rm-text-muted)' }}>{tile.label}</p>
+                  </div>
+                  <p className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>
+                    {tile.valueCurrency !== undefined
+                      ? <AnimatedCurrency value={tile.valueCurrency} />
+                      : <AnimatedCounter value={tile.value ?? 0} />}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--rm-text-muted)' }}>{tile.sub}</p>
                 </div>
-                <span className="text-xs text-slate-600 font-medium text-center whitespace-nowrap">
-                  {a.label}
-                </span>
-              </button>
+                <Link href={tile.link} className="text-xs font-semibold text-cyan-500 hover:text-cyan-400 transition-colors mt-3">
+                  {tile.linkLabel}
+                </Link>
+              </div>
             ))}
           </div>
-        </section>
 
-        {/* ──── Pipeline ──── */}
-        {pipelineSummary.some(s => s.count > 0) && (
-          <section
-            className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-6 animate-slide-up"
-            style={{ animationDelay: '200ms' }}
-          >
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-5">
-              Pipeline
-            </h2>
-            <div className="flex items-end gap-4 justify-between">
-              {pipelineSummary.map((stage, index) => {
-                const maxCount = Math.max(...pipelineSummary.map(s => s.count), 1);
-                const height = Math.max((stage.count / maxCount) * 120, 12);
+          {/* AI Insight panel */}
+          <div className="lg:col-span-1 rounded-2xl p-4 relative overflow-hidden"
+            style={{ backgroundColor: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.2)' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">✨</span>
+              <span className="text-xs font-bold text-cyan-400">AI Insight</span>
+              <span className="text-[9px] font-bold text-cyan-500 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded-full">BETA</span>
+            </div>
+            {kpis.stuckAtRiskCount > 0 ? (
+              <>
+                <p className="text-sm font-medium mb-2" style={{ color: 'var(--rm-text)' }}>
+                  {kpis.stuckAtRiskCount} application{kpis.stuckAtRiskCount !== 1 ? 's are' : ' is'} at risk of SLA breach within the next 24 hours.
+                </p>
+                <p className="text-xs mb-3" style={{ color: 'var(--rm-text-secondary)' }}>
+                  <span className="font-semibold" style={{ color: 'var(--rm-text)' }}>Top recommendation:</span> Review and action pending applications to avoid SLA breach.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm mb-3" style={{ color: 'var(--rm-text)' }}>
+                All applications are on track. {kpis.needsActionCount > 0 ? `${kpis.needsActionCount} need your attention.` : 'Great work!'}
+              </p>
+            )}
+            <Link href="/dashboard/applications" className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors">
+              View all insights →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ══ QUICK ACTIONS ══ */}
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--rm-text-muted)' }}>Quick Actions</h2>
+        <div className="rounded-2xl p-4 flex flex-wrap gap-3" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+          {[
+            { label: 'New Application', path: '/dashboard/applications/new', icon: '➕', color: 'from-cyan-500 to-blue-600' },
+            { label: 'Add Customer', path: '/dashboard/customers/new', icon: '👤', color: 'from-violet-500 to-purple-600' },
+            { label: 'All Applications', path: '/dashboard/applications', icon: '📋', color: 'from-indigo-500 to-blue-600' },
+            { label: 'Customers', path: '/dashboard/customers', icon: '👥', color: 'from-teal-500 to-emerald-600' },
+            { label: 'KYC / AML', path: '/dashboard/kyc', icon: '🛡️', color: 'from-amber-500 to-orange-600' },
+            { label: 'Products', path: '/dashboard/products', icon: '📦', color: 'from-pink-500 to-rose-600' },
+            { label: 'Accounts', path: '/dashboard/accounts', icon: '🏦', color: 'from-slate-500 to-slate-600' },
+          ].map(a => (
+            <button
+              key={a.path}
+              onClick={() => router.push(a.path)}
+              className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:-translate-y-0.5 hover:shadow-lg"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
+            >
+              <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${a.color} flex items-center justify-center text-xs text-white`}>
+                {a.icon}
+              </div>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ══ PIPELINE BY STAGE ══ */}
+      {pipelineSummary.some(s => s.count > 0) && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Pipeline by Stage</h2>
+            <Link href="/dashboard/applications" className="text-xs font-semibold text-cyan-500 hover:text-cyan-400 transition-colors">
+              View pipeline →
+            </Link>
+          </div>
+          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+            {/* Arrow flow */}
+            <div className="flex overflow-x-auto no-scrollbar">
+              {pipelineSummary.filter(s => s.count > 0 || true).map((stage, i) => {
+                const colors: Record<string, { bg: string; text: string; border: string }> = {
+                  DRAFT: { bg: 'rgba(100,116,139,0.12)', text: '#94a3b8', border: 'rgba(100,116,139,0.3)' },
+                  SUBMITTED: { bg: 'rgba(59,130,246,0.12)', text: '#60a5fa', border: 'rgba(59,130,246,0.3)' },
+                  UNDERWRITING: { bg: 'rgba(245,158,11,0.12)', text: '#fbbf24', border: 'rgba(245,158,11,0.3)' },
+                  APPROVED: { bg: 'rgba(16,185,129,0.12)', text: '#34d399', border: 'rgba(16,185,129,0.3)' },
+                  OFFER: { bg: 'rgba(139,92,246,0.12)', text: '#a78bfa', border: 'rgba(139,92,246,0.3)' },
+                  BOOKING: { bg: 'rgba(99,102,241,0.12)', text: '#818cf8', border: 'rgba(99,102,241,0.3)' },
+                };
+                const c = colors[stage.key] ?? colors.DRAFT;
                 return (
-                  <div key={stage.key} className="flex-1 flex flex-col items-center gap-2 group">
-                    <span className="text-lg font-bold text-slate-900 tabular-nums group-hover:text-primary-600 transition-colors">
-                      <AnimatedCounter value={stage.count} duration={800} />
-                    </span>
-                    <div className="w-full flex justify-center">
-                      <div
-                        className={`w-full max-w-[48px] rounded-xl ${stage.color} pipeline-bar group-hover:shadow-lg transition-shadow duration-300`}
-                        style={{ height: `${height}px`, animationDelay: `${index * 100}ms` }}
-                      />
-                    </div>
-                    <span className="text-xs text-slate-500 text-center font-medium">
-                      {stage.label}
-                    </span>
-                    {stage.avgDays > 0 && (
-                      <span className="text-[10px] text-slate-400">
-                        {Math.round(stage.avgDays)}d avg
+                  <div key={stage.key} className="flex-1 min-w-[100px] flex flex-col items-center px-3 py-4 relative group hover:bg-white/5 transition-colors"
+                    style={{ borderRight: i < pipelineSummary.length - 1 ? '1px solid var(--rm-border)' : undefined }}>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl mb-2" style={{ backgroundColor: c.bg, border: `1px solid ${c.border}` }}>
+                      <span className="text-sm font-bold" style={{ color: c.text }}>
+                        <AnimatedCounter value={stage.count} />
                       </span>
+                    </div>
+                    <p className="text-xs font-semibold text-center" style={{ color: 'var(--rm-text)' }}>{stage.label}</p>
+                    {stage.avgDays > 0 && (
+                      <p className="text-[10px] mt-1" style={{ color: 'var(--rm-text-muted)' }}>{Math.round(stage.avgDays)}d avg</p>
+                    )}
+                    <p className="text-[10px] mt-0.5" style={{ color: c.text }}>
+                      {stage.value > 0 && <AnimatedCurrency value={stage.value} />}
+                    </p>
+                    {i < pipelineSummary.length - 1 && (
+                      <svg className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 z-10" style={{ color: 'var(--rm-text-muted)' }} fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                      </svg>
                     )}
                   </div>
                 );
               })}
             </div>
-          </section>
-        )}
-
-        {/* ──── Insights — performance + pipeline blockers (real data) ──── */}
-        <DashboardInsights performance={performance} missingItems={missingItems} />
-
-        {/* ──── Worklist ──── */}
-        <section
-          className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft overflow-hidden animate-slide-up"
-          style={{ animationDelay: '300ms' }}
-        >
-          {/* Header with tabs */}
-          <div className="px-6 py-4 border-b border-slate-100">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-4">
-                <h2 className="text-base font-semibold text-slate-900">Latest Applications</h2>
-                <div className="flex items-center bg-slate-100 rounded-xl p-0.5">
-                  {[
-                    {
-                      key: 'action' as const,
-                      label: 'Needs Action',
-                      count: actionItems.length,
-                      accent: 'bg-amber-100 text-amber-700',
-                    },
-                    {
-                      key: 'completed' as const,
-                      label: 'Completed',
-                      count: completedItems.length + declinedItems.length,
-                      accent: 'bg-slate-200 text-slate-600',
-                    },
-                    {
-                      key: 'all' as const,
-                      label: 'All',
-                      count: worklist.length,
-                      accent: 'bg-slate-200 text-slate-600',
-                    },
-                  ].map(tab => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 ${
-                        activeTab === tab.key
-                          ? 'bg-white text-slate-900 shadow-md shadow-slate-200/50'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {tab.label}
-                      {tab.count > 0 && (
-                        <span
-                          className={`ml-1.5 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold rounded-full ${activeTab === tab.key ? tab.accent : 'bg-slate-200 text-slate-500'}`}
-                        >
-                          {tab.count}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+            {/* Summary stats bar */}
+            {kpis && (
+              <div className="flex items-center gap-6 px-5 py-3 flex-wrap" style={{ borderTop: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Total Pipeline</p>
+                  <p className="text-sm font-bold" style={{ color: 'var(--rm-text)' }}>
+                    <AnimatedCurrency value={kpis.inProgressValue} />
+                  </p>
+                  <p className="text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>{kpis.inProgressCount} applications</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Conversion Rate</p>
+                  <p className="text-sm font-bold text-emerald-500">
+                    {kpis.conversionRate30d ? `${Math.round(kpis.conversionRate30d)}%` : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--rm-text-muted)' }}>Booked (MTD)</p>
+                  <p className="text-sm font-bold" style={{ color: 'var(--rm-text)' }}>
+                    <AnimatedCurrency value={kpis.bookedThisMonthValue} />
+                  </p>
+                  <p className="text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>{kpis.bookedThisMonthCount} deals</p>
+                </div>
+                <div className="ml-auto">
+                  <Link href="/dashboard/applications" className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-colors" style={{ backgroundColor: '#0ea5e9' }}>
+                    View pipeline
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedFilter || ''}
-                  onChange={e => setSelectedFilter(e.target.value || undefined)}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ══ INSIGHTS (performance + blockers) ══ */}
+      <DashboardInsights performance={performance} missingItems={missingItems} />
+
+      {/* ══ LATEST APPLICATIONS WORKLIST ══ */}
+      <section className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--rm-border)' }}>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>Latest Applications</h2>
+            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--rm-border)' }}>
+              {[
+                { key: 'action' as const, label: 'Needs Action', count: actionItems.length },
+                { key: 'completed' as const, label: 'Completed', count: completedItems.length + declinedItems.length },
+                { key: 'all' as const, label: 'All', count: worklist.length },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                  style={{
+                    backgroundColor: activeTab === tab.key ? '#0ea5e9' : 'transparent',
+                    color: activeTab === tab.key ? '#fff' : 'var(--rm-text-secondary)',
+                  }}
                 >
-                  <option value="">All Statuses</option>
-                  <option value="SUBMITTED">Submitted</option>
-                  <option value="PENDING_KYC">Pending KYC</option>
-                  <option value="PENDING_DOCUMENTS">Pending Documents</option>
-                  <option value="PENDING_CREDIT_CHECK">Pending Credit Check</option>
-                  <option value="REFERRED_TO_SENIOR">Referred to Senior</option>
-                  <option value="IN_UNDERWRITING">In Underwriting</option>
-                  <option value="UNDERWRITING_APPROVED">Underwriting Approved</option>
-                  <option value="APPROVED">Approved</option>
-                  <option value="OFFER_GENERATED">Offer Generated</option>
-                  <option value="PENDING_ESIGN">Pending E-Sign</option>
-                  <option value="PENDING_BOOKING">Pending Booking</option>
-                  <option value="BOOKED">Booked</option>
-                  <option value="DISBURSED">Disbursed</option>
-                  <option value="DECLINED">Declined</option>
-                </select>
-                {/* View toggle (card / table) like VTB's grid/list toggle */}
-                <div className="flex bg-slate-100 rounded-lg p-0.5">
-                  <button
-                    onClick={() => setViewMode('card')}
-                    className={`p-1.5 rounded-md transition-all duration-300 ${viewMode === 'card' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-600/20' : 'text-slate-400 hover:text-slate-600'}`}
-                    title="Card view"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setViewMode('table')}
-                    className={`p-1.5 rounded-md transition-all duration-300 ${viewMode === 'table' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-600/20' : 'text-slate-400 hover:text-slate-600'}`}
-                    title="Table view"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 6h16M4 10h16M4 14h16M4 18h16"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 text-[9px] font-bold rounded-full"
+                      style={{ backgroundColor: activeTab === tab.key ? 'rgba(255,255,255,0.3)' : 'var(--rm-input)' }}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedFilter ?? ''}
+              onChange={e => setSelectedFilter(e.target.value || undefined)}
+              className="px-3 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
+            >
+              <option value="">All Statuses</option>
+              {['SUBMITTED','PENDING_KYC','PENDING_DOCUMENTS','PENDING_CREDIT_CHECK','IN_UNDERWRITING','APPROVED','OFFER_SENT','PENDING_ESIGN'].map(s => (
+                <option key={s} value={s}>{s.replace(/_/g,' ')}</option>
+              ))}
+            </select>
+            <Link href="/dashboard/applications"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}>
+              View all
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
+              </svg>
+            </Link>
+          </div>
+        </div>
 
-          {/* ── Card View ── */}
-          {viewMode === 'card' && (
-            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-grid">
-              {sortedWorklist.map(item => {
-                const statusStyle = getStatusStyle(item.status);
-                const action = getSmartAction(item);
-                const isTerminal = TERMINAL_STATUSES.has(item.status);
-                const isCompletedItem = COMPLETED_STATUSES.has(item.status);
-
-                return (
-                  <div
-                    key={item.applicationId}
-                    className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-100/80 p-4 hover:bg-white hover:shadow-medium hover:border-slate-200/80 hover:-translate-y-1 transition-all duration-300 ease-out-expo group cursor-pointer"
-                    onClick={() => router.push(`/dashboard/applications/${item.applicationId}`)}
-                  >
-                    {/* Top row: icon + app number + age */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-xl ${statusStyle.bg} flex items-center justify-center shrink-0 ring-1 ${statusStyle.ring}`}
-                        >
-                          <span className={`w-2.5 h-2.5 rounded-full ${statusStyle.dot}`} />
+        {/* Table */}
+        {sortedWorklist.length === 0 ? (
+          <div className="py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl mx-auto mb-3 text-2xl" style={{ backgroundColor: 'var(--rm-input)' }}>
+              {activeTab === 'action' ? '✅' : '📋'}
+            </div>
+            <p className="text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>
+              {activeTab === 'action' ? 'No applications need action' : 'No applications found'}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              {activeTab === 'action' ? "You're all caught up!" : 'Try a different filter'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                  {['Customer', 'Application', 'Amount', 'Status', 'Stage / Next Action', 'SLA', ''].map(h => (
+                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold whitespace-nowrap" style={{ color: 'var(--rm-text-muted)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedWorklist.slice(0, 10).map(item => {
+                  const style = getStatusStyle(item.status);
+                  const action = getSmartAction(item);
+                  const isOverdue = item.daysInCurrentStage > 5;
+                  return (
+                    <tr
+                      key={item.applicationId}
+                      className="transition-colors hover:bg-white/[0.03] cursor-pointer"
+                      style={{ borderBottom: '1px solid var(--rm-border)' }}
+                      onClick={() => router.push(`/dashboard/applications/${item.applicationId}`)}
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                            style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+                            {(item.customerName || '?').charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold truncate" style={{ color: 'var(--rm-text)' }}>{item.customerName || '—'}</p>
+                            <p className="text-[10px] truncate" style={{ color: 'var(--rm-text-muted)' }}>{item.customerType}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">
-                            {item.applicationNumber}
-                          </p>
-                          <p className="text-xs text-slate-400">{item.customerName}</p>
-                        </div>
-                      </div>
-                      <span
-                        className={`text-xs font-bold tabular-nums ${item.daysInCurrentStage > 7 ? 'text-red-500' : item.daysInCurrentStage > 3 ? 'text-amber-500' : 'text-slate-400'}`}
-                      >
-                        {item.daysInCurrentStage}d
-                      </span>
-                    </div>
-
-                    {/* Product + Amount */}
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs text-slate-500 truncate">{item.productName}</span>
-                      <span className="text-sm font-bold text-slate-800 tabular-nums">
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <p className="font-mono text-xs" style={{ color: 'var(--rm-text-secondary)' }}>{item.applicationNumber}</p>
+                        <p className="text-[10px] truncate" style={{ color: 'var(--rm-text-muted)' }}>{item.productName}</p>
+                      </td>
+                      <td className="px-5 py-3.5 font-semibold" style={{ color: 'var(--rm-text)' }}>
                         {formatCurrency(item.requestedAmount)}
-                      </span>
-                    </div>
-
-                    {/* Readiness: doc progress + KYC/AML chips */}
-                    {!isTerminal && (
-                      <div className="mb-3 flex items-center gap-2">
-                        {item.documentsRequiredCount > 0 && (
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] text-slate-400">Documents</span>
-                              <span className="text-[10px] font-semibold text-slate-500 tabular-nums">
-                                {item.documentsSubmittedCount}/{item.documentsRequiredCount}
-                              </span>
-                            </div>
-                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                              <div
-                                className={`h-full rounded-full ${
-                                  item.documentsSubmittedCount >= item.documentsRequiredCount
-                                    ? 'bg-emerald-400'
-                                    : 'bg-blue-400'
-                                }`}
-                                style={{
-                                  width: `${Math.min(100, Math.round((item.documentsSubmittedCount / item.documentsRequiredCount) * 100))}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${style.bg} ${style.text}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                          {item.status.replace(/_/g,' ')}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {action.actionable ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); router.push(`/dashboard/applications/${item.applicationId}`); }}
+                            className="flex items-center gap-1 text-xs font-semibold text-cyan-500 hover:text-cyan-400 transition-colors whitespace-nowrap"
+                          >
+                            {action.label}
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <span className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>{action.label}</span>
                         )}
-                        <div className="flex gap-1 shrink-0">
-                          <span
-                            className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${item.kycVerified ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}
-                            title={item.kycVerified ? 'KYC verified' : 'KYC pending'}
-                          >
-                            KYC {item.kycVerified ? '✓' : '·'}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {item.daysInCurrentStage > 0 && (
+                          <span className={`text-xs font-semibold ${isOverdue ? 'text-red-400' : 'text-emerald-500'}`}>
+                            {item.daysInCurrentStage}d {isOverdue ? '⚠️' : '✓'}
                           </span>
-                          <span
-                            className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${item.amlCheckPassed ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}
-                            title={item.amlCheckPassed ? 'AML passed' : 'AML pending'}
-                          >
-                            AML {item.amlCheckPassed ? '✓' : '·'}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Status badge */}
-                    <div className="flex items-center justify-between">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
-                        {item.status.replace(/_/g, ' ')}
-                      </span>
-                      {/* Action */}
-                      {item.status === 'PENDING_KYC' || item.nextAction === 'COMPLETE_KYC' ? (
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
                         <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleCompleteKyc(item.applicationId);
-                          }}
-                          disabled={kycLoadingId === item.applicationId}
-                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                          onClick={e => e.stopPropagation()}
+                          className="p-1 rounded-lg hover:bg-white/5 transition-colors"
+                          style={{ color: 'var(--rm-text-muted)' }}
                         >
-                          {kycLoadingId === item.applicationId ? 'Processing...' : 'Complete KYC'}
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+                          </svg>
                         </button>
-                      ) : !isTerminal && action.actionable ? (
-                        <span className="text-[11px] font-medium text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {action.label} &rarr;
-                        </span>
-                      ) : isCompletedItem ? (
-                        <svg
-                          className="w-4 h-4 text-emerald-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      ) : null}
-                    </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-                    {/* SLA badge */}
-                    {item.slaBreachDays !== null && item.slaBreachDays > 0 && (
-                      <div className="mt-2">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">
-                          SLA +{item.slaBreachDays}d
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        {/* Footer */}
+        {worklist.length > 0 && (
+          <div className="flex items-center justify-between px-5 py-3 text-xs" style={{ borderTop: '1px solid var(--rm-border)', color: 'var(--rm-text-muted)' }}>
+            <span>Showing {Math.min(sortedWorklist.length, 10)} of {worklist.length} applications</span>
+            <Link href="/dashboard/applications" className="font-semibold text-cyan-500 hover:text-cyan-400 transition-colors">
+              View all applications →
+            </Link>
+          </div>
+        )}
+      </section>
 
-          {/* ── Table View ── */}
-          {viewMode === 'table' && (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50/80">
-                    <SortableHeader
-                      label="Application"
-                      field="applicationNumber"
-                      currentSort={sortConfig}
-                      onSort={handleSort}
-                    />
-                    <SortableHeader
-                      label="Customer"
-                      field="customerName"
-                      currentSort={sortConfig}
-                      onSort={handleSort}
-                    />
-                    <SortableHeader
-                      label="Product / Amount"
-                      field="requestedAmount"
-                      currentSort={sortConfig}
-                      onSort={handleSort}
-                    />
-                    <SortableHeader
-                      label="Status"
-                      field="status"
-                      currentSort={sortConfig}
-                      onSort={handleSort}
-                    />
-                    <SortableHeader
-                      label="Action"
-                      field="nextAction"
-                      currentSort={sortConfig}
-                      onSort={handleSort}
-                    />
-                    <SortableHeader
-                      label="Age"
-                      field="daysInCurrentStage"
-                      currentSort={sortConfig}
-                      onSort={handleSort}
-                    />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {sortedWorklist.map(item => {
-                    const statusStyle = getStatusStyle(item.status);
-                    const action = getSmartAction(item);
-                    const isTerminal = TERMINAL_STATUSES.has(item.status);
-                    const isCompletedItem = COMPLETED_STATUSES.has(item.status);
-
-                    return (
-                      <tr
-                        key={item.applicationId}
-                        className="hover:bg-blue-50/50 transition-all duration-200 group backdrop-blur-sm"
-                      >
-                        <td className="px-6 py-3.5">
-                          <div className="flex items-center gap-2">
-                            <Link
-                              href={`/dashboard/applications/${item.applicationId}`}
-                              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
-                            >
-                              {item.applicationNumber}
-                            </Link>
-                            {item.createdByMe ? (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">
-                                MY
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700">
-                                ASSIGNED
-                              </span>
-                            )}
-                          </div>
-                          {item.slaBreachDays !== null && item.slaBreachDays > 0 && (
-                            <span className="inline-flex items-center mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
-                              SLA +{item.slaBreachDays}d
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <Link
-                            href={`/dashboard/customers/${item.customerId}`}
-                            className="text-sm font-medium text-slate-900 hover:text-blue-600 hover:underline"
-                          >
-                            {item.customerName}
-                          </Link>
-                          <p className="text-xs text-slate-400">{item.customerNumber}</p>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <p className="text-sm text-slate-900">{item.productName}</p>
-                          <p className="text-sm font-semibold text-slate-700">
-                            {formatCurrency(item.requestedAmount)}
-                          </p>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
-                            {item.status.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          {item.status === 'PENDING_KYC' || item.nextAction === 'COMPLETE_KYC' ? (
-                            <button
-                              onClick={() => handleCompleteKyc(item.applicationId)}
-                              disabled={kycLoadingId === item.applicationId}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              {kycLoadingId === item.applicationId ? (
-                                <>
-                                  <svg
-                                    className="w-3 h-3 animate-spin"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <circle
-                                      className="opacity-25"
-                                      cx="12"
-                                      cy="12"
-                                      r="10"
-                                      stroke="currentColor"
-                                      strokeWidth="4"
-                                    />
-                                    <path
-                                      className="opacity-75"
-                                      fill="currentColor"
-                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                                    />
-                                  </svg>
-                                  Processing...
-                                </>
-                              ) : (
-                                <>
-                                  <svg
-                                    className="w-3 h-3"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                                    />
-                                  </svg>
-                                  Complete KYC
-                                </>
-                              )}
-                            </button>
-                          ) : isCompletedItem ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-lg">
-                              <svg
-                                className="w-3.5 h-3.5"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M5 13l4 4L19 7"
-                                />
-                              </svg>
-                              {action.label}
-                            </span>
-                          ) : isTerminal ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-500 text-xs font-medium rounded-lg">
-                              {action.label}
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() =>
-                                router.push(`/dashboard/applications/${item.applicationId}`)
-                              }
-                              className="inline-flex items-center gap-1.5 text-sm text-blue-600 font-medium hover:text-blue-800 transition-colors group/action"
-                            >
-                              <span className="group-hover/action:underline">{action.label}</span>
-                              <svg
-                                className="w-3.5 h-3.5 opacity-0 group-hover/action:opacity-100 transition-opacity"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M13 7l5 5m0 0l-5 5m5-5H6"
-                                />
-                              </svg>
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-sm font-bold tabular-nums ${item.daysInCurrentStage > 7 ? 'text-red-600' : item.daysInCurrentStage > 3 ? 'text-amber-600' : 'text-slate-700'}`}
-                            >
-                              {item.daysInCurrentStage}d
-                            </span>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] text-slate-400 leading-tight">
-                                in status
-                              </span>
-                              <span className="text-[10px] text-slate-300 leading-tight">
-                                {item.daysSinceSubmitted}d total
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Empty State */}
-          {displayWorklist.length === 0 && (
-            <div className="py-20 text-center">
-              {activeTab === 'action' ? (
-                <>
-                  <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
-                    <svg
-                      className="w-8 h-8 text-emerald-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  </div>
-                  <p className="text-slate-900 font-semibold text-lg">All caught up!</p>
-                  <p className="text-sm text-slate-500 mt-1">
-                    No applications need your attention right now.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="mx-auto w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-                    <svg
-                      className="w-8 h-8 text-slate-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
-                  </div>
-                  <p className="text-slate-900 font-semibold text-lg">No applications found</p>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Try adjusting your filters or timeframe.
-                  </p>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Footer */}
-          {displayWorklist.length > 0 && (
-            <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-              <p className="text-xs text-slate-400">
-                Showing {displayWorklist.length} of {worklist.length} application
-                {worklist.length !== 1 ? 's' : ''}
-              </p>
-              <button
-                onClick={() => router.push('/dashboard/applications')}
-                className="text-xs text-blue-600 font-medium hover:underline"
-              >
-                View all applications &rarr;
-              </button>
-            </div>
-          )}
-        </section>
+      {/* ══ SYSTEM STATUS ══ */}
+      <div className="flex items-center gap-2 text-xs pb-2" style={{ color: 'var(--rm-text-muted)' }}>
+        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+        <span>All systems operational</span>
+        <span className="ml-auto">Last updated: {new Date().toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} AM</span>
       </div>
+
     </div>
   );
 }

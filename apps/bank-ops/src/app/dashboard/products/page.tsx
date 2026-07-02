@@ -272,58 +272,30 @@ export default function ProductsPage() {
   ];
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-100">
-      {/* ──── Gradient header banner ──── */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-[#1a3a7a] via-[#1e4da0] to-[#3b82f6]">
-        <div className="absolute -top-20 -right-20 w-72 h-72 bg-white/5 rounded-full blur-3xl" />
-        <div className="absolute -bottom-16 left-1/4 w-56 h-56 bg-blue-400/10 rounded-full blur-2xl" />
-        <svg
-          className="absolute bottom-0 left-0 right-0 text-slate-100"
-          viewBox="0 0 1440 48"
-          preserveAspectRatio="none"
-        >
-          <path fill="currentColor" d="M0,48 L0,24 Q360,0 720,24 Q1080,48 1440,24 L1440,48 Z" />
-        </svg>
-
-        <div className="relative max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-14">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-white">Product Management</h1>
-              <p className="text-blue-200 text-sm mt-1">
-                Manage loan products for Irish/EU banking
-              </p>
-            </div>
-            <Link
-              href="/dashboard/products/new"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-blue-700 rounded-xl font-semibold text-sm hover:bg-blue-50 transition-colors shadow-lg shadow-blue-900/20"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              New Product
-            </Link>
-          </div>
+    <div className="space-y-5">
+      {/* Page header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>Product Management</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--rm-text-secondary)' }}>Manage loan products for Irish/EU banking</p>
         </div>
+        <Link href="/dashboard/products/new"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors hover:opacity-90"
+          style={{ backgroundColor: '#0ea5e9' }}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+          New Product
+        </Link>
       </div>
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-4 pb-8 space-y-4">
-        {/* ──── Stats strip ──── */}
+      <div className="space-y-4">
+        {/* Stats strip */}
         <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
           {statCards.map(s => (
-            <div
-              key={s.label}
-              className="flex-none min-w-[140px] bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-sm px-5 py-3 text-center"
-            >
+            <div key={s.label} className="flex-none min-w-[140px] rounded-2xl px-5 py-3 text-center"
+              style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
               {s.icon}
               <p className={`text-xl font-bold mt-1 ${s.color}`}>{s.value}</p>
-              <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">
-                {s.label}
-              </p>
+              <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>{s.label}</p>
             </div>
           ))}
         </div>

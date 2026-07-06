@@ -96,8 +96,10 @@ export default function CardsPage() {
           {/* Full card render */}
           {card && (
             <div className="p-5 rounded-2xl" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-              <BankCard card={card} />
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="mx-auto w-full max-w-[340px]">
+                <BankCard card={card} />
+              </div>
+              <div className="mx-auto mt-4 grid w-full max-w-[340px] grid-cols-3 gap-2">
                 {[
                   { label: frozen ? 'Unfreeze' : 'Freeze', icon: '❄️', action: () => setFrozen(v => !v), danger: false },
                   { label: 'PIN', icon: '🔐', action: () => {}, danger: false },

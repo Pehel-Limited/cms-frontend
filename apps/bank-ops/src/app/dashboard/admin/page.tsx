@@ -90,12 +90,12 @@ export default function AdminPage() {
       {/* ── Page header ── */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Admin</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Admin</h1>
           <p className="text-sm mt-0.5 text-slate-400">Administrative control center for users, workflows, policies, integrations and system governance.</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span>Last updated: {lastUpdated}</span>
-          <button className="p-1.5 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-white">
+          <button className="p-1.5 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-slate-900">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -111,7 +111,7 @@ export default function AdminPage() {
               <span className="text-xl">{s.icon}</span>
               <p className="text-xs text-slate-400 truncate">{s.label}</p>
             </div>
-            <p className="text-2xl font-bold text-white">{s.value}</p>
+            <p className="text-2xl font-bold text-slate-900">{s.value}</p>
             <p className={`text-xs mt-1 font-medium ${s.positive === true ? 'text-emerald-400' : s.positive === false ? 'text-red-400' : 'text-slate-500'}`}>
               {s.delta}
             </p>
@@ -147,7 +147,7 @@ export default function AdminPage() {
             <div className="xl:col-span-7 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <h2 className="text-sm font-bold text-white">Users</h2>
+                  <h2 className="text-sm font-bold text-slate-900">Users</h2>
                   <p className="text-xs text-slate-400">Manage users, roles, teams and access permissions.</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -159,11 +159,11 @@ export default function AdminPage() {
                       value={userSearch}
                       onChange={e => setUserSearch(e.target.value)}
                       placeholder="Search users..."
-                      className="pl-8 pr-3 py-1.5 rounded-lg text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+                      className="pl-8 pr-3 py-1.5 rounded-lg text-xs text-slate-700 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
                       style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)' }}
                     />
                   </div>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/5 transition-colors border border-white/10">
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-white/5 transition-colors border border-white/10">
                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                     </svg>
@@ -197,17 +197,17 @@ export default function AdminPage() {
                               {u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-semibold text-white truncate">{u.name}</p>
+                              <p className="font-semibold text-slate-900 truncate">{u.name}</p>
                               <p className="text-slate-500 truncate">{u.email}</p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-slate-300">{u.role}</td>
-                        <td className="px-4 py-3 text-slate-300">{u.team}</td>
+                        <td className="px-4 py-3 text-slate-700">{u.role}</td>
+                        <td className="px-4 py-3 text-slate-700">{u.team}</td>
                         <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{u.lastActive}</td>
                         <td className="px-4 py-3"><StatusBadge status={u.status} /></td>
                         <td className="px-4 py-3">
-                          <button className="p-1 rounded-lg hover:bg-white/5 transition-colors text-slate-500 hover:text-white">
+                          <button className="p-1 rounded-lg hover:bg-white/5 transition-colors text-slate-500 hover:text-slate-900">
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                             </svg>
@@ -221,7 +221,7 @@ export default function AdminPage() {
                   <span className="text-xs text-slate-500">Showing 1 to {filteredUsers.length} of 248 users</span>
                   <div className="flex items-center gap-1">
                     {[1, 2, 3, '...', 31].map((p, i) => (
-                      <button key={i} className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${p === 1 ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+                      <button key={i} className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${p === 1 ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-900'}`}>
                         {p}
                       </button>
                     ))}
@@ -234,7 +234,7 @@ export default function AdminPage() {
             <div className="xl:col-span-3 space-y-4">
               <div className="rounded-xl p-4" style={{ border: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-sm font-semibold text-white">Default Corporate Loan Approval</h3>
+                  <h3 className="text-sm font-semibold text-slate-900">Default Corporate Loan Approval</h3>
                   <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">Active</span>
                 </div>
                 <p className="text-[11px] text-slate-500 mb-4">Multi-stage workflow for corporate loan applications</p>
@@ -247,7 +247,7 @@ export default function AdminPage() {
                         {ws.step}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-white truncate">{ws.label}</p>
+                        <p className="text-xs font-medium text-slate-900 truncate">{ws.label}</p>
                         <p className="text-[10px] text-slate-500">{ws.assignee}</p>
                       </div>
                       <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">SLA: {ws.sla}</span>
@@ -265,7 +265,7 @@ export default function AdminPage() {
                     ].map(item => (
                       <div key={item.label} className="rounded-lg p-2" style={{ backgroundColor: 'var(--rm-input)' }}>
                         <p className="text-[10px] text-slate-500">{item.label}</p>
-                        <p className={`text-sm font-bold ${item.red ? 'text-red-400' : 'text-white'}`}>{item.value}</p>
+                        <p className={`text-sm font-bold ${item.red ? 'text-red-400' : 'text-slate-900'}`}>{item.value}</p>
                       </div>
                     ))}
                   </div>
@@ -281,14 +281,14 @@ export default function AdminPage() {
               {/* System health */}
               <div className="rounded-xl p-4" style={{ border: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-white">System Health</h3>
+                  <h3 className="text-xs font-bold text-slate-900">System Health</h3>
                   <span className="text-[10px] text-emerald-400">All systems operational</span>
                 </div>
                 <div className="space-y-2">
                   {SYSTEM_HEALTH.map(s => (
                     <div key={s.name} className="flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                      <span className="text-[11px] text-slate-300 flex-1 truncate">{s.name}</span>
+                      <span className="text-[11px] text-slate-700 flex-1 truncate">{s.name}</span>
                       <span className="text-[10px] font-semibold text-emerald-400 shrink-0">{s.uptime}</span>
                     </div>
                   ))}
@@ -301,7 +301,7 @@ export default function AdminPage() {
               {/* Recent admin actions */}
               <div className="rounded-xl p-4" style={{ border: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-white">Recent Admin Actions</h3>
+                  <h3 className="text-xs font-bold text-slate-900">Recent Admin Actions</h3>
                   <button className="text-[11px] text-cyan-400 hover:text-cyan-300">View all</button>
                 </div>
                 <div className="space-y-3">
@@ -309,7 +309,7 @@ export default function AdminPage() {
                     <div key={i} className="flex items-start gap-2">
                       <span className="text-base shrink-0 mt-0.5">{a.icon}</span>
                       <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-white truncate">{a.action}</p>
+                        <p className="text-[11px] font-medium text-slate-900 truncate">{a.action}</p>
                         <p className="text-[10px] text-slate-500">by {a.by}</p>
                         <p className="text-[10px] text-slate-600">{a.time}</p>
                       </div>
@@ -321,7 +321,7 @@ export default function AdminPage() {
               {/* Security alerts */}
               <div className="rounded-xl p-4" style={{ border: '1px solid rgba(239,68,68,0.2)', backgroundColor: 'rgba(239,68,68,0.05)' }}>
                 <div className="flex items-center gap-2 mb-3">
-                  <h3 className="text-xs font-bold text-white">Security Alerts</h3>
+                  <h3 className="text-xs font-bold text-slate-900">Security Alerts</h3>
                   <span className="text-[10px] font-bold text-red-400 bg-red-500/15 border border-red-500/20 px-1.5 py-0.5 rounded-full">{SECURITY_ALERTS.length}</span>
                 </div>
                 <div className="space-y-2.5">
@@ -353,7 +353,7 @@ export default function AdminPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-white">{activeTab}</p>
+            <p className="text-sm font-semibold text-slate-900">{activeTab}</p>
             <p className="text-xs mt-1 text-slate-500">Configuration panel coming soon</p>
           </div>
         )}

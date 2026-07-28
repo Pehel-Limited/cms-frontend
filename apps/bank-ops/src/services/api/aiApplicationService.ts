@@ -68,6 +68,18 @@ class AiApplicationService {
     );
     return response.data;
   }
+
+  /**
+   * Fetches the last persisted summary without triggering regeneration.
+   * Status is NOT_GENERATED (content: null) if none has been generated yet.
+   */
+  async getLatestSummary(applicationId: string, bankId: string): Promise<ApplicationSummary> {
+    const response = await axios.get(
+      `${API_URL}/api/admin/ai/applications/${applicationId}/summary`,
+      { params: { bankId }, headers: this.getHeaders() }
+    );
+    return response.data;
+  }
 }
 
 export const aiApplicationService = new AiApplicationService();

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'react-toastify';
 import { aiApplicationService, ApplicationSummary } from '@/services/api/aiApplicationService';
@@ -27,7 +27,33 @@ export function ApplicationAiSummaryTab({
 }: ApplicationAiSummaryTabProps) {
   const [summary, setSummary] = useState<ApplicationSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setInitialLoading(true);
+        const result = await aiApplicationService.getLatestSummary(applicationId, bankId);
+        if (cancelled) return;
+        if (result.status !== 'NOT_GENERATED') {
+          setSummary(result);
+        }
+      } catch (err) {
+        // Silently fall back to the empty "not generated yet" state — the
+        // user can still explicitly generate a summary.
+      } finally {
+        if (!cancelled) setInitialLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationId, bankId]);
 
   const handleGenerate = async () => {
     try {
@@ -57,14 +83,16 @@ export function ApplicationAiSummaryTab({
       <SectionCard title="AI Application Summary">
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Generates a narrative summary from live application, applicant, and workflow data.
-            This is an AI-assisted draft and always requires human review — it never represents an
-            approval, decline, or pricing decision.
+            {summary
+              ? 'This is the last generated summary. Regenerate it if the application details have changed.'
+              : 'Generates a narrative summary from live application, applicant, and workflow data.'}
+            {' '}This is an AI-assisted draft and always requires human review — it never represents
+            an approval, decline, or pricing decision.
           </p>
 
           <button
             onClick={handleGenerate}
-            disabled={loading}
+            disabled={loading || initialLoading}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#7f2b7b] text-white text-sm font-medium hover:bg-[#6b2568] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading && (
@@ -90,6 +118,10 @@ export function ApplicationAiSummaryTab({
                 ? 'Regenerate AI Summary'
                 : 'Generate AI Summary'}
           </button>
+
+          {initialLoading && (
+            <p className="text-xs text-slate-400">Checking for an existing summary…</p>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 text-sm text-red-700">

@@ -13,7 +13,7 @@ import {
   recentTransactions,
   spendByCategory,
   monthlyInOut,
-  totalBalanceGBP,
+  totalBalanceEUR,
   balanceTrend,
   dailySpendSeries,
   savingsGoal,
@@ -45,10 +45,10 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function fmtGBP(n: number): string {
-  return new Intl.NumberFormat('en-GB', {
+function fmtEUR(n: number): string {
+  return new Intl.NumberFormat('en-IE', {
     style: 'currency',
-    currency: 'GBP',
+    currency: 'EUR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(n);
@@ -132,7 +132,7 @@ export default function PortalDashboard() {
   const txns = useMemo(() => recentTransactions(5), []);
   const spend = useMemo(() => spendByCategory(), []);
   const { income, spending } = useMemo(() => monthlyInOut(), []);
-  const total = useMemo(() => totalBalanceGBP(), []);
+  const total = useMemo(() => totalBalanceEUR(), []);
   const trend = useMemo(() => balanceTrend(), []);
   const topSpend = spend.slice(0, 5);
   const scheduledPayments = SCHEDULED_PAYMENTS.slice(0, 4);
@@ -203,7 +203,7 @@ export default function PortalDashboard() {
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
               <BalanceAmount
                 amount={total}
-                currency="GBP"
+                currency="EUR"
                 hidden={hideBalance}
                 symbolClassName="text-xl md:text-2xl font-bold mr-0.5"
                 centsClassName="text-lg md:text-xl font-bold text-white/65"
@@ -214,7 +214,7 @@ export default function PortalDashboard() {
                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l6-6 4 4 8-8m0 0v5m0-5h-5" />
                 </svg>
-                +£2,735 · 1.96%
+                +€2,735 · 1.96%
               </span>
               <span className="text-xs text-white/60">vs last month</span>
             </div>
@@ -222,11 +222,11 @@ export default function PortalDashboard() {
             <div className="mt-6 grid grid-cols-2 gap-3 border-t border-white/15 pt-4">
               <div>
                 <p className="text-[10px] text-white/50 uppercase tracking-wider">Income</p>
-                <p className="text-base font-bold text-white">{mask(fmtGBP(income))}</p>
+                <p className="text-base font-bold text-white">{mask(fmtEUR(income))}</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] text-white/50 uppercase tracking-wider">Spent</p>
-                <p className="text-base font-bold text-white">{mask(fmtGBP(spending))}</p>
+                <p className="text-base font-bold text-white">{mask(fmtEUR(spending))}</p>
               </div>
             </div>
           </div>
@@ -298,6 +298,11 @@ export default function PortalDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
             } />
+            <QuickActionBtn href="/portal/ai-assistant" label="Ask Rayva AI" icon={
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+              </svg>
+            } />
           </div>
         </div>
       </div>
@@ -340,7 +345,7 @@ export default function PortalDashboard() {
                 <div className="text-right shrink-0">
                   <p className={`text-sm font-bold ${t.direction === 'IN' ? 'text-emerald-500' : ''}`}
                     style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}>
-                    {t.direction === 'IN' ? '+' : '−'}{mask(fmtGBP(t.amount))}
+                    {t.direction === 'IN' ? '+' : '−'}{mask(fmtEUR(t.amount))}
                   </p>
                   <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{t.category}</p>
                 </div>
@@ -373,7 +378,7 @@ export default function PortalDashboard() {
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.frequency}</p>
                   </div>
                   <span className="text-sm font-bold shrink-0" style={{ color: 'var(--text-primary)' }}>
-                    {fmtGBP(p.amount)}
+                    {fmtEUR(p.amount)}
                   </span>
                 </div>
               );
@@ -405,7 +410,7 @@ export default function PortalDashboard() {
                 trackColor="var(--surface-input)"
               >
                 <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Total</span>
-                <span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{mask(fmtGBP(spending))}</span>
+                <span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{mask(fmtEUR(spending))}</span>
               </RadialProgress>
               <div className="flex-1 space-y-2">
                 {topSpend.map(s => (
@@ -420,11 +425,11 @@ export default function PortalDashboard() {
             <div className="mt-4 grid grid-cols-2 gap-2 pt-4" style={{ borderTop: '1px solid var(--surface-border)' }}>
               <div className="rounded-xl px-3 py-2.5 bg-emerald-50 dark:bg-emerald-900/20">
                 <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Money in</p>
-                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">+{mask(fmtGBP(income))}</p>
+                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">+{mask(fmtEUR(income))}</p>
               </div>
               <div className="rounded-xl px-3 py-2.5" style={{ backgroundColor: 'var(--surface-input)' }}>
                 <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Money out</p>
-                <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>−{mask(fmtGBP(spending))}</p>
+                <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>−{mask(fmtEUR(spending))}</p>
               </div>
             </div>
           </div>

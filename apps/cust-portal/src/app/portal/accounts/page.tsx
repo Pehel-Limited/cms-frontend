@@ -5,15 +5,15 @@ import Link from 'next/link';
 import {
   ACCOUNTS,
   TRANSACTIONS,
-  totalBalanceGBP,
+  totalBalanceEUR,
   savingsGoal,
   type BankAccount,
   type Transaction,
 } from '@/lib/banking-data';
 import { Sparkline, BalanceAmount } from '@/components/banking/BankCard';
 
-function fmt(n: number, cur = 'GBP') {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(n);
+function fmt(n: number, cur = 'EUR') {
+  return new Intl.NumberFormat('en-IE', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(n);
 }
 
 const TYPE_LABEL: Record<BankAccount['type'], string> = {
@@ -38,7 +38,7 @@ const LINKED_ACCOUNTS = [
 export default function AccountsPage() {
   const [hide, setHide] = useState(false);
   const [selectedId, setSelectedId] = useState(ACCOUNTS[0].id);
-  const total = useMemo(() => totalBalanceGBP(), []);
+  const total = useMemo(() => totalBalanceEUR(), []);
 
   const selected = ACCOUNTS.find(a => a.id === selectedId) ?? ACCOUNTS[0];
   const recentTxns = useMemo(
@@ -76,7 +76,7 @@ export default function AccountsPage() {
           {
             label: 'Total deposits',
             value: fmt(total),
-            sub: <span className="text-emerald-500 font-semibold text-xs">▲ £2,735.40 (1.96%) vs last month</span>,
+            sub: <span className="text-emerald-500 font-semibold text-xs">▲ €2,735.40 (1.96%) vs last month</span>,
           },
           {
             label: 'Available cash',

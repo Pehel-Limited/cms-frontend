@@ -13,7 +13,7 @@ import {
 import { Sparkline, BankCard } from '@/components/banking/BankCard';
 
 function fmt(n: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
+  return new Intl.NumberFormat('en-IE', {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,

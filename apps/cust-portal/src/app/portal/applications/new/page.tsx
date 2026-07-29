@@ -10,8 +10,9 @@ import {
   LOAN_PURPOSE_LABELS,
   LoanPurpose,
   FACILITY_TYPE_LABELS,
+  INTENT_TO_LOAN_PURPOSE,
 } from '@/services/api/application-service';
-import { productService, LoanProduct, PRODUCT_TYPE_LABELS } from '@/services/api/product-service';
+import { productService, LoanProduct, RatePlan, PRODUCT_TYPE_LABELS } from '@/services/api/product-service';
 import { formatCurrency } from '@/lib/format';
 import {
   partyService,
@@ -86,6 +87,11 @@ export default function NewApplicationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedCode = searchParams.get('product');
+  // Carried over from a confirmed Rayva AI Credit Assistant journey — lets us
+  // prefill the wizard instead of making the customer re-enter details.
+  const prefillAmount = searchParams.get('amount');
+  const prefillPurpose = searchParams.get('purpose');
+  const prefillTargetDate = searchParams.get('targetDate');
 
   // State
   const [step, setStep] = useState<WizardStep>(preselectedCode ? 'loan' : 'product');
@@ -202,11 +208,16 @@ export default function NewApplicationPage() {
         const match = data.find(p => p.productCode === preselectedCode);
         if (match) {
           setSelectedProduct(match);
+          const mappedPurpose = prefillPurpose ? INTENT_TO_LOAN_PURPOSE[prefillPurpose] : undefined;
           setForm(prev => ({
             ...prev,
-            requestedAmount: match.defaultLoanAmount?.toString() || '',
+            requestedAmount: prefillAmount || match.defaultLoanAmount?.toString() || '',
             requestedTermMonths: match.defaultTermMonths?.toString() || '',
             requestedInterestRate: match.defaultInterestRate?.toString() || '',
+            loanPurpose: mappedPurpose || prev.loanPurpose,
+            loanPurposeDescription: prefillTargetDate
+              ? `Target date: ${prefillTargetDate}`
+              : prev.loanPurposeDescription,
           }));
         }
       }
@@ -638,6 +649,30 @@ function StepLoan({
   const isHomePurpose = HOME_PURPOSES.includes(form.loanPurpose);
   const isVehiclePurpose = VEHICLE_PURPOSES.includes(form.loanPurpose);
 
+  // Admin-managed rate plans (LTV bands / fixed-term tiers / green discounts)
+  // fetched live for this product, replacing the old static rate table.
+  const [ratePlans, setRatePlans] = useState<RatePlan[]>([]);
+  const [loadingRatePlans, setLoadingRatePlans] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingRatePlans(true);
+    productService
+      .getRatePlans(product.productCode)
+      .then(plans => {
+        if (!cancelled) setRatePlans(plans);
+      })
+      .catch(() => {
+        if (!cancelled) setRatePlans([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRatePlans(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [product.productCode]);
+
   return (
     <div>
       <h3 className="text-lg font-semibold text-gray-900">
@@ -690,20 +725,41 @@ function StepLoan({
 
         {/* Interest Rate */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Preferred Interest Rate (% p.a.)
-          </label>
-          <input
-            type="number"
-            name="requestedInterestRate"
-            value={form.requestedInterestRate}
-            onChange={onChange}
-            step="0.01"
-            min={product.minInterestRate}
-            max={product.maxInterestRate}
-            placeholder={`${product.minInterestRate} – ${product.maxInterestRate}`}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate</label>
+          {loadingRatePlans ? (
+            <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+          ) : ratePlans.length > 0 ? (
+            <>
+              <select
+                name="requestedInterestRate"
+                value={form.requestedInterestRate}
+                onChange={onChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">Select a rate plan...</option>
+                {ratePlans.map(plan => (
+                  <option key={plan.ratePlanId} value={plan.interestRate}>
+                    {plan.label} — {plan.interestRate}%{plan.isGreen ? ' 🌱' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-400">
+                Choose the LTV / fixed-term rate plan that applies to you.
+              </p>
+            </>
+          ) : (
+            <input
+              type="number"
+              name="requestedInterestRate"
+              value={form.requestedInterestRate}
+              onChange={onChange}
+              step="0.01"
+              min={product.minInterestRate}
+              max={product.maxInterestRate}
+              placeholder={`${product.minInterestRate} – ${product.maxInterestRate}`}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+          )}
         </div>
 
         {/* Loan Purpose */}
@@ -781,7 +837,7 @@ function StepLoan({
                 name="propertyAddress"
                 value={form.propertyAddress}
                 onChange={onChange}
-                placeholder="e.g. 123 MG Road, Flat 4B"
+                placeholder=""
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
@@ -792,7 +848,7 @@ function StepLoan({
                 name="propertyCity"
                 value={form.propertyCity}
                 onChange={onChange}
-                placeholder="e.g. Mumbai"
+                placeholder=""
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
@@ -803,7 +859,7 @@ function StepLoan({
                 name="propertyState"
                 value={form.propertyState}
                 onChange={onChange}
-                placeholder="e.g. Maharashtra"
+                placeholder=""
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
@@ -814,7 +870,7 @@ function StepLoan({
                 name="propertyPostalCode"
                 value={form.propertyPostalCode}
                 onChange={onChange}
-                placeholder="e.g. 400001"
+                placeholder=""
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>

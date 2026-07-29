@@ -6,7 +6,7 @@ import { CARDS, getAccount, type PaymentCard } from '@/lib/banking-data';
 import { BankCard } from '@/components/banking/BankCard';
 
 function fmt(n: number) {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(n);
 }
 
 const CARD_TRANSACTIONS: Record<string, { merchant: string; glyph: string; amount: number; dir: 'IN' | 'OUT'; date: string; category: string }[]> = {

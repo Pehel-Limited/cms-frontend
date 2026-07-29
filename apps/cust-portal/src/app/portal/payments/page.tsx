@@ -10,8 +10,8 @@ import {
   type Beneficiary,
 } from '@/lib/banking-data';
 
-function fmt(n: number, currency = 'GBP'): string {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
+function fmt(n: number, currency = 'EUR'): string {
+  return new Intl.NumberFormat('en-IE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
 }
 function nextDateLabel(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -139,7 +139,7 @@ export default function PaymentsPage() {
                 <div>
                   <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--text-secondary)' }}>Amount</label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold" style={{ color: 'var(--text-muted)' }}>£</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold" style={{ color: 'var(--text-muted)' }}>€</span>
                     <input
                       type="text"
                       value={amount}
@@ -264,8 +264,8 @@ export default function PaymentsPage() {
             </div>
             <div className="mb-3">
               <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Daily remaining allowance</p>
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>£8,250<span className="text-sm font-semibold text-slate-400">.00</span></p>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>of £10,000.00</p>
+              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>€8,250<span className="text-sm font-semibold text-slate-400">.00</span></p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>of €10,000.00</p>
             </div>
             <div className="flex items-center justify-between">
               <div className="relative w-16 h-16">

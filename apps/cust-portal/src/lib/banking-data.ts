@@ -140,8 +140,8 @@ export const ACCOUNTS: BankAccount[] = [
     type: 'CURRENT',
     accountNumber: '•••• 4827',
     sortCode: '04-29-11',
-    iban: 'GB29 RAYV 0429 1100 0048 27',
-    currency: 'GBP',
+    iban: 'IE29 RAYV 0429 1100 0048 27',
+    currency: 'EUR',
     balance: 12480.55,
     available: 12230.55,
     gradient: 'linear-gradient(135deg, #2d0e2b 0%, #4a1747 50%, #7f2b7b 100%)',
@@ -155,8 +155,8 @@ export const ACCOUNTS: BankAccount[] = [
     type: 'SAVINGS',
     accountNumber: '•••• 9043',
     sortCode: '04-29-11',
-    iban: 'GB29 RAYV 0429 1100 0090 43',
-    currency: 'GBP',
+    iban: 'IE29 RAYV 0429 1100 0090 43',
+    currency: 'EUR',
     balance: 28750.0,
     available: 28750.0,
     gradient: 'linear-gradient(135deg, #0f3d3e 0%, #0c5e54 50%, #10b981 100%)',
@@ -169,7 +169,7 @@ export const ACCOUNTS: BankAccount[] = [
     type: 'VAULT',
     accountNumber: '•••• 1170',
     sortCode: '04-29-11',
-    iban: 'GB29 RAYV 0429 1100 0011 70',
+    iban: 'IE29 RAYV 0429 1100 0011 70',
     currency: 'EUR',
     balance: 3420.9,
     available: 3420.9,
@@ -183,8 +183,8 @@ export const ACCOUNTS: BankAccount[] = [
     type: 'JOINT',
     accountNumber: '•••• 6692',
     sortCode: '04-29-11',
-    iban: 'GB29 RAYV 0429 1100 0066 92',
-    currency: 'GBP',
+    iban: 'IE29 RAYV 0429 1100 0066 92',
+    currency: 'EUR',
     balance: 5210.34,
     available: 4960.34,
     gradient: 'linear-gradient(135deg, #5b1d4f 0%, #9d174d 50%, #db2777 100%)',
@@ -278,11 +278,11 @@ export const BENEFICIARIES: Beneficiary[] = [
 ];
 
 export const SCHEDULED_PAYMENTS: ScheduledPayment[] = [
-  { id: 's1', payee: 'Octopus Energy', amount: 96.4, currency: 'GBP', nextDate: '2026-06-14', frequency: 'Monthly', glyph: '⚡' },
-  { id: 's2', payee: 'Vitality Health', amount: 48.0, currency: 'GBP', nextDate: '2026-06-18', frequency: 'Monthly', glyph: '💪' },
-  { id: 's3', payee: 'Netflix', amount: 17.99, currency: 'GBP', nextDate: '2026-06-22', frequency: 'Monthly', glyph: '🎬' },
-  { id: 's4', payee: 'Spotify Premium', amount: 11.99, currency: 'GBP', nextDate: '2026-06-25', frequency: 'Monthly', glyph: '🎧' },
-  { id: 's5', payee: 'Apartment Rent', amount: 1450.0, currency: 'GBP', nextDate: '2026-07-01', frequency: 'Monthly', glyph: '🏠' },
+  { id: 's1', payee: 'Octopus Energy', amount: 96.4, currency: 'EUR', nextDate: '2026-06-14', frequency: 'Monthly', glyph: '⚡' },
+  { id: 's2', payee: 'Vitality Health', amount: 48.0, currency: 'EUR', nextDate: '2026-06-18', frequency: 'Monthly', glyph: '💪' },
+  { id: 's3', payee: 'Netflix', amount: 17.99, currency: 'EUR', nextDate: '2026-06-22', frequency: 'Monthly', glyph: '🎬' },
+  { id: 's4', payee: 'Spotify Premium', amount: 11.99, currency: 'EUR', nextDate: '2026-06-25', frequency: 'Monthly', glyph: '🎧' },
+  { id: 's5', payee: 'Apartment Rent', amount: 1450.0, currency: 'EUR', nextDate: '2026-07-01', frequency: 'Monthly', glyph: '🏠' },
 ];
 
 /* ──────────────────────────────────────────────────────────────────
@@ -311,7 +311,7 @@ function tx(
     category,
     amount,
     direction,
-    currency: 'GBP',
+    currency: 'EUR',
     status: 'COMPLETED',
     date: d.toISOString(),
     cardId: direction === 'OUT' ? 'card-debit-1' : undefined,
@@ -356,11 +356,11 @@ export const TRANSACTIONS: Transaction[] = [
  * Derived helpers
  * ────────────────────────────────────────────────────────────────── */
 
-/** Convert a foreign balance to GBP for the "total wealth" figure (mock rates). */
-const FX_TO_GBP: Record<string, number> = { GBP: 1, EUR: 0.85, USD: 0.79 };
+/** Convert a foreign balance to EUR for the "total wealth" figure (mock rates). */
+const FX_TO_EUR: Record<string, number> = { EUR: 1, GBP: 1.18, USD: 0.92 };
 
-export function totalBalanceGBP(): number {
-  return ACCOUNTS.reduce((sum, a) => sum + a.balance * (FX_TO_GBP[a.currency] ?? 1), 0);
+export function totalBalanceEUR(): number {
+  return ACCOUNTS.reduce((sum, a) => sum + a.balance * (FX_TO_EUR[a.currency] ?? 1), 0);
 }
 
 export function getAccount(id: string): BankAccount | undefined {
@@ -458,13 +458,13 @@ export function savingsGoal(): SavingsGoal {
     label: 'Savings Pot',
     saved: pot?.balance ?? 0,
     target: 40000,
-    currency: pot?.currency ?? 'GBP',
+    currency: pot?.currency ?? 'EUR',
   };
 }
 
 /** A 12-point series approximating account balance over time, for the hero chart. */
 export function balanceTrend(): number[] {
-  const base = totalBalanceGBP();
+  const base = totalBalanceEUR();
   const wobble = [0.78, 0.81, 0.79, 0.85, 0.88, 0.84, 0.9, 0.93, 0.91, 0.96, 0.98, 1];
   return wobble.map(w => Math.round(base * w));
 }

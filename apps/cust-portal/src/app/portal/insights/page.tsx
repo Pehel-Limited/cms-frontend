@@ -12,7 +12,7 @@ import {
 import { RadialProgress, SpendBars } from '@/components/banking/BankCard';
 
 function fmt(n: number) {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(n);
 }
 
 const TABS = ['Overview', 'Expenses', 'Cash flow', 'Budgets', 'Trends'] as const;
@@ -125,7 +125,7 @@ export default function InsightsPage() {
           </div>
           <p className="text-3xl font-extrabold" style={{ color: 'var(--text-primary)' }}>{fmt(spending)}</p>
           <div className="flex items-center gap-2 mt-1 mb-4">
-            <span className="text-xs font-semibold text-emerald-500">▼ £132.41 (9.6%) vs last month</span>
+            <span className="text-xs font-semibold text-emerald-500">▼ €132.41 (9.6%) vs last month</span>
           </div>
           <div className="h-20 w-full">
             {lineChart(dailySpend.map(d => d.total), 300, 80, '#7f2b7b', true)}
@@ -189,7 +189,7 @@ export default function InsightsPage() {
                 <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Smart insight</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
                   You spent <span className="font-bold text-[#7f2b7b] dark:text-purple-300">28% more</span> on Dining Out this month.
-                  That's <span className="font-bold">£24.15</span> more than your monthly average.
+                  That&apos;s <span className="font-bold">€24.15</span> more than your monthly average.
                 </p>
                 <button className="mt-2 text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">View insights →</button>
               </div>
@@ -316,7 +316,7 @@ export default function InsightsPage() {
           <div className="flex-1">
             <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Savings opportunity</h3>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-              You could save up to <span className="font-bold text-[#7f2b7b] dark:text-purple-300">£82.30/month</span> by reviewing your subscriptions and Dining Out spending.
+              You could save up to <span className="font-bold text-[#7f2b7b] dark:text-purple-300">€82.30/month</span> by reviewing your subscriptions and Dining Out spending.
             </p>
           </div>
           <button className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-[#7f2b7b] hover:bg-[#6b2468] transition-colors shrink-0">

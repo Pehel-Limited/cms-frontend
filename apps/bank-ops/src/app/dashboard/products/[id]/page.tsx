@@ -3,7 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { productService, type Product } from '@/services/api/productService';
+import {
+  productService,
+  type Product,
+  type RatePlan,
+  type CreateRatePlanRequest,
+  type UpdateRatePlanRequest,
+} from '@/services/api/productService';
 import { useAppSelector } from '@/store';
 import config from '@/config';
 import { formatCurrency as sharedFormatCurrency } from '@/lib/format';
@@ -287,6 +293,9 @@ export default function ProductDetailsPage() {
               </div>
             </Panel>
 
+            {/* Rate Plans */}
+            <RatePlansPanel productId={productId} />
+
             {/* Eligibility Criteria */}
             <Panel>
               <PanelHeader icon={<ShieldIcon />} title="Eligibility Criteria" />
@@ -378,6 +387,463 @@ export default function ProductDetailsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// Rate Plans management
+// ============================================================================
+
+const RATE_TYPE_OPTIONS = ['VARIABLE', 'FIXED', 'GREEN_FIXED', 'GREEN_VARIABLE'];
+
+type RatePlanFormState = {
+  planCode: string;
+  label: string;
+  rateType: string;
+  ltvMinPercentage: string;
+  ltvMaxPercentage: string;
+  fixedTermYears: string;
+  interestRate: string;
+  aprc: string;
+  costPerThousand: string;
+  isGreen: boolean;
+  displayOrder: string;
+  isActive: boolean;
+};
+
+const EMPTY_RATE_PLAN_FORM: RatePlanFormState = {
+  planCode: '',
+  label: '',
+  rateType: 'FIXED',
+  ltvMinPercentage: '',
+  ltvMaxPercentage: '',
+  fixedTermYears: '',
+  interestRate: '',
+  aprc: '',
+  costPerThousand: '',
+  isGreen: false,
+  displayOrder: '0',
+  isActive: true,
+};
+
+function ratePlanToForm(plan: RatePlan): RatePlanFormState {
+  return {
+    planCode: plan.planCode,
+    label: plan.label,
+    rateType: plan.rateType,
+    ltvMinPercentage: plan.ltvMinPercentage?.toString() ?? '',
+    ltvMaxPercentage: plan.ltvMaxPercentage?.toString() ?? '',
+    fixedTermYears: plan.fixedTermYears?.toString() ?? '',
+    interestRate: plan.interestRate?.toString() ?? '',
+    aprc: plan.aprc?.toString() ?? '',
+    costPerThousand: plan.costPerThousand?.toString() ?? '',
+    isGreen: !!plan.isGreen,
+    displayOrder: plan.displayOrder?.toString() ?? '0',
+    isActive: plan.isActive !== false,
+  };
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  if (value.trim() === '') return undefined;
+  const n = Number(value);
+  return Number.isNaN(n) ? undefined : n;
+}
+
+function formToRequest(form: RatePlanFormState): CreateRatePlanRequest {
+  return {
+    planCode: form.planCode.trim().toUpperCase(),
+    label: form.label.trim(),
+    rateType: form.rateType,
+    ltvMinPercentage: parseOptionalNumber(form.ltvMinPercentage),
+    ltvMaxPercentage: parseOptionalNumber(form.ltvMaxPercentage),
+    fixedTermYears: parseOptionalNumber(form.fixedTermYears),
+    interestRate: Number(form.interestRate),
+    aprc: parseOptionalNumber(form.aprc),
+    costPerThousand: parseOptionalNumber(form.costPerThousand),
+    isGreen: form.isGreen,
+    displayOrder: parseOptionalNumber(form.displayOrder) ?? 0,
+    isActive: form.isActive,
+  };
+}
+
+function RatePlansPanel({ productId }: { productId: string }) {
+  const [ratePlans, setRatePlans] = useState<RatePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [showModal, setShowModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<RatePlan | null>(null);
+  const [form, setForm] = useState<RatePlanFormState>(EMPTY_RATE_PLAN_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RatePlan | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadRatePlans = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const plans = await productService.getRatePlans(productId, false);
+      setRatePlans(plans);
+    } catch (err) {
+      console.error('Failed to load rate plans:', err);
+      setLoadError('Failed to load rate plans.');
+    } finally {
+      setLoading(false);
+    }
+  }, [productId]);
+
+  useEffect(() => {
+    loadRatePlans();
+  }, [loadRatePlans]);
+
+  const openCreateModal = () => {
+    setEditingPlan(null);
+    setForm(EMPTY_RATE_PLAN_FORM);
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (plan: RatePlan) => {
+    setEditingPlan(plan);
+    setForm(ratePlanToForm(plan));
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.planCode.trim() || !form.label.trim() || form.interestRate.trim() === '') {
+      setFormError('Plan code, label and interest rate are required.');
+      return;
+    }
+    if (!/^[A-Z0-9_]+$/.test(form.planCode.trim().toUpperCase())) {
+      setFormError('Plan code must contain only letters, digits and underscores.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setFormError(null);
+      const request = formToRequest(form);
+
+      if (editingPlan) {
+        const update: UpdateRatePlanRequest = request;
+        await productService.updateRatePlan(productId, editingPlan.ratePlanId, update);
+      } else {
+        await productService.createRatePlan(productId, request);
+      }
+
+      setShowModal(false);
+      await loadRatePlans();
+    } catch (err: unknown) {
+      console.error('Failed to save rate plan:', err);
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to save rate plan. Please check the values and try again.';
+      setFormError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      await productService.deleteRatePlan(productId, deleteTarget.ratePlanId);
+      setDeleteTarget(null);
+      await loadRatePlans();
+    } catch (err) {
+      console.error('Failed to delete rate plan:', err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleActive = async (plan: RatePlan) => {
+    try {
+      await productService.updateRatePlan(productId, plan.ratePlanId, { isActive: !plan.isActive });
+      await loadRatePlans();
+    } catch (err) {
+      console.error('Failed to toggle rate plan status:', err);
+    }
+  };
+
+  return (
+    <Panel>
+      <div className="flex items-center justify-between">
+        <PanelHeader icon={<CoinIcon />} title="Rate Plans" />
+        <button
+          onClick={openCreateModal}
+          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+          style={{ backgroundColor: 'var(--rm-accent)' }}
+        >
+          + Add Rate Plan
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="mt-4 space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-10 animate-pulse rounded-lg" style={{ backgroundColor: 'var(--rm-card-hover)' }} />
+          ))}
+        </div>
+      ) : loadError ? (
+        <p className="mt-4 text-sm" style={{ color: '#ef4444' }}>{loadError}</p>
+      ) : ratePlans.length === 0 ? (
+        <p className="mt-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          No rate plans configured yet. Add one so customers see real, admin-managed rates instead of a generic range.
+        </p>
+      ) : (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr style={{ color: 'var(--rm-text-muted)' }}>
+                <th className="pb-2 pr-3 font-medium">Plan</th>
+                <th className="pb-2 pr-3 font-medium">Type</th>
+                <th className="pb-2 pr-3 font-medium">LTV</th>
+                <th className="pb-2 pr-3 font-medium">Term</th>
+                <th className="pb-2 pr-3 font-medium">Rate</th>
+                <th className="pb-2 pr-3 font-medium">APRC</th>
+                <th className="pb-2 pr-3 font-medium">Status</th>
+                <th className="pb-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ratePlans.map(plan => (
+                <tr key={plan.ratePlanId} className="border-t" style={{ borderColor: 'var(--rm-border)' }}>
+                  <td className="py-2 pr-3">
+                    <div className="font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {plan.label} {plan.isGreen && <span className="ml-1 text-xs" style={{ color: '#10b981' }}>🌱</span>}
+                    </div>
+                    <div className="font-mono text-xs" style={{ color: 'var(--rm-text-muted)' }}>{plan.planCode}</div>
+                  </td>
+                  <td className="py-2 pr-3" style={{ color: 'var(--rm-text-secondary)' }}>{plan.rateType.replace(/_/g, ' ')}</td>
+                  <td className="py-2 pr-3" style={{ color: 'var(--rm-text-secondary)' }}>
+                    {plan.ltvMinPercentage != null || plan.ltvMaxPercentage != null
+                      ? `${plan.ltvMinPercentage ?? 0}–${plan.ltvMaxPercentage ?? 100}%`
+                      : '—'}
+                  </td>
+                  <td className="py-2 pr-3" style={{ color: 'var(--rm-text-secondary)' }}>
+                    {plan.fixedTermYears ? `${plan.fixedTermYears} yr fixed` : 'Variable'}
+                  </td>
+                  <td className="py-2 pr-3 font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {Number(plan.interestRate).toFixed(2)}%
+                  </td>
+                  <td className="py-2 pr-3 tabular-nums" style={{ color: 'var(--rm-text-secondary)' }}>
+                    {plan.aprc != null ? `${Number(plan.aprc).toFixed(2)}%` : '—'}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <button
+                      onClick={() => toggleActive(plan)}
+                      className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                      style={{
+                        backgroundColor: plan.isActive ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.15)',
+                        color: plan.isActive ? '#10b981' : '#64748b',
+                      }}
+                    >
+                      {plan.isActive ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td className="py-2">
+                    <div className="flex gap-2">
+                      <button onClick={() => openEditModal(plan)} className="text-xs font-semibold" style={{ color: 'var(--rm-accent)' }}>
+                        Edit
+                      </button>
+                      <button onClick={() => setDeleteTarget(plan)} className="text-xs font-semibold" style={{ color: '#ef4444' }}>
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add/Edit modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !saving && setShowModal(false)}>
+          <div
+            className="w-full max-w-lg rounded-2xl p-6"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="mb-4 text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
+              {editingPlan ? 'Edit Rate Plan' : 'Add Rate Plan'}
+            </h3>
+
+            {formError && (
+              <p className="mb-3 rounded-lg px-3 py-2 text-sm" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                {formError}
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Plan Code" span={2}>
+                <input
+                  value={form.planCode}
+                  onChange={e => setForm({ ...form, planCode: e.target.value.toUpperCase() })}
+                  placeholder="e.g. FIXED_3YR_LTV"
+                  disabled={!!editingPlan}
+                  className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-60"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Label" span={2}>
+                <input
+                  value={form.label}
+                  onChange={e => setForm({ ...form, label: e.target.value })}
+                  placeholder="e.g. 3 Year LTV Fixed"
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Rate Type">
+                <select
+                  value={form.rateType}
+                  onChange={e => setForm({ ...form, rateType: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                >
+                  {RATE_TYPE_OPTIONS.map(t => (
+                    <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Interest Rate (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.interestRate}
+                  onChange={e => setForm({ ...form, interestRate: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="LTV Min (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.ltvMinPercentage}
+                  onChange={e => setForm({ ...form, ltvMinPercentage: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="LTV Max (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.ltvMaxPercentage}
+                  onChange={e => setForm({ ...form, ltvMaxPercentage: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Fixed Term (years)">
+                <input
+                  type="number"
+                  value={form.fixedTermYears}
+                  onChange={e => setForm({ ...form, fixedTermYears: e.target.value })}
+                  placeholder="Blank = variable"
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="APRC (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.aprc}
+                  onChange={e => setForm({ ...form, aprc: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Cost per €1,000">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.costPerThousand}
+                  onChange={e => setForm({ ...form, costPerThousand: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Display Order">
+                <input
+                  type="number"
+                  value={form.displayOrder}
+                  onChange={e => setForm({ ...form, displayOrder: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <div className="col-span-2 flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  <input type="checkbox" checked={form.isGreen} onChange={e => setForm({ ...form, isGreen: e.target.checked })} />
+                  Green / sustainability discount
+                </label>
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} />
+                  Active
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setShowModal(false)}
+                disabled={saving}
+                className="rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
+                style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                {saving ? 'Saving…' : editingPlan ? 'Save Changes' : 'Add Rate Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }} onClick={e => e.stopPropagation()}>
+            <h3 className="mb-2 text-center text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>Delete Rate Plan</h3>
+            <p className="mb-6 text-center text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Are you sure you want to delete &quot;{deleteTarget.label}&quot;? This cannot be undone.
+            </p>
+            <div className="flex justify-center gap-3">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50" style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}>
+                Cancel
+              </button>
+              <button onClick={handleDelete} disabled={deleting} className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#ef4444' }}>
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function FormField({ label, children, span }: { label: string; children: React.ReactNode; span?: number }) {
+  return (
+    <div className={span === 2 ? 'col-span-2' : undefined}>
+      <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--rm-text-muted)' }}>{label}</label>
+      {children}
     </div>
   );
 }

@@ -12,8 +12,8 @@ import {
   type SpendCategory,
 } from '@/lib/banking-data';
 
-function fmt(n: number, currency = 'GBP'): string {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
+function fmt(n: number, currency = 'EUR'): string {
+  return new Intl.NumberFormat('en-IE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
 }
 function txTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });

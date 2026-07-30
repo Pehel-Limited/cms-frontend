@@ -96,34 +96,40 @@ export default function CompanyPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full" />
+        <div className="spinner h-8 w-8" style={{ color: 'var(--brand)' }} role="status" aria-label="Loading company profile" />
       </div>
     );
   }
 
   if (notBusiness) {
     return (
-      <div className="max-w-2xl mx-auto text-center py-20">
-        <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-          <BuildingIcon className="w-8 h-8 text-gray-400" />
+      <div className="max-w-2xl mx-auto py-20">
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <BuildingIcon className="w-7 h-7" />
+          </div>
+          <h2 className="empty-state-title">No company workspace</h2>
+          <p className="empty-state-text">
+            This section is available for business and corporate customers. If you believe this is an
+            error, please contact your relationship manager.
+          </p>
         </div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">No Company Workspace</h2>
-        <p className="text-sm text-gray-500">
-          This section is available for business and corporate customers. If you believe this is an
-          error, please contact your relationship manager.
-        </p>
       </div>
     );
   }
 
   if (error && !company) {
     return (
-      <div className="max-w-2xl mx-auto bg-red-50 border border-red-200 rounded-lg p-6 mt-8">
-        <h2 className="text-red-800 font-semibold mb-2">Could not load company profile</h2>
-        <p className="text-red-600 text-sm">{error}</p>
-        <button onClick={loadCompany} className="mt-4 text-sm text-primary-600 hover:underline">
-          Try again
-        </button>
+      <div className="max-w-2xl mx-auto mt-8">
+        <div className="alert alert-error" role="alert">
+          <div className="flex-1">
+            <p className="font-semibold">Could not load company profile</p>
+            <p className="mt-1">{error}</p>
+            <button onClick={loadCompany} className="btn btn-secondary btn-sm mt-4">
+              Try again
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -133,44 +139,41 @@ export default function CompanyPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'addresses', label: 'Addresses' },
-    { key: 'members', label: 'Directors & Shareholders' },
+    { key: 'members', label: 'Directors & shareholders' },
   ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{company.legalName}</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {company.entityType?.replace(/_/g, ' ')} &middot;{' '}
-            <StatusBadge status={company.status} /> &middot; Reg:{' '}
-            {company.registrationNumber || '—'}
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+            {company.legalName}
+          </h1>
+          <p
+            className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <span>{company.entityType?.replace(/_/g, ' ')}</span>
+            <span aria-hidden="true">&middot;</span>
+            <StatusBadge status={company.status} />
+            <span aria-hidden="true">&middot;</span>
+            <span>Reg: {company.registrationNumber || '—'}</span>
           </p>
         </div>
         {activeTab !== 'members' && (
           <>
             {!editing ? (
-              <button
-                onClick={() => setEditing(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
-              >
+              <button onClick={() => setEditing(true)} className="btn btn-primary">
                 <PencilIcon /> Edit
               </button>
             ) : (
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCancel}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
-                >
+              <div className="flex flex-wrap gap-2">
+                <button onClick={handleCancel} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
-                >
-                  {saving ? 'Saving…' : 'Save'}
+                <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+                  {saving ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
             )}
@@ -180,31 +183,34 @@ export default function CompanyPage() {
 
       {/* Banners */}
       {successMsg && (
-        <div className="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3">
+        <div className="alert alert-success" role="status">
           {successMsg}
         </div>
       )}
       {error && company && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+        <div className="alert alert-error" role="alert">
           {error}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-6">
+      <div style={{ borderBottom: '1px solid var(--surface-border)' }}>
+        <nav className="flex flex-wrap gap-6" role="tablist" aria-label="Company sections">
           {tabs.map(t => (
             <button
               key={t.key}
+              role="tab"
+              aria-selected={activeTab === t.key}
               onClick={() => {
                 setActiveTab(t.key);
                 if (editing) handleCancel();
               }}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+              className="border-b-2 pb-3 text-sm font-medium transition-colors"
+              style={
                 activeTab === t.key
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+                  ? { borderColor: 'var(--brand)', color: 'var(--brand-on-soft)' }
+                  : { borderColor: 'transparent', color: 'var(--text-muted)' }
+              }
             >
               {t.label}
             </button>
@@ -212,18 +218,19 @@ export default function CompanyPage() {
           {/* Team management link — navigates to sub-page */}
           <Link
             href="/portal/company/team"
-            className="pb-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors"
+            className="border-b-2 border-transparent pb-3 text-sm font-medium transition-colors"
+            style={{ color: 'var(--text-muted)' }}
           >
-            Team Management
+            Team management
           </Link>
         </nav>
       </div>
 
       {/* Tab content */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="panel">
         {activeTab === 'overview' && (
-          <div className="p-6 space-y-5">
-            <SectionTitle>Legal Information</SectionTitle>
+          <div className="panel-body space-y-5">
+            <SectionTitle>Legal information</SectionTitle>
             <FieldGrid>
               <ReadOnlyField label="Legal Name" value={company.legalName} />
               <ReadOnlyField label="Entity Type" value={company.entityType?.replace(/_/g, ' ')} />
@@ -234,7 +241,7 @@ export default function CompanyPage() {
               <ReadOnlyField label="VAT Number" value={company.vatNumber} />
             </FieldGrid>
 
-            <SectionTitle>Business Details</SectionTitle>
+            <SectionTitle>Business details</SectionTitle>
             <FieldGrid>
               <EditableField
                 editing={editing}
@@ -279,10 +286,10 @@ export default function CompanyPage() {
         )}
 
         {activeTab === 'addresses' && (
-          <div className="p-6 space-y-6">
+          <div className="panel-body space-y-6">
             <div>
-              <SectionTitle>Registered Address</SectionTitle>
-              <p className="text-xs text-gray-400 mb-3">
+              <SectionTitle>Registered address</SectionTitle>
+              <p className="field-hint mb-3">
                 Changes to the registered address require bank verification
               </p>
               <FieldGrid>
@@ -296,7 +303,7 @@ export default function CompanyPage() {
             </div>
 
             <div>
-              <SectionTitle>Trading Address</SectionTitle>
+              <SectionTitle>Trading address</SectionTitle>
               <FieldGrid>
                 <EditableField
                   editing={editing}
@@ -340,55 +347,55 @@ export default function CompanyPage() {
         )}
 
         {activeTab === 'members' && (
-          <div className="p-6">
-            <SectionTitle>Directors, Shareholders &amp; Signatories</SectionTitle>
+          <div className="panel-body">
+            <SectionTitle>Directors, shareholders &amp; signatories</SectionTitle>
             {company.members && company.members.length > 0 ? (
               <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
+                <table className="data-table min-w-full">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500">Name</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500">Role</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500">Ownership</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500">Signatory</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500">UBO</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
+                      <th>Name</th>
+                      <th>Role</th>
+                      <th>Ownership</th>
+                      <th>Signatory</th>
+                      <th>UBO</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody>
                     {company.members.map(m => (
                       <tr key={m.id}>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="font-medium text-gray-900">{m.customerName || '—'}</div>
-                          <div className="text-xs text-gray-500">{m.customerEmail}</div>
+                        <td className="whitespace-nowrap">
+                          <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {m.customerName || '—'}
+                          </div>
+                          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {m.customerEmail}
+                          </div>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap capitalize">
+                        <td className="whitespace-nowrap capitalize">
                           {m.role?.replace(/_/g, ' ').toLowerCase()}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="whitespace-nowrap">
                           {m.ownershipPercentage != null ? `${m.ownershipPercentage}%` : '—'}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="whitespace-nowrap">
                           {m.isAuthorizedSignatory ? (
-                            <span className="text-green-600 font-medium">Yes</span>
+                            <span className="badge badge-success">Yes</span>
                           ) : (
-                            <span className="text-gray-400">No</span>
+                            <span style={{ color: 'var(--text-muted)' }}>No</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="whitespace-nowrap">
                           {m.isBeneficialOwner ? (
-                            <span className="text-green-600 font-medium">Yes</span>
+                            <span className="badge badge-success">Yes</span>
                           ) : (
-                            <span className="text-gray-400">No</span>
+                            <span style={{ color: 'var(--text-muted)' }}>No</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              m.isActive
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
+                            className={`badge ${m.isActive ? 'badge-success' : 'badge-neutral'}`}
                           >
                             {m.isActive ? 'Active' : 'Inactive'}
                           </span>
@@ -399,7 +406,7 @@ export default function CompanyPage() {
                 </table>
               </div>
             ) : (
-              <p className="mt-4 text-sm text-gray-500">
+              <p className="mt-4 text-sm" style={{ color: 'var(--text-muted)' }}>
                 No members on file. Contact your relationship manager.
               </p>
             )}
@@ -413,9 +420,7 @@ export default function CompanyPage() {
 // ─── Shared components ─────────────────────────────────────────────
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">{children}</h3>
-  );
+  return <h3 className="section-title uppercase tracking-wider">{children}</h3>;
 }
 
 function FieldGrid({ children }: { children: React.ReactNode }) {
@@ -425,8 +430,12 @@ function FieldGrid({ children }: { children: React.ReactNode }) {
 function ReadOnlyField({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <dt className="text-xs font-medium text-gray-500">{label}</dt>
-      <dd className="mt-1 text-sm text-gray-900">{value || '—'}</dd>
+      <dt className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm" style={{ color: 'var(--text-primary)' }}>
+        {value || '—'}
+      </dd>
     </div>
   );
 }
@@ -445,34 +454,32 @@ function EditableField({
   type?: string;
 }) {
   if (!editing) return <ReadOnlyField label={label} value={value} />;
+  const fieldId = `field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-500">{label}</label>
+      <label className="field-label" htmlFor={fieldId}>
+        {label}
+      </label>
       <input
+        id={fieldId}
         type={type}
         value={value || ''}
         onChange={e => onChange(e.target.value)}
-        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500"
+        className="input"
       />
     </div>
   );
 }
 
 function StatusBadge({ status }: { status?: string }) {
-  const colors: Record<string, string> = {
-    ACTIVE: 'bg-green-100 text-green-800',
-    PENDING_VERIFICATION: 'bg-yellow-100 text-yellow-800',
-    SUSPENDED: 'bg-red-100 text-red-800',
-    DORMANT: 'bg-gray-100 text-gray-600',
+  const variants: Record<string, string> = {
+    ACTIVE: 'badge-success',
+    PENDING_VERIFICATION: 'badge-warning',
+    SUSPENDED: 'badge-error',
+    DORMANT: 'badge-neutral',
   };
-  const cls = colors[status || ''] || 'bg-gray-100 text-gray-800';
-  return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}
-    >
-      {status?.replace(/_/g, ' ') || 'Unknown'}
-    </span>
-  );
+  const variant = variants[status || ''] || 'badge-neutral';
+  return <span className={`badge ${variant}`}>{status?.replace(/_/g, ' ') || 'Unknown'}</span>;
 }
 
 function PencilIcon() {

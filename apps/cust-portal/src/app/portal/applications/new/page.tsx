@@ -391,12 +391,13 @@ export default function NewApplicationPage() {
   // ─── Render ──────────────────────────────────────────────────
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="mx-auto max-w-3xl">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
+      <div className="mb-7 flex items-center gap-3">
         <button
           onClick={() => router.push('/portal/applications')}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
+          className="icon-btn"
+          aria-label="Back to applications"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -408,8 +409,10 @@ export default function NewApplicationPage() {
           </svg>
         </button>
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">New Application</h2>
-          <p className="text-sm text-gray-500">
+          <h2 className="text-xl font-bold sm:text-2xl" style={{ color: 'var(--text-primary)' }}>
+            New application
+          </h2>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             {savedApp
               ? `Draft saved — ${savedApp.applicationNumber || 'No number yet'}`
               : 'Fill in the details to apply for a loan'}
@@ -418,34 +421,40 @@ export default function NewApplicationPage() {
       </div>
 
       {/* Stepper */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
+      <nav className="mb-6 overflow-x-auto no-scrollbar" aria-label="Progress">
+        <ol className="flex min-w-max items-center gap-1 sm:min-w-0">
           {STEPS.map((s, i) => {
             const isActive = i === stepIndex;
             const isComplete = i < stepIndex;
             return (
-              <div key={s.key} className="flex-1 flex items-center">
+              <li key={s.key} className="flex flex-1 items-center">
                 <button
                   onClick={() => {
                     if (isComplete) setStep(s.key);
                   }}
                   disabled={!isComplete && !isActive}
-                  className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'text-primary-700'
-                      : isComplete
-                        ? 'text-primary-600 cursor-pointer'
-                        : 'text-gray-400 cursor-default'
-                  }`}
+                  aria-current={isActive ? 'step' : undefined}
+                  className="flex items-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-default"
+                  style={{
+                    color: isActive || isComplete ? 'var(--brand)' : 'var(--text-muted)',
+                  }}
                 >
                   <span
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors"
+                    style={
                       isActive
-                        ? 'border-primary-600 bg-primary-600 text-white'
+                        ? { borderColor: 'var(--brand)', backgroundColor: 'var(--brand)', color: '#fff' }
                         : isComplete
-                          ? 'border-primary-600 bg-primary-50 text-primary-600'
-                          : 'border-gray-300 bg-white text-gray-400'
-                    }`}
+                          ? {
+                              borderColor: 'var(--brand)',
+                              backgroundColor: 'var(--brand-soft)',
+                              color: 'var(--brand-on-soft)',
+                            }
+                          : {
+                              borderColor: 'var(--surface-border-strong)',
+                              color: 'var(--text-muted)',
+                            }
+                    }
                   >
                     {isComplete ? '✓' : i + 1}
                   </span>
@@ -453,24 +462,28 @@ export default function NewApplicationPage() {
                 </button>
                 {i < STEPS.length - 1 && (
                   <div
-                    className={`flex-1 h-0.5 mx-2 ${i < stepIndex ? 'bg-primary-300' : 'bg-gray-200'}`}
+                    className="mx-2 h-0.5 flex-1 rounded-full"
+                    style={{
+                      backgroundColor:
+                        i < stepIndex ? 'var(--brand)' : 'var(--surface-border-strong)',
+                    }}
                   />
                 )}
-              </div>
+              </li>
             );
           })}
-        </div>
-      </div>
+        </ol>
+      </nav>
 
       {/* Error */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+        <div className="alert alert-error mb-5" role="alert">
           {error}
         </div>
       )}
 
       {/* Step Content */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="card p-6">
         {step === 'product' && (
           <StepProduct
             products={products}
@@ -516,25 +529,18 @@ export default function NewApplicationPage() {
       </div>
 
       {/* Navigation */}
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-6 flex items-center justify-between gap-3">
         <div>
           {stepIndex > 0 && (
-            <button
-              onClick={goBack}
-              className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors"
-            >
+            <button onClick={goBack} className="btn btn-ghost">
               &larr; Back
             </button>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {step !== 'review' && selectedProduct && (
-            <button
-              onClick={saveDraft}
-              disabled={saving || !canGoNext()}
-              className="text-sm text-gray-600 hover:text-gray-900 font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {saving ? 'Saving...' : savedApp ? 'Update Draft' : 'Save Draft'}
+            <button onClick={saveDraft} disabled={saving || !canGoNext()} className="btn btn-ghost">
+              {saving ? 'Saving…' : savedApp ? 'Update draft' : 'Save draft'}
             </button>
           )}
           {step === 'review' ? (
@@ -546,16 +552,12 @@ export default function NewApplicationPage() {
                 !declarations.consentCreditCheck ||
                 !declarations.termsAccepted
               }
-              className="bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50 shadow-sm"
+              className="btn bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
             >
-              {submitting ? 'Submitting...' : 'Submit Application'}
+              {submitting ? 'Submitting…' : 'Submit application'}
             </button>
           ) : (
-            <button
-              onClick={goNext}
-              disabled={!canGoNext()}
-              className="bg-primary-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-            >
+            <button onClick={goNext} disabled={!canGoNext()} className="btn btn-primary">
               Continue &rarr;
             </button>
           )}
@@ -581,9 +583,9 @@ function StepProduct({
   if (loading) {
     return (
       <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900">Choose a Product</h3>
+        <h3 className="section-title">Choose a product</h3>
         {[1, 2, 3].map(i => (
-          <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+          <div key={i} className="skeleton h-20" />
         ))}
       </div>
     );
@@ -591,40 +593,46 @@ function StepProduct({
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">Choose a Product</h3>
-      <p className="text-sm text-gray-500 mt-1">Select the loan product you want to apply for.</p>
+      <h3 className="section-title">Choose a product</h3>
+      <p className="field-hint">Select the loan product you want to apply for.</p>
       <div className="mt-4 space-y-2">
-        {products.map(p => (
-          <button
-            key={p.productId}
-            onClick={() => onSelect(p)}
-            className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-              selected?.productId === p.productId
-                ? 'border-primary-500 bg-primary-50'
-                : 'border-gray-200 hover:border-primary-200 hover:bg-gray-50'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-semibold text-gray-900">{p.productName}</h4>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {PRODUCT_TYPE_LABELS[p.productType] || p.productType}
-                  {p.shortDescription && ` — ${p.shortDescription}`}
-                </p>
+        {products.map(p => {
+          const isSelected = selected?.productId === p.productId;
+          return (
+            <button
+              key={p.productId}
+              onClick={() => onSelect(p)}
+              aria-pressed={isSelected}
+              className="w-full rounded-xl border-2 p-4 text-left transition-all"
+              style={{
+                borderColor: isSelected ? 'var(--brand)' : 'var(--surface-border)',
+                backgroundColor: isSelected ? 'var(--brand-soft)' : 'transparent',
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {p.productName}
+                  </h4>
+                  <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {PRODUCT_TYPE_LABELS[p.productType] || p.productType}
+                    {p.shortDescription && ` — ${p.shortDescription}`}
+                  </p>
+                </div>
+                <div className="text-right text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <p>
+                    {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
+                  </p>
+                  <p>
+                    {p.minInterestRate}% – {p.maxInterestRate}% p.a.
+                  </p>
+                </div>
               </div>
-              <div className="text-right text-xs text-gray-500">
-                <p>
-                  {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
-                </p>
-                <p>
-                  {p.minInterestRate}% – {p.maxInterestRate}% p.a.
-                </p>
-              </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
         {products.length === 0 && (
-          <p className="text-sm text-gray-500 text-center py-8">
+          <p className="py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
             No products available for online application.
           </p>
         )}
@@ -675,20 +683,22 @@ function StepLoan({
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">
-        {isBusiness ? 'Facility Details' : 'Loan Details'}
-      </h3>
-      <p className="text-sm text-gray-500 mt-1">
-        Applying for <span className="font-medium text-gray-700">{product.productName}</span>
+      <h3 className="section-title">{isBusiness ? 'Facility details' : 'Loan details'}</h3>
+      <p className="field-hint">
+        Applying for{' '}
+        <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
+          {product.productName}
+        </span>
       </p>
 
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
         {/* Amount */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {isBusiness ? 'Facility Amount' : 'Loan Amount'} <span className="text-red-500">*</span>
+          <label className="field-label" htmlFor="requestedAmount">
+            {isBusiness ? 'Facility amount' : 'Loan amount'} <span className="text-red-500">*</span>
           </label>
           <input
+            id="requestedAmount"
             type="number"
             name="requestedAmount"
             value={form.requestedAmount}
@@ -696,19 +706,20 @@ function StepLoan({
             min={product.minLoanAmount}
             max={product.maxLoanAmount}
             placeholder={`${product.minLoanAmount} – ${product.maxLoanAmount}`}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="input"
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="field-hint">
             Range: {formatCurrency(product.minLoanAmount)} – {formatCurrency(product.maxLoanAmount)}
           </p>
         </div>
 
         {/* Term */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="field-label" htmlFor="requestedTermMonths">
             Term (months) <span className="text-red-500">*</span>
           </label>
           <input
+            id="requestedTermMonths"
             type="number"
             name="requestedTermMonths"
             value={form.requestedTermMonths}
@@ -716,39 +727,43 @@ function StepLoan({
             min={product.minTermMonths}
             max={product.maxTermMonths}
             placeholder={`${product.minTermMonths} – ${product.maxTermMonths}`}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="input"
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="field-hint">
             Range: {product.minTermMonths} – {product.maxTermMonths} months
           </p>
         </div>
 
         {/* Interest Rate */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Interest Rate</label>
+          <label className="field-label" htmlFor="requestedInterestRate">
+            Interest rate
+          </label>
           {loadingRatePlans ? (
-            <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+            <div className="skeleton h-10" />
           ) : ratePlans.length > 0 ? (
             <>
               <select
+                id="requestedInterestRate"
                 name="requestedInterestRate"
                 value={form.requestedInterestRate}
                 onChange={onChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="select"
               >
-                <option value="">Select a rate plan...</option>
+                <option value="">Select a rate plan…</option>
                 {ratePlans.map(plan => (
                   <option key={plan.ratePlanId} value={plan.interestRate}>
                     {plan.label} — {plan.interestRate}%{plan.isGreen ? ' 🌱' : ''}
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="field-hint">
                 Choose the LTV / fixed-term rate plan that applies to you.
               </p>
             </>
           ) : (
             <input
+              id="requestedInterestRate"
               type="number"
               name="requestedInterestRate"
               value={form.requestedInterestRate}
@@ -757,24 +772,25 @@ function StepLoan({
               min={product.minInterestRate}
               max={product.maxInterestRate}
               placeholder={`${product.minInterestRate} – ${product.maxInterestRate}`}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="input"
             />
           )}
         </div>
 
         {/* Loan Purpose */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {isBusiness ? 'Facility Purpose' : 'Loan Purpose'}{' '}
+          <label className="field-label" htmlFor="loanPurpose">
+            {isBusiness ? 'Facility purpose' : 'Loan purpose'}{' '}
             <span className="text-red-500">*</span>
           </label>
           <select
+            id="loanPurpose"
             name="loanPurpose"
             value={form.loanPurpose}
             onChange={onChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="select"
           >
-            <option value="">Select purpose...</option>
+            <option value="">Select purpose…</option>
             {Object.entries(LOAN_PURPOSE_LABELS).map(([key, label]) => (
               <option key={key} value={key}>
                 {label}
@@ -786,14 +802,17 @@ function StepLoan({
         {/* Business: Facility Type */}
         {isBusiness && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Facility Type</label>
+            <label className="field-label" htmlFor="facilityType">
+              Facility type
+            </label>
             <select
+              id="facilityType"
               name="facilityType"
               value={form.facilityType}
               onChange={onChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="select"
             >
-              <option value="">Select type...</option>
+              <option value="">Select type…</option>
               {Object.entries(FACILITY_TYPE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -805,84 +824,92 @@ function StepLoan({
 
         {/* Purpose Description */}
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Purpose Description
+          <label className="field-label" htmlFor="loanPurposeDescription">
+            Purpose description
           </label>
           <textarea
+            id="loanPurposeDescription"
             name="loanPurposeDescription"
             value={form.loanPurposeDescription}
             onChange={onChange}
             rows={2}
             maxLength={1000}
-            placeholder="Briefly describe what you will use the loan for..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+            placeholder="Briefly describe what you will use the loan for…"
+            className="input resize-none"
           />
         </div>
       </div>
 
       {/* ─── Property Details (HOME purposes) ─────────────── */}
       {isHomePurpose && (
-        <div className="mt-8">
-          <h4 className="text-md font-semibold text-gray-800 mb-1">Property Details</h4>
-          <p className="text-sm text-gray-500 mb-4">
-            Enter details about the property for your home loan.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
+          <h4 className="section-title">Property details</h4>
+          <p className="field-hint mb-4">Enter details about the property for your home loan.</p>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Property Address
+              <label className="field-label" htmlFor="propertyAddress">
+                Property address
               </label>
               <input
+                id="propertyAddress"
                 type="text"
                 name="propertyAddress"
                 value={form.propertyAddress}
                 onChange={onChange}
-                placeholder=""
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+              <label className="field-label" htmlFor="propertyCity">
+                City
+              </label>
               <input
+                id="propertyCity"
                 type="text"
                 name="propertyCity"
                 value={form.propertyCity}
                 onChange={onChange}
-                placeholder=""
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+              <label className="field-label" htmlFor="propertyState">
+                County / State
+              </label>
               <input
+                id="propertyState"
                 type="text"
                 name="propertyState"
                 value={form.propertyState}
                 onChange={onChange}
-                placeholder=""
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
+              <label className="field-label" htmlFor="propertyPostalCode">
+                Postal code
+              </label>
               <input
+                id="propertyPostalCode"
                 type="text"
                 name="propertyPostalCode"
                 value={form.propertyPostalCode}
                 onChange={onChange}
-                placeholder=""
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Property Type</label>
+              <label className="field-label" htmlFor="propertyType">
+                Property type
+              </label>
               <select
+                id="propertyType"
                 name="propertyType"
                 value={form.propertyType}
                 onChange={onChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="select"
               >
-                <option value="">Select type...</option>
+                <option value="">Select type…</option>
                 {PROPERTY_TYPES.map(t => (
                   <option key={t.value} value={t.value}>
                     {t.label}
@@ -891,29 +918,31 @@ function StepLoan({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Estimated Property Value
+              <label className="field-label" htmlFor="propertyValue">
+                Estimated property value
               </label>
               <input
+                id="propertyValue"
                 type="number"
                 name="propertyValue"
                 value={form.propertyValue}
                 onChange={onChange}
-                placeholder="e.g. 5000000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g. 350000"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Down Payment Amount
+              <label className="field-label" htmlFor="downPaymentAmount">
+                Deposit amount
               </label>
               <input
+                id="downPaymentAmount"
                 type="number"
                 name="downPaymentAmount"
                 value={form.downPaymentAmount}
                 onChange={onChange}
-                placeholder="e.g. 1000000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g. 50000"
+                className="input"
               />
             </div>
           </div>
@@ -922,37 +951,44 @@ function StepLoan({
 
       {/* ─── Vehicle Details (VEHICLE purposes) ───────────── */}
       {isVehiclePurpose && (
-        <div className="mt-8">
-          <h4 className="text-md font-semibold text-gray-800 mb-1">Vehicle Details</h4>
-          <p className="text-sm text-gray-500 mb-4">
-            Enter details about the vehicle you plan to purchase.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
+          <h4 className="section-title">Vehicle details</h4>
+          <p className="field-hint mb-4">Enter details about the vehicle you plan to purchase.</p>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Make / Brand</label>
+              <label className="field-label" htmlFor="vehicleMake">
+                Make / brand
+              </label>
               <input
+                id="vehicleMake"
                 type="text"
                 name="vehicleMake"
                 value={form.vehicleMake}
                 onChange={onChange}
-                placeholder="e.g. Maruti Suzuki"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g. Volkswagen"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+              <label className="field-label" htmlFor="vehicleModel">
+                Model
+              </label>
               <input
+                id="vehicleModel"
                 type="text"
                 name="vehicleModel"
                 value={form.vehicleModel}
                 onChange={onChange}
-                placeholder="e.g. Swift Dzire"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g. Golf"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+              <label className="field-label" htmlFor="vehicleYear">
+                Year
+              </label>
               <input
+                id="vehicleYear"
                 type="number"
                 name="vehicleYear"
                 value={form.vehicleYear}
@@ -960,18 +996,21 @@ function StepLoan({
                 min={2000}
                 max={2030}
                 placeholder="e.g. 2024"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
+              <label className="field-label" htmlFor="vehicleCondition">
+                Condition
+              </label>
               <select
+                id="vehicleCondition"
                 name="vehicleCondition"
                 value={form.vehicleCondition}
                 onChange={onChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="select"
               >
-                <option value="">Select condition...</option>
+                <option value="">Select condition…</option>
                 {VEHICLE_CONDITIONS.map(c => (
                   <option key={c.value} value={c.value}>
                     {c.label}
@@ -980,16 +1019,17 @@ function StepLoan({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Estimated Vehicle Value
+              <label className="field-label" htmlFor="vehicleValue">
+                Estimated vehicle value
               </label>
               <input
+                id="vehicleValue"
                 type="number"
                 name="vehicleValue"
                 value={form.vehicleValue}
                 onChange={onChange}
-                placeholder="e.g. 800000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g. 30000"
+                className="input"
               />
             </div>
           </div>
@@ -1012,35 +1052,39 @@ function StepFinancial({
 }) {
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">
-        {isBusiness ? 'Business & Financial Information' : 'Financial Information'}
+      <h3 className="section-title">
+        {isBusiness ? 'Business & financial information' : 'Financial information'}
       </h3>
-      <p className="text-sm text-gray-500 mt-1">
+      <p className="field-hint">
         Help us evaluate your application. All fields are optional but improve approval chances.
       </p>
 
       {/* Business-specific fields */}
       {isBusiness && (
         <div className="mt-6">
-          <h4 className="text-md font-semibold text-gray-800 mb-3">Business Financials</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <h4 className="section-title mb-3">Business financials</h4>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Annual Revenue</label>
+              <label className="field-label" htmlFor="businessAnnualRevenue">
+                Annual revenue
+              </label>
               <input
+                id="businessAnnualRevenue"
                 type="number"
                 name="businessAnnualRevenue"
                 value={form.businessAnnualRevenue}
                 onChange={onChange}
-                placeholder="e.g. 50000000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g. 2500000"
+                className="input"
               />
-              <p className="mt-1 text-xs text-gray-400">Annual turnover of the business</p>
+              <p className="field-hint">Annual turnover of the business</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Business Vintage (Years)
+              <label className="field-label" htmlFor="businessVintageYears">
+                Business vintage (years)
               </label>
               <input
+                id="businessVintageYears"
                 type="number"
                 name="businessVintageYears"
                 value={form.businessVintageYears}
@@ -1048,23 +1092,22 @@ function StepFinancial({
                 min={0}
                 max={200}
                 placeholder="e.g. 5"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className="input"
               />
-              <p className="mt-1 text-xs text-gray-400">
-                How many years the business has been operating
-              </p>
+              <p className="field-hint">How many years the business has been operating</p>
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Facility Purpose Description
+              <label className="field-label" htmlFor="facilityPurposeDescription">
+                Facility purpose description
               </label>
               <textarea
+                id="facilityPurposeDescription"
                 name="facilityPurposeDescription"
                 value={form.facilityPurposeDescription}
                 onChange={onChange}
                 rows={2}
-                placeholder="Describe how the facility will be used in your business operations..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                placeholder="Describe how the facility will be used in your business operations…"
+                className="input resize-none"
               />
             </div>
           </div>
@@ -1072,44 +1115,51 @@ function StepFinancial({
       )}
 
       {/* Personal financial fields */}
-      <div className={isBusiness ? 'mt-6' : 'mt-6'}>
-        {isBusiness && (
-          <h4 className="text-md font-semibold text-gray-800 mb-3">Personal Financials</h4>
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div className="mt-6">
+        {isBusiness && <h4 className="section-title mb-3">Personal financials</h4>}
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Annual Income</label>
+            <label className="field-label" htmlFor="statedAnnualIncome">
+              Annual income
+            </label>
             <input
+              id="statedAnnualIncome"
               type="number"
               name="statedAnnualIncome"
               value={form.statedAnnualIncome}
               onChange={onChange}
-              placeholder="e.g. 1200000"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="e.g. 60000"
+              className="input"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Income</label>
+            <label className="field-label" htmlFor="statedMonthlyIncome">
+              Monthly income
+            </label>
             <input
+              id="statedMonthlyIncome"
               type="number"
               name="statedMonthlyIncome"
               value={form.statedMonthlyIncome}
               onChange={onChange}
-              placeholder="e.g. 100000"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="e.g. 5000"
+              className="input"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Expenses</label>
+            <label className="field-label" htmlFor="statedMonthlyExpenses">
+              Monthly expenses
+            </label>
             <input
+              id="statedMonthlyExpenses"
               type="number"
               name="statedMonthlyExpenses"
               value={form.statedMonthlyExpenses}
               onChange={onChange}
-              placeholder="e.g. 50000"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="e.g. 2000"
+              className="input"
             />
           </div>
         </div>
@@ -1129,21 +1179,24 @@ function StepEmployment({
 }) {
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">Employment Details</h3>
-      <p className="text-sm text-gray-500 mt-1">
+      <h3 className="section-title">Employment details</h3>
+      <p className="field-hint">
         Provide your employment information. Optional but recommended.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Employment Status</label>
+          <label className="field-label" htmlFor="employmentStatus">
+            Employment status
+          </label>
           <select
+            id="employmentStatus"
             name="employmentStatus"
             value={form.employmentStatus}
             onChange={onChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="select"
           >
-            <option value="">Select status...</option>
+            <option value="">Select status…</option>
             {EMPLOYMENT_STATUSES.map(s => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -1153,34 +1206,41 @@ function StepEmployment({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Employer Name</label>
+          <label className="field-label" htmlFor="employerName">
+            Employer name
+          </label>
           <input
+            id="employerName"
             type="text"
             name="employerName"
             value={form.employerName}
             onChange={onChange}
-            placeholder="e.g. Tata Consultancy Services"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="e.g. Acme Ltd"
+            className="input"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
+          <label className="field-label" htmlFor="jobTitle">
+            Job title
+          </label>
           <input
+            id="jobTitle"
             type="text"
             name="jobTitle"
             value={form.jobTitle}
             onChange={onChange}
             placeholder="e.g. Software Engineer"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="input"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Years with Employer
+          <label className="field-label" htmlFor="yearsWithEmployer">
+            Years with employer
           </label>
           <input
+            id="yearsWithEmployer"
             type="number"
             name="yearsWithEmployer"
             value={form.yearsWithEmployer}
@@ -1188,7 +1248,7 @@ function StepEmployment({
             min={0}
             max={50}
             placeholder="e.g. 3"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            className="input"
           />
         </div>
       </div>
@@ -1210,9 +1270,9 @@ function StepParties({
   if (loading) {
     return (
       <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900">People &amp; Roles</h3>
+        <h3 className="section-title">People &amp; roles</h3>
         {[1, 2, 3].map(i => (
-          <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />
+          <div key={i} className="skeleton h-14" />
         ))}
       </div>
     );
@@ -1222,55 +1282,45 @@ function StepParties({
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">People &amp; Roles</h3>
-      <p className="text-sm text-gray-500 mt-1">
+      <h3 className="section-title">People &amp; roles</h3>
+      <p className="field-hint">
         Confirm the directors, shareholders, UBOs and signatories linked to your company.
       </p>
 
       {/* Validation Banner */}
       {validation && (
         <div
-          className={`mt-4 rounded-lg border p-4 ${
-            validation.isComplete ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
-          }`}
+          className={`alert mt-4 items-start ${validation.isComplete ? 'alert-success' : 'alert-warning'}`}
         >
-          <div className="flex items-start gap-3">
-            <span
-              className={`text-lg ${validation.isComplete ? 'text-green-600' : 'text-amber-500'}`}
-            >
-              {validation.isComplete ? '✓' : '⚠'}
-            </span>
-            <div className="flex-1">
-              <h4
-                className={`text-sm font-semibold ${validation.isComplete ? 'text-green-800' : 'text-amber-800'}`}
-              >
-                {validation.isComplete ? 'All party requirements met' : 'Requirements not yet met'}
-              </h4>
-              {!validation.isComplete && validation.issues.length > 0 && (
-                <ul className="mt-1 text-sm list-disc list-inside text-amber-700">
-                  {validation.issues.map((issue, i) => (
-                    <li key={i}>{issue}</li>
-                  ))}
-                </ul>
-              )}
-              <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-600">
-                <span>
-                  {validation.summary.directors} Director
-                  {validation.summary.directors !== 1 ? 's' : ''}
-                </span>
-                <span>
-                  {validation.summary.shareholders} Shareholder
-                  {validation.summary.shareholders !== 1 ? 's' : ''}
-                </span>
-                <span>
-                  {validation.summary.ubos} UBO{validation.summary.ubos !== 1 ? 's' : ''} (
-                  {validation.summary.totalUboOwnership}%)
-                </span>
-                <span>
-                  {validation.summary.signatories} Signator
-                  {validation.summary.signatories !== 1 ? 'ies' : 'y'}
-                </span>
-              </div>
+          <span className="text-lg leading-none">{validation.isComplete ? '✓' : '⚠'}</span>
+          <div className="flex-1">
+            <h4 className="text-sm font-semibold">
+              {validation.isComplete ? 'All party requirements met' : 'Requirements not yet met'}
+            </h4>
+            {!validation.isComplete && validation.issues.length > 0 && (
+              <ul className="mt-1 list-inside list-disc text-sm">
+                {validation.issues.map((issue, i) => (
+                  <li key={i}>{issue}</li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2 flex flex-wrap gap-4 text-xs opacity-80">
+              <span>
+                {validation.summary.directors} Director
+                {validation.summary.directors !== 1 ? 's' : ''}
+              </span>
+              <span>
+                {validation.summary.shareholders} Shareholder
+                {validation.summary.shareholders !== 1 ? 's' : ''}
+              </span>
+              <span>
+                {validation.summary.ubos} UBO{validation.summary.ubos !== 1 ? 's' : ''} (
+                {validation.summary.totalUboOwnership}%)
+              </span>
+              <span>
+                {validation.summary.signatories} Signator
+                {validation.summary.signatories !== 1 ? 'ies' : 'y'}
+              </span>
             </div>
           </div>
         </div>
@@ -1282,33 +1332,40 @@ function StepParties({
           {active.map(m => (
             <div
               key={m.id}
-              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"
+              style={{
+                backgroundColor: 'var(--surface-input)',
+                borderColor: 'var(--surface-border)',
+              }}
             >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold">
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold"
+                  style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+                >
                   {(m.customerName || '?')[0]}
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                     {m.customerName || 'Unknown'}
                   </div>
-                  <div className="text-xs text-gray-500">{m.customerEmail || ''}</div>
+                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {m.customerEmail || ''}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-xs">
-                <span className="px-2 py-0.5 bg-gray-200 rounded-full text-gray-700 font-medium">
-                  {PARTY_ROLE_LABELS[m.role] || m.role}
-                </span>
+                <span className="badge badge-neutral">{PARTY_ROLE_LABELS[m.role] || m.role}</span>
                 {m.ownershipPercentage != null && (
-                  <span className="text-gray-500">{m.ownershipPercentage}%</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{m.ownershipPercentage}%</span>
                 )}
                 {m.isAuthorizedSignatory && (
-                  <span className="text-green-600" title="Authorized Signatory">
+                  <span className="text-emerald-500" title="Authorized signatory">
                     ✍
                   </span>
                 )}
                 {m.isBeneficialOwner && (
-                  <span className="text-blue-600" title="UBO">
+                  <span className="text-blue-500" title="UBO">
                     ◆
                   </span>
                 )}
@@ -1317,29 +1374,29 @@ function StepParties({
           ))}
         </div>
       ) : (
-        <div className="mt-4 text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-          <div className="text-gray-400 text-3xl mb-2">👥</div>
-          <p className="text-sm text-gray-500">No party members found for your company.</p>
+        <div className="empty-state mt-4">
+          <div className="empty-state-icon text-2xl">👥</div>
+          <p className="empty-state-text">No party members found for your company.</p>
         </div>
       )}
 
       {/* Actions */}
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-4">
         <a
           href="/portal/company/parties"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-primary-600 hover:text-primary-800 font-medium underline"
+          className="link-arrow"
         >
-          Manage People &amp; Roles →
+          Manage people &amp; roles <span data-arrow aria-hidden="true">→</span>
         </a>
-        <button onClick={onRefresh} className="text-sm text-gray-500 hover:text-gray-700">
+        <button onClick={onRefresh} className="btn btn-ghost btn-sm">
           ↻ Refresh
         </button>
       </div>
 
       {validation && !validation.isComplete && (
-        <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700">
+        <div className="alert alert-warning mt-4">
           You can still proceed, but your application may require additional review if party
           requirements are incomplete.
         </div>
@@ -1518,22 +1575,30 @@ function StepReview({
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-900">Review Your Application</h3>
-      <p className="text-sm text-gray-500 mt-1">
-        Please review the details below before submitting.
-      </p>
+      <h3 className="section-title">Review your application</h3>
+      <p className="field-hint">Please review the details below before submitting.</p>
 
       <div className="mt-6 space-y-6">
         {sections.map(section => (
           <div key={section.title}>
-            <h4 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-3">
+            <h4
+              className="mb-3 border-b pb-2 text-sm font-semibold"
+              style={{ color: 'var(--text-secondary)', borderColor: 'var(--surface-border)' }}
+            >
               {section.title}
             </h4>
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               {section.items.map(item => (
-                <div key={item.label} className="flex justify-between sm:block">
-                  <dt className="text-xs text-gray-500">{item.label}</dt>
-                  <dd className="text-sm font-medium text-gray-900">{item.value}</dd>
+                <div key={item.label} className="flex justify-between gap-4 sm:block">
+                  <dt className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {item.label}
+                  </dt>
+                  <dd
+                    className="text-sm font-medium"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {item.value}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -1542,44 +1607,49 @@ function StepReview({
       </div>
 
       {/* ─── Declarations & Consent ─────────────────────── */}
-      <div className="mt-8 border-t border-gray-200 pt-6">
-        <h4 className="text-sm font-semibold text-gray-700 mb-4">Declarations & Consent</h4>
+      <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
+        <h4 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+          Declarations &amp; consent
+        </h4>
         <div className="space-y-3">
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex cursor-pointer items-start gap-3">
             <input
               type="checkbox"
               checked={declarations.informationAccurate}
               onChange={e => onDeclarationChange('informationAccurate', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="mt-0.5 h-4 w-4 rounded text-primary-600 focus:ring-primary-500"
+              style={{ borderColor: 'var(--surface-border-strong)' }}
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               I declare that all information provided in this application is true, accurate, and
               complete to the best of my knowledge. <span className="text-red-500">*</span>
             </span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex cursor-pointer items-start gap-3">
             <input
               type="checkbox"
               checked={declarations.consentCreditCheck}
               onChange={e => onDeclarationChange('consentCreditCheck', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="mt-0.5 h-4 w-4 rounded text-primary-600 focus:ring-primary-500"
+              style={{ borderColor: 'var(--surface-border-strong)' }}
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               I consent to the bank performing credit checks, verifying my identity, and sharing my
               information with credit bureaus and regulatory authorities as required.{' '}
               <span className="text-red-500">*</span>
             </span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex cursor-pointer items-start gap-3">
             <input
               type="checkbox"
               checked={declarations.termsAccepted}
               onChange={e => onDeclarationChange('termsAccepted', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="mt-0.5 h-4 w-4 rounded text-primary-600 focus:ring-primary-500"
+              style={{ borderColor: 'var(--surface-border-strong)' }}
             />
-            <span className="text-sm text-gray-700">
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               I have read and agree to the terms and conditions, privacy policy, and the
               product-specific disclosures. <span className="text-red-500">*</span>
             </span>
@@ -1589,7 +1659,7 @@ function StepReview({
         {(!declarations.informationAccurate ||
           !declarations.consentCreditCheck ||
           !declarations.termsAccepted) && (
-          <p className="mt-3 text-xs text-amber-600">
+          <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
             All declarations must be accepted before you can submit.
           </p>
         )}

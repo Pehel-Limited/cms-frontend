@@ -2,8 +2,6 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useSelector } from 'react-redux';
-import type { RootState } from '@/store';
 import { formatCurrency } from '@/lib/format';
 import {
   ACCOUNTS,
@@ -38,13 +36,6 @@ import {
 } from '@/services/api/application-service';
 
 /* ─── helpers ────────────────────────────────────────────────── */
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
-
 function fmtEUR(n: number): string {
   return new Intl.NumberFormat('en-IE', {
     style: 'currency',
@@ -101,7 +92,7 @@ function MiniChart({ data }: { data: number[] }) {
 }
 
 function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-slate-200 dark:bg-white/10 ${className}`} />;
+  return <div className={`skeleton ${className}`} />;
 }
 
 function QuickActionBtn({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
@@ -125,7 +116,6 @@ function QuickActionBtn({ href, icon, label }: { href: string; icon: React.React
 
 /* ─── main component ─────────────────────────────────────────── */
 export default function PortalDashboard() {
-  const user = useSelector((s: RootState) => s.auth.user);
   const [hideBalance, setHideBalance] = useState(false);
 
   const accounts = ACCOUNTS;
@@ -176,17 +166,16 @@ export default function PortalDashboard() {
           <MiniChart data={trend} />
           <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
           <div className="relative z-10 p-6 md:p-7">
-            <div className="flex items-start justify-between mb-4">
+            <div className="mb-4 flex items-start justify-between">
               <div>
-                <p className="text-sm text-white/75 font-medium">
-                  {getGreeting()}, {user?.firstName || 'there'}
-                </p>
-                <p className="text-[10px] uppercase tracking-widest text-white/50 mt-3">Total balance</p>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-white/55">Total balance</p>
+                <p className="mt-1 text-sm font-medium text-white/75">Across {accounts.length} accounts</p>
               </div>
               <button
                 onClick={() => setHideBalance(v => !v)}
-                className="mt-1 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-                aria-label="Toggle balance"
+                className="mt-1 rounded-lg bg-white/10 p-1.5 transition-colors hover:bg-white/20"
+                aria-label={hideBalance ? 'Show balances' : 'Hide balances'}
+                aria-pressed={hideBalance}
               >
                 {hideBalance ? (
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -234,10 +223,10 @@ export default function PortalDashboard() {
 
         {/* Accounts strip */}
         <div className="xl:col-span-3">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Accounts</h2>
-            <Link href="/portal/accounts" className="text-xs font-semibold text-[#7f2b7b] hover:text-[#5e1f5b] dark:text-purple-400 dark:hover:text-purple-300">
-              View all accounts →
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="section-title">Accounts</h2>
+            <Link href="/portal/accounts" className="link-arrow">
+              View all accounts <span data-arrow aria-hidden="true">→</span>
             </Link>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -307,18 +296,35 @@ export default function PortalDashboard() {
         </div>
       </div>
 
+      {/* ══ ROW 1.5 ══ At-a-glance figures ══ */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {[
+          { label: 'Money in this month', value: mask(fmtEUR(income)), tone: 'text-emerald-600 dark:text-emerald-400' },
+          { label: 'Money out this month', value: `−${mask(fmtEUR(spending))}`, tone: '' },
+          { label: 'Net position', value: `${income - spending >= 0 ? '+' : '−'}${mask(fmtEUR(Math.abs(income - spending)))}`, tone: income - spending >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400' },
+          { label: 'Active applications', value: appLoading ? '—' : String(activeApps.length), tone: '' },
+        ].map(kpi => (
+          <div key={kpi.label} className="stat-tile">
+            <p className="stat-label">{kpi.label}</p>
+            <p className={`stat-value ${kpi.tone}`} style={kpi.tone ? undefined : { color: 'var(--text-primary)' }}>
+              {kpi.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
       {/* ══ ROW 2 ══ Recent transactions | Upcoming payments | Spending overview ══ */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
         {/* Recent Transactions */}
-        <div className="rounded-2xl overflow-hidden shadow-sm" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Recent transactions</h3>
-            <Link href="/portal/transactions" className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">
-              View all →
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title">Recent transactions</h3>
+            <Link href="/portal/transactions" className="link-arrow">
+              View all <span data-arrow aria-hidden="true">→</span>
             </Link>
           </div>
-          <div className="divide-y" style={{ '--tw-divide-opacity': 1 } as React.CSSProperties}>
+          <div className="divide-token">
             {txns.map((t: Transaction) => (
               <div
                 key={t.id}
@@ -327,7 +333,10 @@ export default function PortalDashboard() {
                 <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base"
                   style={{ backgroundColor: 'var(--surface-input)' }}>
                   {t.glyph}
-                  <span className={`absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full ring-2 ring-white dark:ring-[#161c2d] text-white ${t.direction === 'IN' ? 'bg-emerald-500' : 'bg-slate-600 dark:bg-slate-700'}`}>
+                  <span
+                    className={`absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-white ring-2 ${t.direction === 'IN' ? 'bg-emerald-500' : 'bg-slate-600 dark:bg-slate-700'}`}
+                    style={{ ['--tw-ring-color' as string]: 'var(--surface-card)' }}
+                  >
                     <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                       {t.direction === 'IN'
                         ? <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m0 0l6-6m-6 6l-6-6" />
@@ -355,14 +364,14 @@ export default function PortalDashboard() {
         </div>
 
         {/* Upcoming Payments */}
-        <div className="rounded-2xl overflow-hidden shadow-sm" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Upcoming payments</h3>
-            <Link href="/portal/payments" className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">
-              View all →
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title">Upcoming payments</h3>
+            <Link href="/portal/payments" className="link-arrow">
+              View all <span data-arrow aria-hidden="true">→</span>
             </Link>
           </div>
-          <div className="divide-y">
+          <div className="divide-token">
             {scheduledPayments.map((p, i) => {
               const d = new Date(p.nextDate);
               const day = d.getDate().toString().padStart(2, '0');
@@ -395,10 +404,10 @@ export default function PortalDashboard() {
         </div>
 
         {/* Spending Overview */}
-        <div className="rounded-2xl overflow-hidden shadow-sm" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-            <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Spending overview</h3>
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>This month</span>
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title">Spending overview</h3>
+            <span className="chip">This month</span>
           </div>
           <div className="px-5 py-4">
             <div className="flex items-center gap-4">
@@ -440,38 +449,39 @@ export default function PortalDashboard() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
         {/* Pending Applications */}
-        <div className="rounded-2xl overflow-hidden shadow-sm lg:col-span-2" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
+        <div className="panel lg:col-span-2">
+          <div className="panel-header">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Loans &amp; applications</h3>
+              <h3 className="panel-title">Loans &amp; applications</h3>
               {taskCount > 0 && (
-                <span className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                <span className="badge badge-warning">
                   {taskCount} task{taskCount !== 1 ? 's' : ''}
                 </span>
               )}
             </div>
-            <Link href="/portal/applications" className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">
-              View all →
+            <Link href="/portal/applications" className="link-arrow">
+              View all <span data-arrow aria-hidden="true">→</span>
             </Link>
           </div>
           {appLoading ? (
             <div className="space-y-3 p-5">
-              {[1,2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+              {[1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
           ) : recentApps.length === 0 ? (
-            <div className="flex flex-col items-center py-10 text-center px-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl mb-3" style={{ backgroundColor: 'var(--surface-input)' }}>
-                <svg className="h-6 w-6 text-[#7f2b7b]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+            <div className="p-5">
+              <div className="empty-state">
+                <div className="empty-state-icon">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <p className="empty-state-title">No applications yet</p>
+                <p className="empty-state-text">When you apply for a loan or credit product, you&apos;ll be able to track its progress here.</p>
+                <Link href="/portal/products" className="btn btn-primary btn-sm mt-4">Explore products</Link>
               </div>
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>No active applications</p>
-              <Link href="/portal/products" className="mt-2 text-sm font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">
-                Explore products →
-              </Link>
             </div>
           ) : (
-            <div className="divide-y" style={{ '--tw-divide-opacity': 1 } as React.CSSProperties}>
+            <div className="divide-token">
               {recentApps.map(app => (
                 <Link
                   key={app.applicationId}
@@ -503,8 +513,8 @@ export default function PortalDashboard() {
               ))}
               <div className="flex items-center justify-between px-5 py-3 text-xs" style={{ borderTop: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}>
                 <span>{activeApps.length} active · {apps.length} total</span>
-                <Link href="/portal/products" className="font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">
-                  Apply for more →
+                <Link href="/portal/products" className="link-arrow">
+                  Apply for more <span data-arrow aria-hidden="true">→</span>
                 </Link>
               </div>
             </div>
@@ -514,8 +524,8 @@ export default function PortalDashboard() {
         {/* Relationship Manager + Help */}
         <div className="space-y-4">
           {/* Relationship Manager */}
-          <div className="rounded-2xl p-5 shadow-sm" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Your relationship</h3>
+          <div className="card p-5">
+            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Your relationship</h3>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-11 h-11 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
                 JC
@@ -544,15 +554,12 @@ export default function PortalDashboard() {
           </div>
 
           {/* Need help */}
-          <div className="rounded-2xl p-5 shadow-sm" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <h3 className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Need help?</h3>
-            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+          <div className="card p-5">
+            <h3 className="section-title mb-1">Need help?</h3>
+            <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
               Our support team is here to help you with anything you need.
             </p>
-            <Link
-              href="/portal/messages"
-              className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-xs font-semibold text-white bg-[#7f2b7b] hover:bg-[#6b2468] transition-colors"
-            >
+            <Link href="/portal/messages" className="btn btn-primary w-full text-xs">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>

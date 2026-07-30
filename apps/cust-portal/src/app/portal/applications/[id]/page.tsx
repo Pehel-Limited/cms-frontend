@@ -69,7 +69,7 @@ import {
 } from '@/services/api/booking-service';
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-IN', {
+  return new Date(dateStr).toLocaleDateString('en-IE', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -77,7 +77,7 @@ function formatDate(dateStr: string) {
 }
 
 function formatDateTime(dateStr: string) {
-  return new Date(dateStr).toLocaleString('en-IN', {
+  return new Date(dateStr).toLocaleString('en-IE', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -88,14 +88,8 @@ function formatDateTime(dateStr: string) {
 
 function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] || status;
-  const color = STATUS_COLORS[status] || 'bg-gray-100 text-gray-700';
-  return (
-    <span
-      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${color}`}
-    >
-      {label}
-    </span>
-  );
+  const color = STATUS_COLORS[status] || 'badge-neutral';
+  return <span className={`badge ${color}`}>{label}</span>;
 }
 
 // Terminal statuses (not in the normal flow)
@@ -159,11 +153,11 @@ export default function ApplicationDetailPage() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto">
-        <div className="h-8 w-64 bg-gray-200 rounded animate-pulse mb-6" />
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <div className="h-6 w-48 bg-gray-100 rounded animate-pulse" />
-          <div className="h-4 w-full bg-gray-100 rounded animate-pulse" />
-          <div className="h-4 w-3/4 bg-gray-100 rounded animate-pulse" />
+        <div className="skeleton h-8 w-64 mb-6" />
+        <div className="card space-y-4">
+          <div className="skeleton h-6 w-48" />
+          <div className="skeleton h-4 w-full" />
+          <div className="skeleton h-4 w-3/4" />
         </div>
       </div>
     );
@@ -174,7 +168,7 @@ export default function ApplicationDetailPage() {
       <div className="max-w-3xl mx-auto">
         <button
           onClick={() => router.push('/portal/applications')}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6"
+          className="btn btn-ghost btn-sm mb-6"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -184,11 +178,11 @@ export default function ApplicationDetailPage() {
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             />
           </svg>
-          Back to Applications
+          Back to applications
         </button>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-          <p className="text-red-600 font-medium">{error || 'Application not found'}</p>
-          <button onClick={loadApplication} className="mt-3 text-sm text-red-700 underline">
+        <div className="alert alert-error flex-col items-center text-center" role="alert">
+          <p className="font-medium">{error || 'Application not found'}</p>
+          <button onClick={loadApplication} className="btn btn-ghost btn-sm mt-1">
             Retry
           </button>
         </div>
@@ -207,31 +201,46 @@ export default function ApplicationDetailPage() {
     <div className="max-w-5xl mx-auto">
       {/* Withdraw Confirmation Dialog */}
       {showWithdrawConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-gray-900">Withdraw Application?</h3>
-            <p className="mt-2 text-sm text-gray-600">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Withdraw application"
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border p-6"
+            style={{
+              backgroundColor: 'var(--surface-card)',
+              borderColor: 'var(--surface-border)',
+              boxShadow: 'var(--shadow-lg)',
+            }}
+          >
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Withdraw application?
+            </h3>
+            <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
               This action cannot be undone. Your application will be permanently withdrawn.
             </p>
             <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="field-label" htmlFor="withdraw-reason">
                 Reason (optional)
               </label>
               <textarea
+                id="withdraw-reason"
                 value={withdrawReason}
                 onChange={e => setWithdrawReason(e.target.value)}
                 rows={2}
                 placeholder="Why are you withdrawing?"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+                className="input resize-none"
               />
             </div>
-            <div className="mt-5 flex items-center justify-end gap-3">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
               <button
                 onClick={() => {
                   setShowWithdrawConfirm(false);
                   setWithdrawReason('');
                 }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+                className="btn btn-ghost"
               >
                 Cancel
               </button>
@@ -253,9 +262,9 @@ export default function ApplicationDetailPage() {
                   }
                 }}
                 disabled={withdrawing}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                className="btn btn-danger"
               >
-                {withdrawing ? 'Withdrawing...' : 'Confirm Withdraw'}
+                {withdrawing ? 'Withdrawing...' : 'Confirm withdraw'}
               </button>
             </div>
           </div>
@@ -264,29 +273,22 @@ export default function ApplicationDetailPage() {
 
       {/* Return for corrections banner */}
       {isReturned && (
-        <div className="mb-6 bg-orange-50 border border-orange-100 rounded-3xl p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <span className="text-orange-500 text-lg">⚠</span>
-            <div>
-              <h4 className="text-sm font-semibold text-orange-800">Corrections Requested</h4>
-              <p className="mt-1 text-sm text-orange-700">
-                The bank has returned your application for corrections. Please review the requested
-                changes, update the details, and resubmit your application.
-              </p>
-            </div>
+        <div className="alert alert-warning mb-6" role="alert">
+          <span className="text-lg leading-none">⚠</span>
+          <div>
+            <h4 className="text-sm font-semibold">Corrections requested</h4>
+            <p className="mt-1 text-sm">
+              The bank has returned your application for corrections. Please review the requested
+              changes, update the details, and resubmit your application.
+            </p>
           </div>
         </div>
       )}
 
       {/* Success banner */}
       {showSuccess && (
-        <div className="mb-6 bg-green-50 border border-green-100 rounded-3xl p-5 flex items-center gap-3 shadow-sm">
-          <svg
-            className="w-5 h-5 text-green-500 shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+        <div className="alert alert-success mb-6 items-center">
+          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -294,7 +296,7 @@ export default function ApplicationDetailPage() {
               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <p className="text-sm text-green-700 font-medium">
+          <p className="text-sm font-medium">
             Application submitted successfully! Your relationship manager will review it soon.
           </p>
         </div>
@@ -303,7 +305,7 @@ export default function ApplicationDetailPage() {
       {/* Back + Header */}
       <button
         onClick={() => router.push('/portal/applications')}
-        className="mb-3 flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-slate-600"
+        className="btn btn-ghost btn-sm mb-3"
       >
         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -356,7 +358,7 @@ export default function ApplicationDetailPage() {
                 onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
                 className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#7f2b7b] shadow-sm transition-transform hover:scale-[1.02]"
               >
-                Continue Editing
+                Continue editing
               </button>
             )}
             {isReturned && (
@@ -364,7 +366,7 @@ export default function ApplicationDetailPage() {
                 onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
                 className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-orange-600 shadow-sm transition-transform hover:scale-[1.02]"
               >
-                Review &amp; Resubmit
+                Review &amp; resubmit
               </button>
             )}
             {canWithdraw && (
@@ -385,37 +387,49 @@ export default function ApplicationDetailPage() {
           className={`rounded-3xl border p-6 mb-6 shadow-sm ${
             statusInfo.terminal
               ? isDeclined
-                ? 'bg-red-50 border-red-100'
-                : 'bg-slate-50 border-slate-100'
+                ? 'border-red-200 bg-red-50 dark:border-red-500/25 dark:bg-red-500/10'
+                : ''
               : 'mesh-soft border-fuchsia-100/60'
           }`}
+          style={
+            statusInfo.terminal && !isDeclined
+              ? {
+                  backgroundColor: 'var(--surface-input)',
+                  borderColor: 'var(--surface-border)',
+                }
+              : undefined
+          }
         >
           <h3
             className={`text-lg font-semibold ${
-              isDeclined
-                ? 'text-red-800'
-                : statusInfo.terminal
-                  ? 'text-gray-800'
-                  : 'text-primary-800'
+              isDeclined ? 'text-red-800 dark:text-red-200' : ''
             }`}
+            style={
+              isDeclined
+                ? undefined
+                : statusInfo.terminal
+                  ? { color: 'var(--text-primary)' }
+                  : { color: 'var(--brand-strong)' }
+            }
           >
             {statusInfo.headline}
           </h3>
           {statusInfo.detail && (
             <p
-              className={`mt-1 text-sm ${
+              className={`mt-1 text-sm ${isDeclined ? 'text-red-600 dark:text-red-300' : ''}`}
+              style={
                 isDeclined
-                  ? 'text-red-600'
+                  ? undefined
                   : statusInfo.terminal
-                    ? 'text-gray-600'
-                    : 'text-primary-600'
-              }`}
+                    ? { color: 'var(--text-secondary)' }
+                    : { color: 'var(--brand)' }
+              }
             >
               {statusInfo.detail}
             </p>
           )}
           {statusInfo.lastUpdated && (
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
               Last updated: {formatDateTime(statusInfo.lastUpdated)}
             </p>
           )}
@@ -424,13 +438,18 @@ export default function ApplicationDetailPage() {
 
       {/* Stage Stepper */}
       {statusInfo && !statusInfo.terminal && (
-        <div className="bg-white rounded-3xl border border-slate-100 p-6 mb-6 shadow-premium">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-slate-700">Application Progress</h3>
-            <span className="text-sm font-bold text-[#7f2b7b]">{statusInfo.progress}%</span>
+        <div className="card mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h3 className="section-title">Application progress</h3>
+            <span className="text-sm font-bold" style={{ color: 'var(--brand-on-soft)' }}>
+              {statusInfo.progress}%
+            </span>
           </div>
           {/* Progress bar */}
-          <div className="w-full h-2 bg-slate-100 rounded-full mb-6 overflow-hidden">
+          <div
+            className="w-full h-2 rounded-full mb-6 overflow-hidden"
+            style={{ backgroundColor: 'var(--surface-input)' }}
+          >
             <div
               className="h-full rounded-full transition-all duration-700"
               style={{
@@ -439,7 +458,9 @@ export default function ApplicationDetailPage() {
               }}
             />
           </div>
-          <StageStepper currentStage={statusInfo.stage as CustomerStage} />
+          <div className="overflow-x-auto">
+            <StageStepper currentStage={statusInfo.stage as CustomerStage} />
+          </div>
         </div>
       )}
 
@@ -452,51 +473,70 @@ export default function ApplicationDetailPage() {
             app.status === 'KYC_REJECTED' ||
             app.status === 'CREDIT_DECLINED' ||
             app.status === 'UNDERWRITING_DECLINED'
-              ? 'bg-red-50 border-red-200'
-              : 'bg-gray-50 border-gray-200'
+              ? 'border-red-200 bg-red-50 dark:border-red-500/25 dark:bg-red-500/10'
+              : ''
           }`}
+          style={
+            app.status === 'DECLINED' ||
+            app.status === 'CANCELLED' ||
+            app.status === 'KYC_REJECTED' ||
+            app.status === 'CREDIT_DECLINED' ||
+            app.status === 'UNDERWRITING_DECLINED'
+              ? undefined
+              : { backgroundColor: 'var(--surface-input)', borderColor: 'var(--surface-border)' }
+          }
         >
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <StatusBadge status={app.status} />
-            {app.rejectionReason && <p className="text-sm text-gray-600">{app.rejectionReason}</p>}
+            {app.rejectionReason && (
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                {app.rejectionReason}
+              </p>
+            )}
           </div>
         </div>
       )}
 
       {/* Approved terms */}
       {app.approvedAmount && (
-        <div className="bg-green-50 border border-green-100 rounded-3xl p-6 mb-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-green-800 mb-3">Approved Terms</h3>
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 mb-6 shadow-sm dark:border-emerald-500/25 dark:bg-emerald-500/10">
+          <h3 className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-3">
+            Approved terms
+          </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-green-600">Amount</p>
-              <p className="text-lg font-bold text-green-800">
+              <p className="text-xs text-emerald-600 dark:text-emerald-300">Amount</p>
+              <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
                 {formatCurrency(app.approvedAmount)}
               </p>
             </div>
             {app.approvedTermMonths && (
               <div>
-                <p className="text-xs text-green-600">Term</p>
-                <p className="text-lg font-bold text-green-800">{app.approvedTermMonths} months</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-300">Term</p>
+                <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
+                  {app.approvedTermMonths} months
+                </p>
               </div>
             )}
             {app.approvedInterestRate && (
               <div>
-                <p className="text-xs text-green-600">Interest Rate</p>
-                <p className="text-lg font-bold text-green-800">{app.approvedInterestRate}% p.a.</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-300">Interest rate</p>
+                <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
+                  {app.approvedInterestRate}% p.a.
+                </p>
               </div>
             )}
             {app.approvedMonthlyPayment && (
               <div>
-                <p className="text-xs text-green-600">Monthly EMI</p>
-                <p className="text-lg font-bold text-green-800">
+                <p className="text-xs text-emerald-600 dark:text-emerald-300">Monthly EMI</p>
+                <p className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
                   {formatCurrency(app.approvedMonthlyPayment)}
                 </p>
               </div>
             )}
           </div>
           {app.conditionalApprovalConditions && (
-            <div className="mt-3 text-sm text-green-700 bg-green-100 rounded-lg p-3">
+            <div className="mt-3 text-sm text-emerald-700 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-500/15 rounded-lg p-3">
               <span className="font-medium">Conditions:</span> {app.conditionalApprovalConditions}
             </div>
           )}
@@ -505,9 +545,11 @@ export default function ApplicationDetailPage() {
 
       {/* Offer */}
       {app.offerValidUntil && !app.offerAccepted && (
-        <div className="bg-amber-50 border border-amber-100 rounded-3xl p-6 mb-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-amber-800 mb-1">Offer Available</h3>
-          <p className="text-sm text-amber-700">
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 mb-6 shadow-sm dark:border-amber-500/25 dark:bg-amber-500/10">
+          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">
+            Offer available
+          </h3>
+          <p className="text-sm text-amber-700 dark:text-amber-200">
             Valid until <span className="font-medium">{formatDate(app.offerValidUntil)}</span>.
             Please accept or contact your relationship manager.
           </p>
@@ -517,11 +559,11 @@ export default function ApplicationDetailPage() {
       {/* Detail Sections */}
       <div className="space-y-5">
         {/* Loan Request */}
-        <DetailSection title="Loan Details">
-          <DetailRow label="Requested Amount" value={formatCurrency(app.requestedAmount)} />
+        <DetailSection title="Loan details">
+          <DetailRow label="Requested amount" value={formatCurrency(app.requestedAmount)} />
           <DetailRow label="Term" value={`${app.requestedTermMonths} months`} />
           {app.requestedInterestRate && (
-            <DetailRow label="Requested Rate" value={`${app.requestedInterestRate}% p.a.`} />
+            <DetailRow label="Requested rate" value={`${app.requestedInterestRate}% p.a.`} />
           )}
           <DetailRow
             label="Purpose"
@@ -534,21 +576,21 @@ export default function ApplicationDetailPage() {
 
         {/* Financial */}
         {(app.statedAnnualIncome || app.statedMonthlyIncome || app.statedMonthlyExpenses) && (
-          <DetailSection title="Financial Information">
+          <DetailSection title="Financial information">
             {app.statedAnnualIncome && (
-              <DetailRow label="Annual Income" value={formatCurrency(app.statedAnnualIncome)} />
+              <DetailRow label="Annual income" value={formatCurrency(app.statedAnnualIncome)} />
             )}
             {app.statedMonthlyIncome && (
-              <DetailRow label="Monthly Income" value={formatCurrency(app.statedMonthlyIncome)} />
+              <DetailRow label="Monthly income" value={formatCurrency(app.statedMonthlyIncome)} />
             )}
             {app.statedMonthlyExpenses && (
               <DetailRow
-                label="Monthly Expenses"
+                label="Monthly expenses"
                 value={formatCurrency(app.statedMonthlyExpenses)}
               />
             )}
             {app.debtToIncomeRatio != null && (
-              <DetailRow label="Debt-to-Income" value={`${app.debtToIncomeRatio}%`} />
+              <DetailRow label="Debt-to-income" value={`${app.debtToIncomeRatio}%`} />
             )}
           </DetailSection>
         )}
@@ -578,7 +620,7 @@ export default function ApplicationDetailPage() {
             )}
             {app.amlCheckCompleted != null && (
               <DetailRow
-                label="AML Check"
+                label="AML check"
                 value={app.amlCheckCompleted ? 'Completed' : 'Pending'}
               />
             )}
@@ -613,11 +655,13 @@ export default function ApplicationDetailPage() {
 
         {/* Timeline Events */}
         {statusInfo && statusInfo.timeline.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2 mb-4">
-              Activity Timeline
-            </h3>
-            <EventTimeline events={statusInfo.timeline} />
+          <div className="panel">
+            <div className="panel-header">
+              <h3 className="panel-title">Activity timeline</h3>
+            </div>
+            <div className="panel-body">
+              <EventTimeline events={statusInfo.timeline} />
+            </div>
           </div>
         )}
 
@@ -629,17 +673,17 @@ export default function ApplicationDetailPage() {
               <DetailRow label="Submitted" value={formatDateTime(app.submittedAt)} />
             )}
             {app.reviewStartedAt && (
-              <DetailRow label="Review Started" value={formatDateTime(app.reviewStartedAt)} />
+              <DetailRow label="Review started" value={formatDateTime(app.reviewStartedAt)} />
             )}
             {app.decisionDueDate && (
-              <DetailRow label="Decision Due" value={formatDate(app.decisionDueDate)} />
+              <DetailRow label="Decision due" value={formatDate(app.decisionDueDate)} />
             )}
             {app.decisionMadeAt && (
-              <DetailRow label="Decision Made" value={formatDateTime(app.decisionMadeAt)} />
+              <DetailRow label="Decision made" value={formatDateTime(app.decisionMadeAt)} />
             )}
-            <DetailRow label="Last Updated" value={formatDateTime(app.updatedAt)} />
+            <DetailRow label="Last updated" value={formatDateTime(app.updatedAt)} />
             {app.daysInCurrentStatus != null && (
-              <DetailRow label="Days in Status" value={`${app.daysInCurrentStatus}`} />
+              <DetailRow label="Days in status" value={`${app.daysInCurrentStatus}`} />
             )}
             {app.slaBreached && (
               <DetailRow label="SLA" value="Breached" className="text-red-600 font-medium" />
@@ -716,129 +760,162 @@ function DocumentsSection({ applicationId }: { applicationId: string }) {
   );
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-4">
-        <h3 className="text-sm font-semibold text-gray-700">Documents</h3>
-        <button
-          onClick={() => setShowUpload(!showUpload)}
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-        >
+    <div className="panel">
+      <div className="panel-header">
+        <h3 className="panel-title">Documents</h3>
+        <button onClick={() => setShowUpload(!showUpload)} className="btn btn-ghost btn-sm">
           {showUpload ? 'Cancel' : '+ Upload'}
         </button>
       </div>
 
-      {/* Summary counters */}
-      {summary && (
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="rounded-lg bg-gray-50 p-3 text-center">
-            <p className="text-lg font-bold text-gray-900">{summary.totalDocuments}</p>
-            <p className="text-[10px] text-gray-500">Uploaded</p>
+      <div className="panel-body">
+        {/* Summary counters */}
+        {summary && (
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div
+              className="rounded-lg p-3 text-center"
+              style={{ backgroundColor: 'var(--surface-input)' }}
+            >
+              <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                {summary.totalDocuments}
+              </p>
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                Uploaded
+              </p>
+            </div>
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-500/15 p-3 text-center">
+              <p className="text-lg font-bold text-amber-700 dark:text-amber-300">
+                {summary.pendingRequiredRequests}
+              </p>
+              <p className="text-[10px] text-amber-600 dark:text-amber-300">Pending</p>
+            </div>
+            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/15 p-3 text-center">
+              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                {summary.allRequiredFulfilled ? '✓' : '—'}
+              </p>
+              <p className="text-[10px] text-emerald-600 dark:text-emerald-300">All received</p>
+            </div>
           </div>
-          <div className="rounded-lg bg-amber-50 p-3 text-center">
-            <p className="text-lg font-bold text-amber-700">{summary.pendingRequiredRequests}</p>
-            <p className="text-[10px] text-amber-600">Pending</p>
+        )}
+
+        {/* Upload form (inline) */}
+        {showUpload && (
+          <div
+            className="rounded-lg border p-4 mb-4 space-y-3"
+            style={{
+              borderColor: 'var(--surface-border)',
+              backgroundColor: 'var(--surface-input)',
+            }}
+          >
+            <DocUploadForm requestId={undefined} uploading={uploading} onUpload={handleUpload} />
           </div>
-          <div className="rounded-lg bg-green-50 p-3 text-center">
-            <p className="text-lg font-bold text-green-700">
-              {summary.allRequiredFulfilled ? '✓' : '—'}
+        )}
+
+        {/* Pending requests */}
+        {pendingRequests.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-2">
+              Requested by your RM
             </p>
-            <p className="text-[10px] text-green-600">All Received</p>
-          </div>
-        </div>
-      )}
-
-      {/* Upload form (inline) */}
-      {showUpload && (
-        <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4 mb-4 space-y-3">
-          <DocUploadForm requestId={undefined} uploading={uploading} onUpload={handleUpload} />
-        </div>
-      )}
-
-      {/* Pending requests */}
-      {pendingRequests.length > 0 && (
-        <div className="mb-4">
-          <p className="text-xs font-semibold text-amber-700 mb-2">Requested by your RM</p>
-          <div className="space-y-2">
-            {pendingRequests.map(req => (
-              <div
-                key={req.id}
-                className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3"
-              >
-                <span className="text-lg">{getCategoryIcon(req.category)}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{req.title}</p>
-                  {req.description && (
-                    <p className="text-xs text-gray-500 mt-0.5">{req.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${REQUEST_STATUS_COLORS[req.status] || 'bg-gray-100 text-gray-700'}`}
-                    >
-                      {REQUEST_STATUS_LABELS[req.status] || req.status}
-                    </span>
-                    {req.dueDate && (
-                      <span className="text-[10px] text-gray-400">
-                        Due{' '}
-                        {new Date(req.dueDate).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                        })}
-                      </span>
+            <div className="space-y-2">
+              {pendingRequests.map(req => (
+                <div
+                  key={req.id}
+                  className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/25 dark:bg-amber-500/10"
+                >
+                  <span className="text-lg">{getCategoryIcon(req.category)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {req.title}
+                    </p>
+                    {req.description && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        {req.description}
+                      </p>
                     )}
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span
+                        className={`badge !px-2 !py-0.5 !text-[10px] ${REQUEST_STATUS_COLORS[req.status] || 'badge-neutral'}`}
+                      >
+                        {REQUEST_STATUS_LABELS[req.status] || req.status}
+                      </span>
+                      {req.dueDate && (
+                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                          Due{' '}
+                          {new Date(req.dueDate).toLocaleDateString('en-IE', {
+                            day: '2-digit',
+                            month: 'short',
+                          })}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {req.status === 'PENDING' && (
-                  <button
-                    onClick={() => {
-                      setShowUpload(true);
-                      // Scroll into the upload form would be nice, but not critical
-                    }}
-                    className="shrink-0 rounded bg-indigo-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-700"
-                  >
-                    Upload
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Document list */}
-      {loading ? (
-        <div className="flex justify-center py-6">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-        </div>
-      ) : documents.length === 0 && pendingRequests.length === 0 ? (
-        <p className="text-center text-sm text-gray-400 py-6">No documents yet.</p>
-      ) : documents.length > 0 ? (
-        <div className="space-y-2">
-          {documents.map(doc => {
-            const statusColor =
-              UPLOAD_STATUS_COLORS[doc.uploadStatus] || 'bg-gray-100 text-gray-700';
-            return (
-              <div
-                key={doc.id}
-                className="flex items-start gap-3 rounded-lg border border-gray-100 p-3"
-              >
-                <span className="text-lg">{getCategoryIcon(doc.category)}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{doc.fileName}</p>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-gray-500">
-                    <span>{CATEGORY_LABELS[doc.category] || doc.category}</span>
-                    {doc.fileSizeBytes && <span>{formatFileSize(doc.fileSizeBytes)}</span>}
-                    <span
-                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 font-medium ${statusColor}`}
+                  {req.status === 'PENDING' && (
+                    <button
+                      onClick={() => {
+                        setShowUpload(true);
+                        // Scroll into the upload form would be nice, but not critical
+                      }}
+                      className="btn btn-primary btn-sm shrink-0"
                     >
-                      {UPLOAD_STATUS_LABELS[doc.uploadStatus] || doc.uploadStatus}
-                    </span>
+                      Upload
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Document list */}
+        {loading ? (
+          <div className="flex justify-center py-6">
+            <span
+              className="spinner h-5 w-5 border-2"
+              style={{ color: 'var(--brand)' }}
+              role="status"
+              aria-label="Loading documents"
+            />
+          </div>
+        ) : documents.length === 0 && pendingRequests.length === 0 ? (
+          <p className="text-center text-sm py-6" style={{ color: 'var(--text-muted)' }}>
+            No documents yet.
+          </p>
+        ) : documents.length > 0 ? (
+          <div className="space-y-2">
+            {documents.map(doc => {
+              const statusColor = UPLOAD_STATUS_COLORS[doc.uploadStatus] || 'badge-neutral';
+              return (
+                <div
+                  key={doc.id}
+                  className="flex items-start gap-3 rounded-lg border p-3"
+                  style={{ borderColor: 'var(--surface-border)' }}
+                >
+                  <span className="text-lg">{getCategoryIcon(doc.category)}</span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="text-sm font-medium truncate"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      {doc.fileName}
+                    </p>
+                    <div
+                      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[10px]"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      <span>{CATEGORY_LABELS[doc.category] || doc.category}</span>
+                      {doc.fileSizeBytes && <span>{formatFileSize(doc.fileSizeBytes)}</span>}
+                      <span className={`badge !px-1.5 !py-0.5 !text-[10px] ${statusColor}`}>
+                        {UPLOAD_STATUS_LABELS[doc.uploadStatus] || doc.uploadStatus}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -858,13 +935,16 @@ function DocUploadForm({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+          <label className="field-label" htmlFor="doc-category">
+            Category
+          </label>
           <select
+            id="doc-category"
             value={category}
             onChange={e => setCategory(e.target.value as DocumentCategory)}
-            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-indigo-500 focus:ring-indigo-500"
+            className="select"
           >
             {DOC_CATEGORIES.map(c => (
               <option key={c} value={c}>
@@ -874,23 +954,29 @@ function DocUploadForm({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Document Name</label>
+          <label className="field-label" htmlFor="doc-name">
+            Document name
+          </label>
           <input
+            id="doc-name"
             type="text"
             value={fileName}
             onChange={e => setFileName(e.target.value)}
             placeholder="e.g. Passport.pdf"
-            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-indigo-500 focus:ring-indigo-500"
+            className="input"
           />
         </div>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Notes (optional)</label>
+        <label className="field-label" htmlFor="doc-notes">
+          Notes (optional)
+        </label>
         <input
+          id="doc-notes"
           type="text"
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-indigo-500 focus:ring-indigo-500"
+          className="input"
           placeholder="Additional information…"
         />
       </div>
@@ -906,7 +992,7 @@ function DocUploadForm({
             });
           }}
           disabled={!fileName.trim() || uploading}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+          className="btn btn-primary btn-sm"
         >
           {uploading ? 'Uploading…' : 'Upload'}
         </button>
@@ -1036,19 +1122,20 @@ function OfferSection({
 
   const statusBadge = (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${OFFER_STATUS_COLORS[offer.status as OfferStatus] ?? 'bg-gray-100 text-gray-700'}`}
+      className={`badge ${OFFER_STATUS_COLORS[offer.status as OfferStatus] ?? 'badge-neutral'}`}
     >
       {OFFER_STATUS_LABELS[offer.status as OfferStatus] ?? offer.status}
     </span>
   );
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="panel">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
-        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+      <div className="panel-header flex-wrap">
+        <h3 className="panel-title flex items-center gap-2">
           <svg
-            className="w-4 h-4 text-blue-500"
+            className="w-4 h-4"
+            style={{ color: 'var(--brand)' }}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -1060,13 +1147,17 @@ function OfferSection({
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
             />
           </svg>
-          {productName ? productName : 'Loan'} Offer
-          {offer.version > 1 && <span className="text-xs text-gray-400">v{offer.version}</span>}
+          {productName ? productName : 'Loan'} offer
+          {offer.version > 1 && (
+            <span className="text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+              v{offer.version}
+            </span>
+          )}
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {expiryText && (
             <span
-              className={`text-xs px-2 py-0.5 rounded-full ${expiryUrgent ? 'bg-red-50 text-red-600 font-medium' : 'bg-gray-50 text-gray-500'}`}
+              className={`text-xs px-2 py-0.5 rounded-full ${expiryUrgent ? 'bg-red-50 text-red-600 font-medium dark:bg-red-500/15 dark:text-red-300' : 'chip'}`}
             >
               {expiryUrgent ? '⏰ ' : '🕐 '}
               {expiryText}
@@ -1076,12 +1167,15 @@ function OfferSection({
         </div>
       </div>
 
+      <div className="panel-body">
       {/* Offer Terms Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Approved Amount</p>
-          <p className="text-lg font-semibold text-gray-900">
-            {new Intl.NumberFormat('en-IN', {
+          <p className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>
+            Approved amount
+          </p>
+          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {new Intl.NumberFormat('en-IE', {
               style: 'currency',
               currency: offer.currency || 'EUR',
               maximumFractionDigits: 0,
@@ -1089,21 +1183,31 @@ function OfferSection({
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Interest Rate</p>
-          <p className="text-lg font-semibold text-gray-900">
+          <p className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>
+            Interest rate
+          </p>
+          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
             {offer.interestRate}%{' '}
-            <span className="text-xs font-normal text-gray-400">{offer.rateType}</span>
+            <span className="text-xs font-normal" style={{ color: 'var(--text-muted)' }}>
+              {offer.rateType}
+            </span>
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Term</p>
-          <p className="text-lg font-semibold text-gray-900">{offer.termMonths} months</p>
+          <p className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>
+            Term
+          </p>
+          <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {offer.termMonths} months
+          </p>
         </div>
         {offer.repaymentEstimate && (
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">Est. Monthly Payment</p>
-            <p className="text-lg font-semibold text-emerald-600">
-              {new Intl.NumberFormat('en-IN', {
+            <p className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>
+              Est. monthly payment
+            </p>
+            <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-300">
+              {new Intl.NumberFormat('en-IE', {
                 style: 'currency',
                 currency: offer.currency || 'EUR',
                 maximumFractionDigits: 0,
@@ -1113,13 +1217,22 @@ function OfferSection({
         )}
         {offer.apr && (
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">APR</p>
-            <p className="text-lg font-semibold text-gray-900">{offer.apr}%</p>
+            <p className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>
+              APR
+            </p>
+            <p className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {offer.apr}%
+            </p>
           </div>
         )}
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Repayment</p>
-          <p className="text-sm font-medium text-gray-700 capitalize">
+          <p className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>
+            Repayment
+          </p>
+          <p
+            className="text-sm font-medium capitalize"
+            style={{ color: 'var(--text-secondary)' }}
+          >
             {(offer.repaymentFrequency || 'MONTHLY').toLowerCase()}
           </p>
         </div>
@@ -1127,26 +1240,36 @@ function OfferSection({
 
       {/* Conditions */}
       {conditions.length > 0 && (
-        <div className="mb-4 border-t border-gray-100 pt-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        <div
+          className="mb-4 border-t pt-3"
+          style={{ borderColor: 'var(--surface-border)' }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-wide mb-2"
+            style={{ color: 'var(--text-muted)' }}
+          >
             Conditions
           </p>
           <ul className="space-y-1.5">
             {conditions.map(c => (
               <li key={c.id} className="flex items-start gap-2 text-sm">
                 {c.status === 'SATISFIED' ? (
-                  <span className="text-green-500 mt-0.5">✓</span>
+                  <span className="text-emerald-500 mt-0.5">✓</span>
                 ) : c.status === 'WAIVED' ? (
-                  <span className="text-blue-500 mt-0.5">~</span>
+                  <span className="text-sky-500 mt-0.5">~</span>
                 ) : (
                   <span className="text-amber-500 mt-0.5">○</span>
                 )}
                 <span
                   className={
-                    c.status === 'SATISFIED' || c.status === 'WAIVED'
-                      ? 'text-gray-400 line-through'
-                      : 'text-gray-700'
+                    c.status === 'SATISFIED' || c.status === 'WAIVED' ? 'line-through' : ''
                   }
+                  style={{
+                    color:
+                      c.status === 'SATISFIED' || c.status === 'WAIVED'
+                        ? 'var(--text-muted)'
+                        : 'var(--text-secondary)',
+                  }}
                 >
                   {c.description}
                   {c.isMandatory && c.status === 'PENDING' && (
@@ -1161,25 +1284,24 @@ function OfferSection({
 
       {/* Action Buttons — only for ISSUED offers */}
       {isIssued && !showReject && !showCounter && (
-        <div className="flex gap-3 border-t border-gray-100 pt-4">
-          <button
-            onClick={handleAccept}
-            disabled={acting}
-            className="flex-1 bg-green-600 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
-          >
-            {acting ? 'Processing…' : 'Accept Offer'}
+        <div
+          className="flex flex-wrap gap-3 border-t pt-4"
+          style={{ borderColor: 'var(--surface-border)' }}
+        >
+          <button onClick={handleAccept} disabled={acting} className="btn btn-primary flex-1">
+            {acting ? 'Processing…' : 'Accept offer'}
           </button>
           <button
             onClick={() => setShowCounter(true)}
             disabled={acting}
-            className="flex-1 bg-white text-purple-700 text-sm font-medium py-2.5 rounded-lg border border-purple-200 hover:bg-purple-50 disabled:opacity-50 transition-colors"
+            className="btn btn-secondary flex-1"
           >
-            Counter Offer
+            Counter offer
           </button>
           <button
             onClick={() => setShowReject(true)}
             disabled={acting}
-            className="px-4 bg-white text-red-600 text-sm font-medium py-2.5 rounded-lg border border-red-200 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            className="btn btn-outline text-red-600 dark:text-red-300"
           >
             Decline
           </button>
@@ -1188,29 +1310,31 @@ function OfferSection({
 
       {/* Reject Form */}
       {showReject && (
-        <div className="border-t border-gray-100 pt-4 space-y-3">
-          <p className="text-sm font-medium text-gray-700">Why are you declining this offer?</p>
+        <div
+          className="border-t pt-4 space-y-3"
+          style={{ borderColor: 'var(--surface-border)' }}
+        >
+          <label className="field-label" htmlFor="offer-reject-reason">
+            Why are you declining this offer?
+          </label>
           <textarea
+            id="offer-reject-reason"
             value={rejectReason}
             onChange={e => setRejectReason(e.target.value)}
             placeholder="Optional: tell us why (this helps us improve future offers)"
             rows={2}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-200 focus:border-red-400 outline-none"
+            className="input resize-none"
           />
-          <div className="flex gap-2">
-            <button
-              onClick={handleReject}
-              disabled={acting}
-              className="bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-            >
-              {acting ? 'Processing…' : 'Confirm Decline'}
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleReject} disabled={acting} className="btn btn-danger btn-sm">
+              {acting ? 'Processing…' : 'Confirm decline'}
             </button>
             <button
               onClick={() => {
                 setShowReject(false);
                 setRejectReason('');
               }}
-              className="text-sm text-gray-500 hover:text-gray-700 px-3"
+              className="btn btn-ghost btn-sm"
             >
               Cancel
             </button>
@@ -1220,59 +1344,74 @@ function OfferSection({
 
       {/* Counter Offer Form */}
       {showCounter && (
-        <div className="border-t border-gray-100 pt-4 space-y-3">
-          <p className="text-sm font-medium text-gray-700">Propose your terms</p>
-          <p className="text-xs text-gray-400">Leave blank to keep the original value</p>
+        <div
+          className="border-t pt-4 space-y-3"
+          style={{ borderColor: 'var(--surface-border)' }}
+        >
+          <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+            Propose your terms
+          </p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Leave blank to keep the original value
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Amount ({offer.currency})</label>
+              <label className="field-label" htmlFor="counter-amount">
+                Amount ({offer.currency})
+              </label>
               <input
+                id="counter-amount"
                 type="number"
                 value={counterAmount}
                 onChange={e => setCounterAmount(e.target.value)}
                 placeholder={String(offer.amount)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Term (months)</label>
+              <label className="field-label" htmlFor="counter-term">
+                Term (months)
+              </label>
               <input
+                id="counter-term"
                 type="number"
                 value={counterTerm}
                 onChange={e => setCounterTerm(e.target.value)}
                 placeholder={String(offer.termMonths)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Rate (%)</label>
+              <label className="field-label" htmlFor="counter-rate">
+                Rate (%)
+              </label>
               <input
+                id="counter-rate"
                 type="number"
                 step="0.01"
                 value={counterRate}
                 onChange={e => setCounterRate(e.target.value)}
                 placeholder={String(offer.interestRate)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+                className="input"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Notes</label>
+            <label className="field-label" htmlFor="counter-notes">
+              Notes
+            </label>
             <textarea
+              id="counter-notes"
               value={counterNotes}
               onChange={e => setCounterNotes(e.target.value)}
               placeholder="Explain your proposal…"
               rows={2}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 outline-none"
+              className="input resize-none"
             />
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleCounter}
-              disabled={acting}
-              className="bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
-            >
-              {acting ? 'Submitting…' : 'Submit Counter Offer'}
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleCounter} disabled={acting} className="btn btn-primary btn-sm">
+              {acting ? 'Submitting…' : 'Submit counter offer'}
             </button>
             <button
               onClick={() => {
@@ -1282,7 +1421,7 @@ function OfferSection({
                 setCounterRate('');
                 setCounterNotes('');
               }}
-              className="text-sm text-gray-500 hover:text-gray-700 px-3"
+              className="btn btn-ghost btn-sm"
             >
               Cancel
             </button>
@@ -1292,33 +1431,34 @@ function OfferSection({
 
       {/* Terminal state messages */}
       {offer.status === 'ACCEPTED' && (
-        <div className="border-t border-gray-100 pt-3 mt-2">
-          <p className="text-sm text-green-600 font-medium">
+        <div className="border-t pt-3 mt-2" style={{ borderColor: 'var(--surface-border)' }}>
+          <p className="text-sm text-emerald-600 dark:text-emerald-300 font-medium">
             ✓ You accepted this offer{offer.acceptedAt ? ` on ${formatDate(offer.acceptedAt)}` : ''}
           </p>
         </div>
       )}
       {offer.status === 'REJECTED' && (
-        <div className="border-t border-gray-100 pt-3 mt-2">
-          <p className="text-sm text-red-500">
+        <div className="border-t pt-3 mt-2" style={{ borderColor: 'var(--surface-border)' }}>
+          <p className="text-sm text-red-500 dark:text-red-300">
             You declined this offer{offer.voidReason ? `: ${offer.voidReason}` : ''}
           </p>
         </div>
       )}
       {offer.status === 'EXPIRED' && (
-        <div className="border-t border-gray-100 pt-3 mt-2">
-          <p className="text-sm text-amber-600">
+        <div className="border-t pt-3 mt-2" style={{ borderColor: 'var(--surface-border)' }}>
+          <p className="text-sm text-amber-600 dark:text-amber-300">
             This offer has expired. Contact your relationship manager for a new offer.
           </p>
         </div>
       )}
       {offer.status === 'COUNTERED' && (
-        <div className="border-t border-gray-100 pt-3 mt-2">
-          <p className="text-sm text-purple-600">
+        <div className="border-t pt-3 mt-2" style={{ borderColor: 'var(--surface-border)' }}>
+          <p className="text-sm" style={{ color: 'var(--brand-on-soft)' }}>
             Your counter-offer has been submitted. Your RM will review and respond.
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -1397,8 +1537,8 @@ function ESignSection({
 
   const statusBadge = (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        ESIGN_STATUS_COLORS[overallStatus as EsignOverallStatus] ?? 'bg-gray-100 text-gray-700'
+      className={`badge ${
+        ESIGN_STATUS_COLORS[overallStatus as EsignOverallStatus] ?? 'badge-neutral'
       }`}
     >
       {ESIGN_STATUS_LABELS[overallStatus as EsignOverallStatus] ?? overallStatus}
@@ -1409,12 +1549,13 @@ function ESignSection({
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="panel">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
-        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+      <div className="panel-header flex-wrap">
+        <h3 className="panel-title flex items-center gap-2">
           <svg
-            className="w-4 h-4 text-indigo-500"
+            className="w-4 h-4"
+            style={{ color: 'var(--brand)' }}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -1426,26 +1567,36 @@ function ESignSection({
               d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
             />
           </svg>
-          E-Signature
+          E-signature
         </h3>
         {statusBadge}
       </div>
 
+      <div className="panel-body">
       {/* Progress Bar (multi-signatory business) */}
       {isBusiness && totalCount > 1 && (
         <div className="mb-4">
-          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-            <span>Signers Progress</span>
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 text-xs mb-1"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <span>Signers progress</span>
             <span>
               {completedCount} of {totalCount} signed
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2.5">
+          <div
+            className="w-full rounded-full h-2.5"
+            style={{ backgroundColor: 'var(--surface-input)' }}
+          >
             <div
               className={`h-2.5 rounded-full transition-all duration-500 ${
-                isComplete ? 'bg-green-500' : 'bg-indigo-500'
+                isComplete ? 'bg-emerald-500' : ''
               }`}
-              style={{ width: `${progressPct}%` }}
+              style={{
+                width: `${progressPct}%`,
+                backgroundColor: isComplete ? undefined : 'var(--brand)',
+              }}
             />
           </div>
         </div>
@@ -1457,26 +1608,34 @@ function ESignSection({
           {signers.map(s => (
             <div
               key={s.id}
-              className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2"
+              style={{ backgroundColor: 'var(--surface-input)' }}
             >
               <div className="flex items-center gap-2">
                 {s.status === 'COMPLETED' ? (
-                  <span className="text-green-500 text-sm">✓</span>
+                  <span className="text-emerald-500 text-sm">✓</span>
                 ) : s.status === 'DECLINED' ? (
                   <span className="text-red-500 text-sm">✗</span>
                 ) : (
-                  <span className="text-gray-300 text-sm">○</span>
+                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    ○
+                  </span>
                 )}
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{s.name}</p>
-                  <p className="text-xs text-gray-400">{s.email}</p>
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {s.name}
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {s.email}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <span
                   className={`text-xs font-medium capitalize ${
-                    SIGNER_STATUS_COLORS[s.status] ?? 'text-gray-400'
+                    SIGNER_STATUS_COLORS[s.status] ?? ''
                   }`}
+                  style={SIGNER_STATUS_COLORS[s.status] ? undefined : { color: 'var(--text-muted)' }}
                 >
                   {s.status === 'COMPLETED'
                     ? 'Signed'
@@ -1490,8 +1649,9 @@ function ESignSection({
                 {(s.status === 'SENT' || s.status === 'DELIVERED') && (
                   <button
                     onClick={() => handleSimulateComplete(s.envelopeId)}
-                    className="text-xs text-indigo-500 hover:underline ml-1"
+                    className="btn btn-ghost btn-sm"
                     title="Simulate completion (dev)"
+                    aria-label="Simulate signature completion"
                   >
                     sim✓
                   </button>
@@ -1507,39 +1667,25 @@ function ESignSection({
         <div>
           {signingUrl ? (
             <div className="space-y-2">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                 Your signing session is ready. Click below to review and sign the agreement.
               </p>
               <button
                 onClick={() => router.push(signingUrl)}
-                className="block w-full text-center bg-indigo-600 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-indigo-700 transition-colors"
+                className="btn btn-primary w-full"
               >
-                Open Signing Ceremony
+                Open signing ceremony
               </button>
             </div>
           ) : (
             <button
               onClick={handleStartSigning}
               disabled={starting}
-              className="w-full bg-indigo-600 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              className="btn btn-primary w-full"
             >
               {starting ? (
                 <>
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
+                  <span className="spinner h-4 w-4 border-2" aria-hidden="true" />
                   Preparing…
                 </>
               ) : (
@@ -1552,7 +1698,7 @@ function ESignSection({
                       d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                     />
                   </svg>
-                  Sign Now
+                  Sign now
                 </>
               )}
             </button>
@@ -1563,18 +1709,21 @@ function ESignSection({
       {/* Completed message */}
       {isComplete && (
         <div className="text-center py-2">
-          <p className="text-sm text-green-600 font-medium">✓ All signatures have been collected</p>
+          <p className="text-sm text-emerald-600 dark:text-emerald-300 font-medium">
+            ✓ All signatures have been collected
+          </p>
         </div>
       )}
 
       {/* Declined message */}
       {isDeclined && (
         <div className="text-center py-2">
-          <p className="text-sm text-red-500">
+          <p className="text-sm text-red-500 dark:text-red-300">
             A signer has declined. Please contact your relationship manager.
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -1627,10 +1776,10 @@ function BookingSection({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-gray-200 rounded w-1/3" />
-          <div className="h-20 bg-gray-100 rounded" />
+      <div className="card p-5">
+        <div className="space-y-3">
+          <div className="skeleton h-4 w-1/3" />
+          <div className="skeleton h-20 w-full" />
         </div>
       </div>
     );
@@ -1638,8 +1787,10 @@ function BookingSection({
 
   if (error) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <p className="text-sm text-red-500">{error}</p>
+      <div className="card p-5">
+        <p className="text-sm text-red-500 dark:text-red-300" role="alert">
+          {error}
+        </p>
       </div>
     );
   }
@@ -1648,19 +1799,20 @@ function BookingSection({
 
   const phase = status.phase as BookingPhase;
   const phaseLabel = PHASE_LABELS[phase] || phase;
-  const phaseColor = PHASE_COLORS[phase] || 'bg-gray-100 text-gray-600';
+  const phaseColor = PHASE_COLORS[phase] || 'badge-neutral';
 
   const completedCount = status.milestones.filter(m => m.status === 'COMPLETED').length;
   const totalCount = status.milestones.length;
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+    <div className="card p-5 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="section-title flex items-center gap-2">
           <svg
-            className="w-4 h-4 text-indigo-500"
+            className="w-4 h-4"
+            style={{ color: 'var(--brand)' }}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -1672,24 +1824,28 @@ function BookingSection({
               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          Booking &amp; Disbursement
+          Booking &amp; disbursement
         </h3>
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${phaseColor}`}>
-          {phaseLabel}
-        </span>
+        <span className={`badge ${phaseColor}`}>{phaseLabel}</span>
       </div>
 
       {/* Progress Bar */}
       <div>
-        <div className="flex justify-between text-xs text-gray-500 mb-1">
+        <div
+          className="flex flex-wrap justify-between gap-2 text-xs mb-1"
+          style={{ color: 'var(--text-muted)' }}
+        >
           <span>
             {completedCount} of {totalCount} milestones
           </span>
           <span>{progressPct}%</span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-2 rounded-full overflow-hidden"
+          style={{ backgroundColor: 'var(--surface-input)' }}
+        >
           <div
-            className="h-full bg-gradient-to-r from-indigo-500 to-green-500 rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-fuchsia-500 to-emerald-500 rounded-full transition-all duration-500"
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -1700,7 +1856,7 @@ function BookingSection({
         {status.milestones.map((milestone, idx) => {
           const isLast = idx === status.milestones.length - 1;
           const msStatus = milestone.status as MilestoneStatus;
-          const iconColor = MILESTONE_STATUS_COLORS[msStatus] || 'text-gray-300';
+          const iconColor = MILESTONE_STATUS_COLORS[msStatus] || '';
 
           return (
             <div key={milestone.key} className="relative">
@@ -1708,13 +1864,21 @@ function BookingSection({
               {!isLast && (
                 <div
                   className={`absolute left-[-16px] top-6 w-0.5 h-full ${
-                    msStatus === 'COMPLETED' ? 'bg-green-300' : 'bg-gray-200'
+                    msStatus === 'COMPLETED' ? 'bg-emerald-300 dark:bg-emerald-500/40' : ''
                   }`}
+                  style={
+                    msStatus === 'COMPLETED'
+                      ? undefined
+                      : { backgroundColor: 'var(--surface-border)' }
+                  }
                 />
               )}
 
               {/* Status icon */}
-              <div className={`absolute left-[-22px] top-1 ${iconColor}`}>
+              <div
+                className={`absolute left-[-22px] top-1 ${iconColor}`}
+                style={iconColor ? undefined : { color: 'var(--text-muted)' }}
+              >
                 {msStatus === 'COMPLETED' ? (
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path
@@ -1746,28 +1910,40 @@ function BookingSection({
               <div>
                 <p
                   className={`text-sm font-medium ${
-                    msStatus === 'COMPLETED'
-                      ? 'text-gray-900'
-                      : msStatus === 'IN_PROGRESS'
-                        ? 'text-blue-700'
-                        : 'text-gray-400'
+                    msStatus === 'IN_PROGRESS' ? 'text-sky-700 dark:text-sky-300' : ''
                   }`}
+                  style={
+                    msStatus === 'IN_PROGRESS'
+                      ? undefined
+                      : {
+                          color:
+                            msStatus === 'COMPLETED'
+                              ? 'var(--text-primary)'
+                              : 'var(--text-muted)',
+                        }
+                  }
                 >
                   {milestone.label}
                 </p>
                 <p
                   className={`text-xs mt-0.5 ${
-                    msStatus === 'COMPLETED'
-                      ? 'text-gray-500'
-                      : msStatus === 'IN_PROGRESS'
-                        ? 'text-blue-500'
-                        : 'text-gray-300'
+                    msStatus === 'IN_PROGRESS' ? 'text-sky-500 dark:text-sky-300' : ''
                   }`}
+                  style={
+                    msStatus === 'IN_PROGRESS'
+                      ? undefined
+                      : {
+                          color:
+                            msStatus === 'COMPLETED'
+                              ? 'var(--text-secondary)'
+                              : 'var(--text-muted)',
+                        }
+                  }
                 >
                   {milestone.description}
                 </p>
                 {milestone.completedAt && (
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
                     {new Date(milestone.completedAt).toLocaleDateString('en-IE', {
                       day: 'numeric',
                       month: 'short',
@@ -1785,19 +1961,28 @@ function BookingSection({
 
       {/* Account Details (shown when booked) */}
       {status.accountNumber && (
-        <div className="mt-3 bg-indigo-50 rounded-lg p-3 space-y-1">
-          <p className="text-xs font-medium text-indigo-700">Loan Account Details</p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
+        <div
+          className="mt-3 rounded-lg p-3 space-y-1"
+          style={{ backgroundColor: 'var(--brand-soft)' }}
+        >
+          <p className="text-xs font-medium" style={{ color: 'var(--brand-on-soft)' }}>
+            Loan account details
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             {status.accountNumber && (
               <div>
-                <span className="text-gray-500">Account: </span>
-                <span className="font-medium text-gray-800">{status.accountNumber}</span>
+                <span style={{ color: 'var(--text-muted)' }}>Account: </span>
+                <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {status.accountNumber}
+                </span>
               </div>
             )}
             {status.arrangementId && (
               <div>
-                <span className="text-gray-500">Ref: </span>
-                <span className="font-medium text-gray-800">{status.arrangementId}</span>
+                <span style={{ color: 'var(--text-muted)' }}>Ref: </span>
+                <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {status.arrangementId}
+                </span>
               </div>
             )}
           </div>
@@ -1806,19 +1991,23 @@ function BookingSection({
 
       {/* Disbursement Details (shown when disbursed) */}
       {status.disbursementReference && (
-        <div className="mt-2 bg-green-50 rounded-lg p-3 space-y-1">
-          <p className="text-xs font-medium text-green-700">Disbursement Details</p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="mt-2 rounded-lg p-3 space-y-1 bg-emerald-50 dark:bg-emerald-500/10">
+          <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            Disbursement details
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             {status.disbursementReference && (
               <div>
-                <span className="text-gray-500">Reference: </span>
-                <span className="font-medium text-gray-800">{status.disbursementReference}</span>
+                <span style={{ color: 'var(--text-muted)' }}>Reference: </span>
+                <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {status.disbursementReference}
+                </span>
               </div>
             )}
             {status.disbursementAmount != null && (
               <div>
-                <span className="text-gray-500">Amount: </span>
-                <span className="font-medium text-gray-800">
+                <span style={{ color: 'var(--text-muted)' }}>Amount: </span>
+                <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
                   {new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' }).format(
                     status.disbursementAmount
                   )}
@@ -1826,9 +2015,11 @@ function BookingSection({
               </div>
             )}
             {status.disbursementAccount && (
-              <div className="col-span-2">
-                <span className="text-gray-500">To Account: </span>
-                <span className="font-medium text-gray-800">{status.disbursementAccount}</span>
+              <div className="sm:col-span-2">
+                <span style={{ color: 'var(--text-muted)' }}>To account: </span>
+                <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {status.disbursementAccount}
+                </span>
               </div>
             )}
           </div>
@@ -1837,7 +2028,7 @@ function BookingSection({
 
       {/* Completed Banner */}
       {phase === 'DISBURSED' || phase === 'ACTIVE' || phase === 'CLOSED' ? (
-        <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10">
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
@@ -1954,27 +2145,27 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
       key: 'messages',
       label: `Messages${conversation && conversation.messageCount > 0 ? ` (${conversation.messageCount})` : ''}`,
     },
-    { key: 'help', label: 'Request Help' },
-    { key: 'callback', label: 'Request a Call' },
+    { key: 'help', label: 'Request help' },
+    { key: 'callback', label: 'Request a call' },
   ];
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="card p-5">
       {/* Tab header */}
-      <div className="flex items-center gap-1 border-b border-gray-100 pb-2 mb-4">
-        {tabs.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              tab === t.key
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mb-4 overflow-x-auto">
+        <div className="segmented" role="tablist" aria-label="Message your relationship manager">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => setTab(t.key)}
+              className="segmented-item text-xs"
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Messages tab */}
@@ -1982,10 +2173,15 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
         <div>
           {loading ? (
             <div className="flex justify-center py-6">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+              <span
+                className="spinner h-5 w-5 border-2"
+                style={{ color: 'var(--brand)' }}
+                role="status"
+                aria-label="Loading messages"
+              />
             </div>
           ) : messages.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">
+            <p className="text-sm text-center py-6" style={{ color: 'var(--text-muted)' }}>
               No messages yet. Send a message or request help from your RM.
             </p>
           ) : (
@@ -1997,8 +2193,12 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
           )}
 
           {/* Compose */}
-          <div className="flex gap-2 mt-2">
+          <div className="flex flex-wrap gap-2 mt-2">
+            <label className="sr-only" htmlFor="new-message">
+              Message
+            </label>
             <input
+              id="new-message"
               value={newMessage}
               onChange={e => setNewMessage(e.target.value)}
               onKeyDown={e => {
@@ -2008,12 +2208,12 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
                 }
               }}
               placeholder="Type a message…"
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="input flex-1 min-w-[12rem]"
             />
             <button
               onClick={handleSend}
               disabled={!newMessage.trim() || sending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary"
             >
               {sending ? '…' : 'Send'}
             </button>
@@ -2024,35 +2224,41 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
       {/* Help request tab */}
       {tab === 'help' && (
         <div className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Describe your issue and your Relationship Manager will receive a task to assist you.
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Describe your issue and your relationship manager will receive a task to assist you.
           </p>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Subject</label>
+            <label className="field-label" htmlFor="help-subject">
+              Subject
+            </label>
             <input
+              id="help-subject"
               value={helpSubject}
               onChange={e => setHelpSubject(e.target.value)}
               placeholder="e.g. Question about document requirements"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Message</label>
+            <label className="field-label" htmlFor="help-body">
+              Message
+            </label>
             <textarea
+              id="help-body"
               value={helpBody}
               onChange={e => setHelpBody(e.target.value)}
               rows={3}
               placeholder="Describe what you need help with…"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="input"
             />
           </div>
           <div className="text-right">
             <button
               onClick={handleHelpRequest}
               disabled={!helpSubject.trim() || !helpBody.trim() || helpSending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary"
             >
-              {helpSending ? 'Sending…' : 'Request Help'}
+              {helpSending ? 'Sending…' : 'Request help'}
             </button>
           </div>
         </div>
@@ -2061,26 +2267,32 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
       {/* Callback request tab */}
       {tab === 'callback' && (
         <div className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Request a callback from your Relationship Manager at a convenient time.
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Request a callback from your relationship manager at a convenient time.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Preferred Date</label>
+              <label className="field-label" htmlFor="cb-date">
+                Preferred date
+              </label>
               <input
+                id="cb-date"
                 type="date"
                 value={cbDate}
                 onChange={e => setCbDate(e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                className="input"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Preferred Time</label>
+              <label className="field-label" htmlFor="cb-time">
+                Preferred time
+              </label>
               <select
+                id="cb-time"
                 value={cbTimeSlot}
                 onChange={e => setCbTimeSlot(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                className="select"
               >
                 <option value="">Any time</option>
                 <option value="09:00-11:00">9 AM – 11 AM</option>
@@ -2091,21 +2303,24 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Notes (optional)</label>
+            <label className="field-label" htmlFor="cb-notes">
+              Notes (optional)
+            </label>
             <input
+              id="cb-notes"
               value={cbNotes}
               onChange={e => setCbNotes(e.target.value)}
               placeholder="What would you like to discuss?"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="input"
             />
           </div>
           <div className="text-right">
             <button
               onClick={handleCallbackRequest}
               disabled={cbSending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary"
             >
-              {cbSending ? 'Requesting…' : 'Request Callback'}
+              {cbSending ? 'Requesting…' : 'Request callback'}
             </button>
           </div>
         </div>
@@ -2123,7 +2338,10 @@ function MessageBubble({ message }: { message: Message }) {
   if (isSystem) {
     return (
       <div className="flex justify-center">
-        <span className="text-[10px] text-gray-400 bg-gray-50 px-3 py-1 rounded-full">
+        <span
+          className="text-[10px] px-3 py-1 rounded-full"
+          style={{ color: 'var(--text-muted)', backgroundColor: 'var(--surface-input)' }}
+        >
           {message.body}
         </span>
       </div>
@@ -2133,21 +2351,23 @@ function MessageBubble({ message }: { message: Message }) {
   return (
     <div className={`flex ${isCustomer ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[80%] rounded-lg px-3 py-2 ${
-          isCustomer ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-900'
-        }`}
+        className="max-w-[80%] rounded-lg px-3 py-2"
+        style={
+          isCustomer
+            ? { backgroundColor: 'var(--brand)', color: '#fff' }
+            : { backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)' }
+        }
       >
         {!isCustomer && message.senderName && (
-          <p
-            className={`text-[10px] font-medium mb-0.5 ${
-              isCustomer ? 'text-indigo-200' : 'text-gray-500'
-            }`}
-          >
+          <p className="text-[10px] font-medium mb-0.5" style={{ color: 'var(--text-muted)' }}>
             {message.senderName}
           </p>
         )}
         <p className="text-sm whitespace-pre-wrap">{message.body}</p>
-        <p className={`text-[10px] mt-1 ${isCustomer ? 'text-indigo-200' : 'text-gray-400'}`}>
+        <p
+          className="text-[10px] mt-1"
+          style={{ color: isCustomer ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}
+        >
           {formatMessageTime(message.createdAt)}
         </p>
       </div>
@@ -2173,11 +2393,20 @@ function StageStepper({ currentStage }: { currentStage: CustomerStage }) {
               <div
                 className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
                   isComplete
-                    ? 'border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-200'
+                    ? 'border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-200 dark:shadow-none'
                     : isActive
-                      ? 'border-transparent bg-gradient-to-br from-[#ae3fa9] to-[#ec4899] text-white ring-4 ring-fuchsia-100 shadow-lg'
-                      : 'border-slate-200 bg-white text-slate-400'
+                      ? 'border-transparent bg-gradient-to-br from-[#ae3fa9] to-[#ec4899] text-white ring-4 ring-fuchsia-100 dark:ring-fuchsia-500/20 shadow-lg'
+                      : ''
                 }`}
+                style={
+                  isComplete || isActive
+                    ? undefined
+                    : {
+                        borderColor: 'var(--surface-border-strong)',
+                        backgroundColor: 'var(--surface-card)',
+                        color: 'var(--text-muted)',
+                      }
+                }
               >
                 {isComplete ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2194,15 +2423,23 @@ function StageStepper({ currentStage }: { currentStage: CustomerStage }) {
               </div>
               <span
                 className={`mt-1.5 text-[10px] font-medium text-center leading-tight ${
-                  isComplete ? 'text-emerald-600' : isActive ? 'text-[#7f2b7b]' : 'text-slate-400'
+                  isComplete ? 'text-emerald-600 dark:text-emerald-300' : ''
                 }`}
+                style={
+                  isComplete
+                    ? undefined
+                    : {
+                        color: isActive ? 'var(--brand-on-soft)' : 'var(--text-muted)',
+                      }
+                }
               >
                 {s.label}
               </span>
             </div>
             {i < CUSTOMER_STAGES.length - 1 && (
               <div
-                className={`flex-1 h-0.5 mx-1 ${i < activeIndex ? 'bg-emerald-400' : 'bg-slate-200'}`}
+                className={`flex-1 h-0.5 mx-1 ${i < activeIndex ? 'bg-emerald-400' : ''}`}
+                style={i < activeIndex ? undefined : { backgroundColor: 'var(--surface-border)' }}
               />
             )}
           </div>
@@ -2215,18 +2452,37 @@ function StageStepper({ currentStage }: { currentStage: CustomerStage }) {
 // ─── Event Timeline ────────────────────────────────────────────
 
 const TIMELINE_ICON_STYLES: Record<string, { bg: string; text: string; symbol: string }> = {
-  info: { bg: 'bg-blue-100', text: 'text-blue-600', symbol: 'ℹ' },
-  success: { bg: 'bg-green-100', text: 'text-green-600', symbol: '✓' },
-  warning: { bg: 'bg-red-100', text: 'text-red-600', symbol: '!' },
-  action: { bg: 'bg-amber-100', text: 'text-amber-600', symbol: '→' },
-  milestone: { bg: 'bg-purple-100', text: 'text-purple-600', symbol: '★' },
+  info: { bg: 'bg-sky-100 dark:bg-sky-500/15', text: 'text-sky-600 dark:text-sky-300', symbol: 'ℹ' },
+  success: {
+    bg: 'bg-emerald-100 dark:bg-emerald-500/15',
+    text: 'text-emerald-600 dark:text-emerald-300',
+    symbol: '✓',
+  },
+  warning: {
+    bg: 'bg-red-100 dark:bg-red-500/15',
+    text: 'text-red-600 dark:text-red-300',
+    symbol: '!',
+  },
+  action: {
+    bg: 'bg-amber-100 dark:bg-amber-500/15',
+    text: 'text-amber-600 dark:text-amber-300',
+    symbol: '→',
+  },
+  milestone: {
+    bg: 'bg-fuchsia-100 dark:bg-fuchsia-500/15',
+    text: 'text-fuchsia-600 dark:text-fuchsia-300',
+    symbol: '★',
+  },
 };
 
 function EventTimeline({ events }: { events: TimelineEvent[] }) {
   return (
     <div className="relative">
       {/* Vertical line */}
-      <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-gray-100" />
+      <div
+        className="absolute left-3.5 top-2 bottom-2 w-0.5"
+        style={{ backgroundColor: 'var(--surface-border)' }}
+      />
 
       <div className="space-y-4">
         {events.map((evt, i) => {
@@ -2243,11 +2499,17 @@ function EventTimeline({ events }: { events: TimelineEvent[] }) {
 
               {/* Content */}
               <div className="pt-0.5 min-w-0">
-                <p className="text-sm font-medium text-gray-900">{evt.title}</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {evt.title}
+                </p>
                 {evt.description && (
-                  <p className="text-xs text-gray-500 mt-0.5">{evt.description}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    {evt.description}
+                  </p>
                 )}
-                <p className="text-[10px] text-gray-400 mt-0.5">{formatDateTime(evt.timestamp)}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {formatDateTime(evt.timestamp)}
+                </p>
               </div>
             </div>
           );
@@ -2261,8 +2523,10 @@ function EventTimeline({ events }: { events: TimelineEvent[] }) {
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-premium">
-      <h3 className="text-base font-semibold text-slate-900 mb-4">{title}</h3>
+    <div className="card">
+      <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+        {title}
+      </h3>
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">{children}</dl>
     </div>
   );
@@ -2278,9 +2542,22 @@ function DetailRow({
   className?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl bg-slate-50/70 px-4 py-3 sm:flex-col sm:items-start sm:gap-1">
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className={`text-sm font-bold text-slate-900 ${className || ''}`}>{value}</dd>
+    <div
+      className="flex items-center justify-between gap-4 rounded-2xl px-4 py-3 sm:flex-col sm:items-start sm:gap-1"
+      style={{ backgroundColor: 'var(--surface-input)' }}
+    >
+      <dt
+        className="text-xs font-medium uppercase tracking-wide"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        {label}
+      </dt>
+      <dd
+        className={`text-sm font-bold ${className || ''}`}
+        style={className ? undefined : { color: 'var(--text-primary)' }}
+      >
+        {value}
+      </dd>
     </div>
   );
 }

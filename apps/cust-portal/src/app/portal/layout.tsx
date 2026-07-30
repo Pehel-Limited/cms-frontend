@@ -129,7 +129,53 @@ const NAV_BOTTOM = [
   },
 ];
 
-/* ─── Layout ────────────────────────────────────────────────── */
+/* ─── Nav grouping ──────────────────────────────────────────
+   Same destinations as before, organised into labelled groups so a
+   9-item list stays scannable instead of reading as one long column. */
+
+type NavItem = { name: string; path: string; icon: React.ReactNode };
+
+const ALL_NAV: NavItem[] = [...NAV_MAIN, ...NAV_BOTTOM];
+const byPath = (path: string): NavItem =>
+  ALL_NAV.find(i => i.path === path) ?? ALL_NAV[0];
+
+const NAV_SECTIONS: { label?: string; items: NavItem[] }[] = [
+  { items: [byPath('/portal')] },
+  {
+    label: 'Banking',
+    items: ['/portal/accounts', '/portal/payments', '/portal/cards', '/portal/transactions'].map(byPath),
+  },
+  {
+    label: 'Borrowing',
+    items: ['/portal/applications', '/portal/documents'].map(byPath),
+  },
+  {
+    label: 'Insights & help',
+    items: ['/portal/insights', '/portal/ai-assistant', '/portal/messages'].map(byPath),
+  },
+];
+
+const NAV_FOOTER: NavItem[] = [byPath('/portal/profile')];
+
+/* Primary destinations surfaced as a thumb-reachable bar on small screens */
+const MOBILE_NAV: NavItem[] = ['/portal', '/portal/accounts', '/portal/payments', '/portal/applications'].map(byPath);
+
+/* Longest-prefix match drives the page title shown in the top bar */
+const PAGE_TITLES: { path: string; title: string; subtitle: string }[] = [
+  { path: '/portal/accounts', title: 'Accounts', subtitle: 'Balances and account details' },
+  { path: '/portal/ai-assistant', title: 'AI Assistant', subtitle: 'Get instant answers about your finances' },
+  { path: '/portal/payments', title: 'Payments', subtitle: 'Transfers, payees and scheduled payments' },
+  { path: '/portal/cards', title: 'Cards', subtitle: 'Manage your debit and credit cards' },
+  { path: '/portal/transactions', title: 'Transactions', subtitle: 'Search and review your activity' },
+  { path: '/portal/applications', title: 'Applications', subtitle: 'Track your credit applications' },
+  { path: '/portal/documents', title: 'Documents', subtitle: 'Upload and manage your paperwork' },
+  { path: '/portal/insights', title: 'Insights', subtitle: 'Understand where your money goes' },
+  { path: '/portal/messages', title: 'Messages', subtitle: 'Your conversations with the bank' },
+  { path: '/portal/products', title: 'Products', subtitle: 'Explore what we can offer you' },
+  { path: '/portal/company', title: 'Company', subtitle: 'Business profile and people' },
+  { path: '/portal/profile', title: 'Settings', subtitle: 'Profile, security and preferences' },
+];
+
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -153,6 +199,20 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  /* Restore the collapsed preference so the shell feels persistent */
+  useEffect(() => {
+    setSidebarCollapsed(localStorage.getItem('cms-sidebar-collapsed') === '1');
+  }, []);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('cms-sidebar-collapsed', next ? '1' : '0');
+      return next;
+    });
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -163,6 +223,28 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  /* Escape closes whichever overlay is open, and focus returns to its trigger */
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (isUserMenuOpen) {
+        setIsUserMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+      setMobileSidebarOpen(false);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isUserMenuOpen]);
+
+  /* Prevent the page behind the mobile drawer from scrolling */
+  useEffect(() => {
+    document.body.style.overflow = mobileSidebarOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileSidebarOpen]);
 
   const handleLogout = async () => {
     await authService.logout();
@@ -184,274 +266,313 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     return 'Good evening';
   };
 
-  function NavLink({ item }: { item: { name: string; path: string; icon: React.ReactNode } }) {
+  const page =
+    PAGE_TITLES.filter(p => pathname.startsWith(p.path)).sort((a, b) => b.path.length - a.path.length)[0] ??
+    { title: 'Overview', subtitle: `${getGreeting()}, ${user?.firstName ?? 'there'}` };
+
+  function NavLink({ item }: { item: NavItem }) {
     const active = isActive(item.path);
     return (
       <Link
         href={item.path}
         onClick={() => setMobileSidebarOpen(false)}
+        aria-current={active ? 'page' : undefined}
         title={sidebarCollapsed ? item.name : undefined}
         className={[
-          'group relative flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200',
-          sidebarCollapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5',
+          'group relative flex items-center gap-3 rounded-xl text-sm font-medium transition-colors duration-200',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70',
+          sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5',
           active
-            ? 'bg-white/20 text-white shadow-md'
-            : 'text-purple-100/80 hover:bg-white/10 hover:text-white',
+            ? 'bg-white/[0.18] text-white'
+            : 'text-purple-100/70 hover:bg-white/10 hover:text-white',
         ].join(' ')}
       >
         {active && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-r-full" />
+          <span className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-white" />
         )}
-        <span className="shrink-0">{item.icon}</span>
+        <span className={active ? 'shrink-0' : 'shrink-0 opacity-80 group-hover:opacity-100'}>
+          {item.icon}
+        </span>
         {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
       </Link>
     );
   }
 
+  const sidebarContent = (
+    <>
+      {/* Logo */}
+      <div
+        className={[
+          'flex h-16 shrink-0 items-center border-b border-white/10',
+          sidebarCollapsed ? 'justify-center' : 'gap-3 px-5',
+        ].join(' ')}
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur">
+          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+        </div>
+        {!sidebarCollapsed && (
+          <div className="min-w-0">
+            <p className="truncate text-lg font-bold leading-none tracking-tight">Rayva</p>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-purple-200/70">Personal banking</p>
+          </div>
+        )}
+      </div>
+
+      {/* Grouped nav */}
+      <nav aria-label="Main" className="sidebar-scrollbar flex-1 overflow-y-auto px-3 py-4">
+        {NAV_SECTIONS.map((section, i) => (
+          <div key={section.label ?? `group-${i}`} className={i === 0 ? '' : 'mt-5'}>
+            {section.label && !sidebarCollapsed && (
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-purple-200/50">
+                {section.label}
+              </p>
+            )}
+            {section.label && sidebarCollapsed && (
+              <div className="mx-auto mb-2 h-px w-6 bg-white/15" />
+            )}
+            <div className="space-y-0.5">
+              {section.items.map(item => (
+                <NavLink key={item.path} item={item} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Quick Transfer widget */}
+      {!sidebarCollapsed && (
+        <div className="mx-3 mb-3 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
+          <div className="mb-1.5 flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/20">
+              <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+            </div>
+            <span className="text-xs font-semibold text-white">Quick transfer</span>
+          </div>
+          <p className="mb-2 text-[10px] leading-tight text-purple-200/70">Send money to your saved payees</p>
+          <Link
+            href="/portal/payments"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-white/20 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/30"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
+            </svg>
+            Send money
+          </Link>
+        </div>
+      )}
+
+      {/* Footer nav + collapse + logout */}
+      <div className="space-y-0.5 border-t border-white/10 px-3 pb-4 pt-3">
+        {NAV_FOOTER.map(item => (
+          <NavLink key={item.path} item={item} />
+        ))}
+
+        <button
+          onClick={toggleSidebar}
+          aria-expanded={!sidebarCollapsed}
+          className={[
+            'hidden w-full items-center rounded-xl text-sm text-purple-200/70 transition-colors hover:bg-white/10 hover:text-white lg:flex',
+            sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
+          ].join(' ')}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <svg
+            className={`h-5 w-5 shrink-0 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+              d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+          {!sidebarCollapsed && <span>Collapse</span>}
+        </button>
+
+        <button
+          onClick={handleLogout}
+          className={[
+            'flex w-full items-center rounded-xl text-sm text-purple-200/70 transition-colors hover:bg-red-500/15 hover:text-red-200',
+            sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
+          ].join(' ')}
+          title={sidebarCollapsed ? 'Log out' : undefined}
+        >
+          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          {!sidebarCollapsed && <span>Log out</span>}
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: 'var(--surface-bg)' }}>
+    <div className="flex min-h-screen" style={{ backgroundColor: 'var(--surface-bg)' }}>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
+
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
 
       {/* ─── Sidebar ─── */}
       <aside
         className={[
-          'fixed lg:sticky top-0 left-0 z-50 h-screen flex flex-col mesh-hero text-white transition-all duration-300 ease-in-out',
-          sidebarCollapsed ? 'w-[70px]' : 'w-[230px]',
+          'mesh-hero fixed left-0 top-0 z-50 flex h-screen flex-col text-white shadow-2xl transition-[width,transform] duration-300 ease-in-out lg:sticky lg:shadow-none',
+          sidebarCollapsed ? 'lg:w-[76px]' : 'lg:w-[248px]',
+          'w-[264px]',
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
       >
-        {/* Logo */}
-        <div className={[
-          'flex items-center h-16 shrink-0 border-b border-white/10',
-          sidebarCollapsed ? 'justify-center' : 'gap-3 px-5',
-        ].join(' ')}>
-          <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0 shadow">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-          </div>
-          {!sidebarCollapsed && (
-            <span className="text-lg font-bold tracking-tight whitespace-nowrap">Rayva</span>
-          )}
-        </div>
-
-        {/* Main nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto sidebar-scrollbar">
-          {NAV_MAIN.map(item => (
-            <NavLink key={item.path} item={item} />
-          ))}
-        </nav>
-
-        {/* Quick Transfer widget */}
-        {!sidebarCollapsed && (
-          <div className="mx-3 mb-3 rounded-2xl bg-white/10 backdrop-blur-sm p-3 border border-white/15">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
-                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                </svg>
-              </div>
-              <span className="text-xs font-semibold text-white">Quick transfer</span>
-            </div>
-            <p className="text-[10px] text-purple-200/70 mb-2 leading-tight">Send money to your saved payees</p>
-            <Link
-              href="/portal/payments"
-              className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
-              </svg>
-              Send money
-            </Link>
-          </div>
-        )}
-
-        {/* Bottom nav + collapse + logout */}
-        <div className="px-3 pb-4 space-y-0.5 border-t border-white/10 pt-3">
-          {NAV_BOTTOM.map(item => (
-            <NavLink key={item.path} item={item} />
-          ))}
-
-          <button
-            onClick={() => setSidebarCollapsed(c => !c)}
-            className={[
-              'hidden lg:flex items-center w-full rounded-xl text-purple-200/80 hover:text-white hover:bg-white/10 text-sm transition-colors',
-              sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-3 py-2.5',
-            ].join(' ')}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <svg
-              className={`w-5 h-5 shrink-0 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-            {!sidebarCollapsed && <span>Collapse</span>}
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className={[
-              'flex items-center w-full rounded-xl text-purple-200/80 hover:text-red-300 hover:bg-red-500/10 text-sm transition-colors',
-              sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-3 py-2.5',
-            ].join(' ')}
-            title={sidebarCollapsed ? 'Log out' : undefined}
-          >
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            {!sidebarCollapsed && <span>Log out</span>}
-          </button>
-        </div>
+        {sidebarContent}
       </aside>
 
       {/* ─── Main column ─── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header
-          className="sticky top-0 z-30 h-16 flex items-center px-4 lg:px-6 gap-3 backdrop-blur-md border-b transition-colors duration-200"
+          className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b px-4 backdrop-blur-xl transition-colors duration-200 sm:gap-3 lg:px-6"
           style={{ backgroundColor: 'var(--topbar-bg)', borderColor: 'var(--topbar-border)' }}
         >
           {/* Mobile hamburger */}
           <button
-            className="lg:hidden p-2 rounded-xl transition-colors"
-            style={{ color: 'var(--text-secondary)' }}
+            className="icon-btn lg:hidden"
             onClick={() => setMobileSidebarOpen(true)}
-            aria-label="Open menu"
+            aria-label="Open navigation menu"
+            aria-expanded={mobileSidebarOpen}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
 
+          {/* Page title — orients the user without spending a whole extra header row */}
+          <div className="min-w-0 flex-1 lg:flex-none">
+            <h1 className="truncate text-base font-semibold leading-tight" style={{ color: 'var(--text-primary)' }}>
+              {page.title}
+            </h1>
+            <p className="hidden truncate text-xs sm:block" style={{ color: 'var(--text-muted)' }}>
+              {page.subtitle}
+            </p>
+          </div>
+
           {/* Search */}
-          <div className="relative flex-1 max-w-sm">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="relative mx-auto hidden w-full max-w-sm lg:block">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+              style={{ color: 'var(--text-muted)' }}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
-              type="text"
+              type="search"
+              aria-label="Search"
               placeholder="Search anything..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500/40"
-              style={{
-                backgroundColor: 'var(--surface-input)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--surface-border)',
-              }}
+              className="input py-2 pl-9 pr-4 text-sm"
             />
           </div>
 
-          <div className="flex-1" />
-
-          {/* Greeting */}
-          <span className="hidden xl:block text-sm whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-            {getGreeting()},{' '}
-            <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {user?.firstName}
-            </span>
-          </span>
-
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-xl transition-all duration-200 hover:scale-105"
-            style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--surface-input)', border: '1px solid var(--surface-border)' }}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
-            )}
-          </button>
-
-          {/* Notifications bell */}
-          <button
-            className="relative p-2 rounded-xl transition-colors"
-            style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--surface-input)', border: '1px solid var(--surface-border)' }}
-            aria-label="Notifications"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold ring-2 ring-white dark:ring-[#0d1117]">
-              3
-            </span>
-          </button>
-
-          {/* Messages */}
-          <Link
-            href="/portal/messages"
-            className="p-2 rounded-xl transition-colors"
-            style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--surface-input)', border: '1px solid var(--surface-border)' }}
-            aria-label="Messages"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </Link>
-
-          {/* User menu */}
-          <div className="relative" ref={menuRef}>
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            {/* Theme toggle */}
             <button
-              onClick={() => setIsUserMenuOpen(v => !v)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-xl transition-colors"
-              style={{ border: '1px solid var(--surface-border)' }}
+              onClick={toggleTheme}
+              className="icon-btn"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#7f2b7b] to-[#ae3fa9] flex items-center justify-center text-white text-xs font-bold shadow">
-                {initials}
-              </div>
-              <span className="hidden sm:block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                {user?.firstName} {user?.lastName}
-              </span>
-              <svg
-                className="hidden sm:block w-4 h-4 transition-transform duration-200"
-                style={{
-                  color: 'var(--text-muted)',
-                  transform: isUserMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                }}
-                fill="none" stroke="currentColor" viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              {theme === 'dark' ? (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
             </button>
 
-            {isUserMenuOpen && (
-              <div
-                className="absolute right-0 mt-2 w-60 rounded-2xl shadow-xl border py-2 z-50 animate-fade-in"
-                style={{ backgroundColor: 'var(--surface-card)', borderColor: 'var(--surface-border)' }}
+            {/* Notifications bell */}
+            <button className="icon-btn relative hidden sm:inline-flex" aria-label="Notifications, 3 unread">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                3
+              </span>
+            </button>
+
+            {/* Messages */}
+            <Link href="/portal/messages" className="icon-btn hidden sm:inline-flex" aria-label="Messages">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </Link>
+
+            {/* User menu */}
+            <div className="relative" ref={menuRef}>
+              <button
+                ref={menuButtonRef}
+                onClick={() => setIsUserMenuOpen(v => !v)}
+                className="flex items-center gap-2 rounded-xl border py-1 pl-1 pr-2 transition-colors sm:pr-3"
+                style={{ borderColor: 'var(--surface-border)' }}
+                aria-haspopup="menu"
+                aria-expanded={isUserMenuOpen}
+                aria-label="Account menu"
               >
-                <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--surface-border)' }}>
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    {user?.firstName} {user?.lastName}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{user?.email}</p>
-                  <span className="inline-block mt-2 text-[10px] uppercase tracking-wider text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 rounded-full font-bold">
-                    Customer
-                  </span>
-                </div>
-                <div className="py-1">
-                  {[
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#7f2b7b] to-[#ae3fa9] text-xs font-bold text-white shadow-sm">
+                  {initials}
+                </span>
+                <span className="hidden max-w-[9rem] truncate text-sm font-medium sm:block" style={{ color: 'var(--text-primary)' }}>
+                  {user?.firstName} {user?.lastName}
+                </span>
+                <svg
+                  className="hidden h-4 w-4 transition-transform duration-200 sm:block"
+                  style={{
+                    color: 'var(--text-muted)',
+                    transform: isUserMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {isUserMenuOpen && (
+                <div
+                  role="menu"
+                  className="animate-fade-in absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border py-2"
+                  style={{
+                    backgroundColor: 'var(--surface-card)',
+                    borderColor: 'var(--surface-border)',
+                    boxShadow: 'var(--shadow-lg)',
+                  }}
+                >
+                  <div className="border-b px-4 py-3" style={{ borderColor: 'var(--surface-border)' }}>
+                    <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {user?.firstName} {user?.lastName}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs" style={{ color: 'var(--text-muted)' }}>{user?.email}</p>
+                    <span className="badge badge-primary mt-2 text-[10px] uppercase tracking-wider">
+                      Customer
+                    </span>
+                  </div>
+                  <div className="py-1">
+                    {[
                     { href: '/portal/profile', label: 'My Profile' },
                     { href: '/portal/documents', label: 'Documents' },
                     { href: '/portal/messages', label: 'Messages' },
@@ -459,6 +580,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
                     <Link
                       key={item.href}
                       href={item.href}
+                      role="menuitem"
                       className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5"
                       style={{ color: 'var(--text-secondary)' }}
                       onClick={() => setIsUserMenuOpen(false)}
@@ -466,29 +588,75 @@ function PortalShell({ children }: { children: React.ReactNode }) {
                       {item.label}
                     </Link>
                   ))}
+                  </div>
+                  <div className="border-t py-1" style={{ borderColor: 'var(--surface-border)' }}>
+                    <button
+                      role="menuitem"
+                      onClick={() => { setIsUserMenuOpen(false); handleLogout(); }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Sign Out
+                    </button>
+                  </div>
                 </div>
-                <div className="border-t py-1" style={{ borderColor: 'var(--surface-border)' }}>
-                  <button
-                    onClick={() => { setIsUserMenuOpen(false); handleLogout(); }}
-                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors w-full"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
-          {children}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 px-4 pb-24 pt-5 focus:outline-none sm:px-6 sm:pb-8 lg:px-8 lg:pt-6"
+        >
+          <div className="mx-auto w-full max-w-[1400px]">{children}</div>
         </main>
       </div>
+
+      {/* ─── Mobile bottom navigation ─── */}
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-xl lg:hidden"
+        style={{
+          backgroundColor: 'var(--topbar-bg)',
+          borderColor: 'var(--topbar-border)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
+      >
+        <div className="grid grid-cols-5">
+          {MOBILE_NAV.map(item => {
+            const active = isActive(item.path);
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                aria-current={active ? 'page' : undefined}
+                className="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors"
+                style={{ color: active ? 'var(--brand-on-soft)' : 'var(--text-muted)' }}
+              >
+                <span className={active ? 'scale-110 transition-transform' : 'transition-transform'}>{item.icon}</span>
+                {item.name}
+              </Link>
+            );
+          })}
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+            aria-label="More options"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            More
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }

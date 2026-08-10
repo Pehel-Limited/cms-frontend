@@ -199,20 +199,70 @@ export const INTENT_TO_PRODUCT_TYPES: Record<string, string[]> = {
  * whose amount range fits the customer's estimated cost first (products
  * outside the amount range are kept — e.g. a Green Loan top-up alongside a
  * Home Mortgage — just ranked lower).
+ *
+ * `borrowerSegment` / `assetCategory` (from `CreditNeedFacts`) refine the
+ * candidate list further — mirroring how AIB/BOI route the same "purpose"
+ * to entirely different product lines depending on who the borrower is and
+ * what specific asset is being financed (e.g. a farm buying machinery gets
+ * routed to `AGRI_LOAN`, not the generic SME asset-finance products).
  */
+const SME_ONLY_PRODUCT_TYPES = new Set([
+  'SME_TERM_LOAN', 'BUSINESS_OVERDRAFT', 'INVOICE_FINANCE', 'BUSINESS_CREDIT_CARD',
+  'COMMERCIAL_MORTGAGE', 'BUSINESS_LOAN', 'WORKING_CAPITAL_LOAN',
+]);
+
+export function resolveCandidateProductTypes(
+  purposeCode: string | null | undefined,
+  borrowerSegment?: string | null,
+  assetCategory?: string | null
+): string[] {
+  const base = purposeCode ? INTENT_TO_PRODUCT_TYPES[purposeCode] ?? [] : [];
+  let candidates = [...base];
+
+  const isFarm = borrowerSegment === 'FARM_AGRICULTURE' || assetCategory === 'AGRICULTURAL_MACHINERY';
+  const isGreen = assetCategory === 'RENEWABLE_ENERGY';
+  const isPersonal = borrowerSegment === 'PERSONAL';
+  const isBusinessLike = borrowerSegment === 'COMPANY' || borrowerSegment === 'SOLE_TRADER' || borrowerSegment === 'PARTNERSHIP';
+
+  if (isFarm) {
+    candidates = ['AGRI_LOAN', ...candidates];
+  }
+  if (isGreen) {
+    candidates = ['GREEN_LOAN', ...candidates];
+  }
+  if (purposeCode === 'VEHICLE_PURCHASE' && isBusinessLike) {
+    // A company/sole-trader vehicle is financed as a business asset, not a personal car loan.
+    candidates = ['HIRE_PURCHASE', 'ASSET_LEASING', 'SME_TERM_LOAN', ...candidates];
+  }
+  if (isPersonal) {
+    candidates = candidates.filter(t => !SME_ONLY_PRODUCT_TYPES.has(t));
+    if (candidates.length === 0) {
+      candidates = ['PERSONAL_LOAN', 'HIRE_PURCHASE', 'PCP', 'CREDIT_UNION_LOAN'];
+    }
+  }
+
+  return Array.from(new Set(candidates));
+}
+
 export function matchProductsForIntent(
   products: LoanProduct[],
   purposeCode: string | null | undefined,
-  estimatedCost?: number | null
+  estimatedCost?: number | null,
+  borrowerSegment?: string | null,
+  assetCategory?: string | null
 ): LoanProduct[] {
-  const types = purposeCode ? INTENT_TO_PRODUCT_TYPES[purposeCode] : undefined;
+  const types = resolveCandidateProductTypes(purposeCode, borrowerSegment, assetCategory);
   let matched =
-    types && types.length > 0
+    types.length > 0
       ? products.filter(p => types.includes(p.productType))
       : products.filter(p => p.isFeatured);
 
   if (matched.length === 0) {
     matched = products.filter(p => p.isFeatured);
+  }
+
+  if (types.length > 0) {
+    matched = [...matched].sort((a, b) => types.indexOf(a.productType) - types.indexOf(b.productType));
   }
 
   if (estimatedCost != null && estimatedCost > 0) {

@@ -42,10 +42,59 @@ export interface CreditNeedFacts {
   estimatedCost?: number | null;
   currency?: string | null;
   targetDate?: string | null;
+  borrowerSegment?: string | null;
+  assetCategory?: string | null;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   needsClarification: boolean;
   clarifyingQuestion?: string | null;
   customerExplanation?: string | null;
+}
+
+/**
+ * Client-side mirror of ai-assistant-service's `CreditNeedDraft` taxonomy
+ * constants — who the borrower is, mirroring how AIB/BOI split lending into
+ * separate product lines (Business Loans vs Farm Loans vs personal lending).
+ */
+export const BORROWER_SEGMENT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'PERSONAL', label: 'Personal' },
+  { value: 'SOLE_TRADER', label: 'Sole trader' },
+  { value: 'COMPANY', label: 'Company' },
+  { value: 'PARTNERSHIP', label: 'Partnership' },
+  { value: 'FARM_AGRICULTURE', label: 'Farm / agriculture' },
+  { value: 'UNKNOWN', label: 'Not sure yet' },
+];
+
+/** Client-side mirror of `CreditNeedDraft.ASSET_CATEGORIES`. */
+export const ASSET_CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'AGRICULTURAL_MACHINERY', label: 'Agricultural machinery' },
+  { value: 'COMMERCIAL_VEHICLE', label: 'Commercial vehicle' },
+  { value: 'PRIVATE_VEHICLE', label: 'Private vehicle' },
+  { value: 'CONSTRUCTION_PLANT', label: 'Construction plant' },
+  { value: 'MANUFACTURING_MACHINERY', label: 'Manufacturing machinery' },
+  { value: 'IT_TECHNOLOGY', label: 'IT / technology' },
+  { value: 'MEDICAL_DENTAL', label: 'Medical / dental' },
+  { value: 'CATERING_HOSPITALITY', label: 'Catering / hospitality' },
+  { value: 'OFFICE_FURNITURE', label: 'Office furniture / fit-out' },
+  { value: 'RENEWABLE_ENERGY', label: 'Renewable energy' },
+  { value: 'OTHER', label: 'Other' },
+  { value: 'NOT_APPLICABLE', label: 'Not applicable' },
+];
+
+/** Purposes ambiguous about who the borrower is — mirrors `IntentCatalog.requiresBorrowerSegment`. */
+const BORROWER_SEGMENT_PURPOSES = new Set([
+  'BUSINESS_EQUIPMENT_PURCHASE', 'VEHICLE_PURCHASE', 'BUSINESS_EXPANSION',
+  'CASH_FLOW_MANAGEMENT', 'COMMERCIAL_PROPERTY_PURCHASE', 'REFINANCE_EXISTING_BORROWING',
+]);
+
+/** Purposes where asset type materially changes the product route — mirrors `IntentCatalog.requiresAssetCategory`. */
+const ASSET_CATEGORY_PURPOSES = new Set(['BUSINESS_EQUIPMENT_PURCHASE', 'VEHICLE_PURCHASE']);
+
+export function requiresBorrowerSegment(purposeCode?: string | null): boolean {
+  return !!purposeCode && BORROWER_SEGMENT_PURPOSES.has(purposeCode);
+}
+
+export function requiresAssetCategory(purposeCode?: string | null): boolean {
+  return !!purposeCode && ASSET_CATEGORY_PURPOSES.has(purposeCode);
 }
 
 export interface StageReview {

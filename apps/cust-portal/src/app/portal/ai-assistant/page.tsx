@@ -6,6 +6,10 @@ import { formatCurrency } from '@/lib/format';
 import {
   aiCreditJourneyService,
   DEFAULT_INTENT_OPTIONS,
+  BORROWER_SEGMENT_OPTIONS,
+  ASSET_CATEGORY_OPTIONS,
+  requiresBorrowerSegment,
+  requiresAssetCategory,
   type CreditJourney,
   type CreditNeedFacts,
   type IntentOption,
@@ -20,11 +24,19 @@ import {
 /* ─── helpers ────────────────────────────────────────────────── */
 
 function formatFactValue(key: string, value: unknown, facts: CreditNeedFacts): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '' || value === 'UNKNOWN' || value === 'NOT_APPLICABLE') {
+    return '—';
+  }
   if (key === 'estimatedCost') {
     const n = typeof value === 'number' ? value : parseFloat(String(value));
     if (Number.isNaN(n)) return '—';
     return formatCurrency(n, facts.currency || 'EUR');
+  }
+  if (key === 'borrowerSegment') {
+    return BORROWER_SEGMENT_OPTIONS.find(o => o.value === value)?.label ?? String(value).replace(/_/g, ' ');
+  }
+  if (key === 'assetCategory') {
+    return ASSET_CATEGORY_OPTIONS.find(o => o.value === value)?.label ?? String(value).replace(/_/g, ' ');
   }
   return String(value).replace(/_/g, ' ');
 }
@@ -35,6 +47,8 @@ const FACT_LABELS: Record<string, string> = {
   estimatedCost: 'Estimated amount',
   currency: 'Currency',
   targetDate: 'Target date',
+  borrowerSegment: 'Borrower type',
+  assetCategory: 'Asset / equipment type',
 };
 
 function Skeleton({ className = '' }: { className?: string }) {
@@ -74,9 +88,13 @@ function ReviewCard({
   );
   const [currency, setCurrency] = useState(facts.currency || 'EUR');
   const [targetDate, setTargetDate] = useState(facts.targetDate || '');
+  const [borrowerSegment, setBorrowerSegment] = useState(facts.borrowerSegment || 'UNKNOWN');
+  const [assetCategory, setAssetCategory] = useState(facts.assetCategory || 'NOT_APPLICABLE');
 
   const isPresented = status === 'PRESENTED';
   const isConfirmed = status === 'CONFIRMED';
+  const showBorrowerSegment = requiresBorrowerSegment(facts.purpose);
+  const showAssetCategory = requiresAssetCategory(facts.purpose);
 
   function submitRevision(e: React.FormEvent) {
     e.preventDefault();
@@ -85,6 +103,8 @@ function ReviewCard({
       estimatedCost: estimatedCost === '' ? null : parseFloat(estimatedCost),
       currency,
       targetDate: targetDate || null,
+      borrowerSegment,
+      assetCategory,
     });
     setEditing(false);
   }
@@ -118,7 +138,16 @@ function ReviewCard({
 
       {!editing ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(['purpose', 'assetCondition', 'estimatedCost', 'targetDate'] as const).map(key => (
+          {(
+            [
+              'purpose',
+              'assetCondition',
+              'estimatedCost',
+              'targetDate',
+              ...(showBorrowerSegment ? (['borrowerSegment'] as const) : []),
+              ...(showAssetCategory ? (['assetCategory'] as const) : []),
+            ] as const
+          ).map(key => (
             <div key={key}>
               <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
                 {FACT_LABELS[key]}
@@ -175,6 +204,42 @@ function ReviewCard({
               className="input text-sm"
             />
           </div>
+          {showBorrowerSegment && (
+            <div>
+              <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
+                Who is this for?
+              </label>
+              <select
+                value={borrowerSegment}
+                onChange={e => setBorrowerSegment(e.target.value)}
+                className="input text-sm"
+              >
+                {BORROWER_SEGMENT_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {showAssetCategory && (
+            <div>
+              <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
+                Asset / equipment type
+              </label>
+              <select
+                value={assetCategory}
+                onChange={e => setAssetCategory(e.target.value)}
+                className="input text-sm"
+              >
+                {ASSET_CATEGORY_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="sm:col-span-2 flex items-center gap-2 pt-1">
             <button type="submit" disabled={busy} className="btn btn-primary text-xs px-4 py-2">
               Save changes
@@ -250,7 +315,13 @@ export default function AiAssistantPage() {
       .then(all => {
         if (cancelled) return;
         setMatchedProducts(
-          matchProductsForIntent(all, review.facts.purpose, review.facts.estimatedCost)
+          matchProductsForIntent(
+            all,
+            review.facts.purpose,
+            review.facts.estimatedCost,
+            review.facts.borrowerSegment,
+            review.facts.assetCategory
+          )
         );
       })
       .catch(() => {

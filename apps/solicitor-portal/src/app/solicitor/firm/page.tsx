@@ -102,6 +102,10 @@ export default function FirmProfilePage() {
     dot: 'bg-gray-400',
   };
 
+  const firmName = String(firm.firmName ?? 'Unnamed Firm');
+  const tradingName = firm.tradingName ? String(firm.tradingName) : null;
+  const lawSocietyId = firm.lawSocietyIdentifier ? String(firm.lawSocietyIdentifier) : null;
+
   const address = [firm.addressLine1, firm.addressLine2, firm.city, firm.county, firm.eircode]
     .filter(Boolean)
     .map(String)
@@ -131,18 +135,12 @@ export default function FirmProfilePage() {
               </svg>
             </div>
             <div>
-              <h1 className="text-2xl font-bold leading-tight">
-                {String(firm.firmName ?? 'Unnamed Firm')}
-              </h1>
-              {firm.tradingName && (
-                <p className="text-purple-200 text-sm mt-0.5">
-                  Trading as: {String(firm.tradingName)}
-                </p>
+              <h1 className="text-2xl font-bold leading-tight">{firmName}</h1>
+              {tradingName && (
+                <p className="text-purple-200 text-sm mt-0.5">Trading as: {tradingName}</p>
               )}
-              {firm.lawSocietyIdentifier && (
-                <p className="text-purple-300 text-xs mt-1">
-                  Law Society: {String(firm.lawSocietyIdentifier)}
-                </p>
+              {lawSocietyId && (
+                <p className="text-purple-300 text-xs mt-1">Law Society: {lawSocietyId}</p>
               )}
             </div>
           </div>

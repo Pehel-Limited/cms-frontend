@@ -18,9 +18,11 @@ const statusColor: Record<string, string> = {
   NOT_STARTED: 'bg-gray-100 text-gray-600',
   PENDING: 'bg-yellow-100 text-yellow-700',
   SUBMITTED: 'bg-blue-100 text-blue-700',
+  IN_REVIEW: 'bg-indigo-100 text-indigo-700',
   ACCEPTED: 'bg-green-100 text-green-700',
   REJECTED: 'bg-red-100 text-red-700',
   WAIVED: 'bg-purple-100 text-purple-700',
+  NOT_APPLICABLE: 'bg-gray-100 text-gray-400',
 };
 
 export default function ChecklistPanel({
@@ -97,12 +99,22 @@ export default function ChecklistPanel({
               >
                 {item.status.replace(/_/g, ' ')}
               </span>
-              {isBankUser && ['SUBMITTED', 'PENDING'].includes(item.status) && (
+              {/* Bank: review submitted items */}
+              {isBankUser && ['SUBMITTED', 'PENDING', 'IN_REVIEW'].includes(item.status) && (
                 <button
                   onClick={() => setReviewingId(reviewingId === item.id ? null : item.id)}
                   className="text-xs text-primary-600 hover:underline"
                 >
                   Review
+                </button>
+              )}
+              {/* Solicitor: submit not-yet-submitted items */}
+              {!isBankUser && ['NOT_STARTED', 'PENDING', 'REJECTED'].includes(item.status) && (
+                <button
+                  onClick={() => review(item.id, 'SUBMIT')}
+                  className="text-xs px-2.5 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
+                >
+                  Mark as Submitted
                 </button>
               )}
             </div>

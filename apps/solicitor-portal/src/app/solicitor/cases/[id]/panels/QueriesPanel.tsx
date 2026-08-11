@@ -7,9 +7,9 @@ import { toast } from 'react-toastify';
 interface QueryMessage {
   id: string;
   messageBody: string;
-  senderName?: string;
-  sentAt?: string;
+  senderType?: string;
   internalOnly?: boolean;
+  createdAt?: string;
 }
 
 interface QueryThread {
@@ -44,7 +44,7 @@ export default function QueriesPanel({
   const [showNewForm, setShowNewForm] = useState(false);
   const [newSubject, setNewSubject] = useState('');
   const [newMessage, setNewMessage] = useState('');
-  const [newType, setNewType] = useState('GENERAL');
+  const [newType, setNewType] = useState('OTHER');
 
   useEffect(() => {
     load();
@@ -126,9 +126,21 @@ export default function QueriesPanel({
             onChange={e => setNewType(e.target.value)}
             className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none"
           >
-            {['GENERAL', 'TITLE', 'PLANNING', 'VALUATION', 'LEGAL', 'DRAWDOWN', 'OTHER'].map(t => (
-              <option key={t} value={t}>
-                {t}
+            {[
+              { value: 'MISSING_INFORMATION', label: 'Missing Information' },
+              { value: 'TITLE_ISSUE', label: 'Title Issue' },
+              { value: 'PLANNING_ISSUE', label: 'Planning Issue' },
+              { value: 'IDENTITY_AUTHORITY_ISSUE', label: 'Identity / Authority Issue' },
+              { value: 'FACILITY_LETTER_ISSUE', label: 'Facility Letter Issue' },
+              { value: 'DRAWDOWN_ISSUE', label: 'Drawdown Issue' },
+              { value: 'REDEMPTION_ISSUE', label: 'Redemption Issue' },
+              { value: 'DISCHARGE_ISSUE', label: 'Discharge Issue' },
+              { value: 'REGISTRATION_DELAY', label: 'Registration Delay' },
+              { value: 'TECHNICAL_SUPPORT', label: 'Technical Support' },
+              { value: 'OTHER', label: 'Other' },
+            ].map(t => (
+              <option key={t.value} value={t.value}>
+                {t.label}
               </option>
             ))}
           </select>
@@ -192,10 +204,10 @@ export default function QueriesPanel({
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-medium text-gray-700">
-                        {msg.senderName ?? 'Unknown'}
+                        {msg.senderType === 'BANK_USER' ? 'Bank' : 'Solicitor'}
                       </span>
                       <span className="text-xs text-gray-400">
-                        {msg.sentAt ? new Date(msg.sentAt).toLocaleString() : ''}
+                        {msg.createdAt ? new Date(msg.createdAt).toLocaleString() : ''}
                       </span>
                     </div>
                     <p className="text-gray-700 whitespace-pre-wrap">{msg.messageBody}</p>

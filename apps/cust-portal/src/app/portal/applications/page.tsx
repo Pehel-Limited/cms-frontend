@@ -59,59 +59,57 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 const STATUS_BG: Record<string, string> = {
-  DRAFT: 'bg-slate-50 text-slate-700',
-  SUBMITTED: 'bg-blue-50 text-blue-700',
-  PENDING_KYC: 'bg-amber-50 text-amber-700',
-  KYC_APPROVED: 'bg-teal-50 text-teal-700',
-  KYC_REJECTED: 'bg-red-50 text-red-700',
-  PENDING_DOCUMENTS: 'bg-orange-50 text-orange-700',
-  DOCUMENTS_RECEIVED: 'bg-teal-50 text-teal-700',
-  PENDING_CREDIT_CHECK: 'bg-indigo-50 text-indigo-700',
-  CREDIT_APPROVED: 'bg-indigo-50 text-indigo-700',
-  CREDIT_DECLINED: 'bg-red-50 text-red-700',
-  PENDING_UNDERWRITING: 'bg-violet-50 text-violet-700',
-  IN_UNDERWRITING: 'bg-violet-50 text-violet-700',
-  UNDERWRITING_APPROVED: 'bg-emerald-50 text-emerald-700',
-  UNDERWRITING_DECLINED: 'bg-red-50 text-red-700',
-  REFERRED_TO_SENIOR: 'bg-indigo-50 text-indigo-700',
-  REFERRED_TO_UNDERWRITER: 'bg-indigo-50 text-indigo-700',
-  PENDING_DECISION: 'bg-purple-50 text-purple-700',
-  APPROVED: 'bg-emerald-50 text-emerald-700',
-  DECLINED: 'bg-red-50 text-red-700',
-  PENDING_CONDITIONS: 'bg-amber-50 text-amber-700',
-  CONDITIONS_MET: 'bg-teal-50 text-teal-700',
-  OFFER_GENERATED: 'bg-cyan-50 text-cyan-700',
-  OFFER_SENT: 'bg-cyan-50 text-cyan-700',
-  OFFER_ACCEPTED: 'bg-emerald-50 text-emerald-700',
-  OFFER_REJECTED: 'bg-red-50 text-red-700',
-  OFFER_EXPIRED: 'bg-slate-100 text-slate-500',
-  OFFER_COUNTERED: 'bg-amber-50 text-amber-700',
-  PENDING_ESIGN: 'bg-violet-50 text-violet-700',
-  ESIGN_IN_PROGRESS: 'bg-violet-50 text-violet-700',
-  ESIGN_COMPLETED: 'bg-emerald-50 text-emerald-700',
-  PENDING_BOOKING: 'bg-sky-50 text-sky-700',
-  BOOKING_IN_PROGRESS: 'bg-sky-50 text-sky-700',
-  BOOKED: 'bg-emerald-50 text-emerald-700',
-  PENDING_DISBURSEMENT: 'bg-lime-50 text-lime-700',
-  DISBURSEMENT_IN_PROGRESS: 'bg-lime-50 text-lime-700',
-  DISBURSED: 'bg-emerald-50 text-emerald-700',
-  RETURNED: 'bg-orange-50 text-orange-700',
-  WITHDRAWN: 'bg-slate-100 text-slate-600',
-  EXPIRED: 'bg-slate-100 text-slate-500',
-  CANCELLED: 'bg-slate-100 text-slate-600',
-  ACTIVE: 'bg-emerald-50 text-emerald-700',
-  CLOSED: 'bg-slate-100 text-slate-600',
+  DRAFT: 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300',
+  SUBMITTED: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  PENDING_KYC: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  KYC_APPROVED: 'bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  KYC_REJECTED: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  PENDING_DOCUMENTS: 'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  DOCUMENTS_RECEIVED: 'bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  PENDING_CREDIT_CHECK: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+  CREDIT_APPROVED: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+  CREDIT_DECLINED: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  PENDING_UNDERWRITING: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  IN_UNDERWRITING: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  UNDERWRITING_APPROVED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  UNDERWRITING_DECLINED: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  REFERRED_TO_SENIOR: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+  REFERRED_TO_UNDERWRITER: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+  PENDING_DECISION: 'bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+  APPROVED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  DECLINED: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  PENDING_CONDITIONS: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  CONDITIONS_MET: 'bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  OFFER_GENERATED: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300',
+  OFFER_SENT: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300',
+  OFFER_ACCEPTED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  OFFER_REJECTED: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  OFFER_EXPIRED: 'bg-slate-100 text-slate-500 dark:bg-slate-500/15 dark:text-slate-400',
+  OFFER_COUNTERED: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  PENDING_ESIGN: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  ESIGN_IN_PROGRESS: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  ESIGN_COMPLETED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  PENDING_BOOKING: 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+  BOOKING_IN_PROGRESS: 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+  BOOKED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  PENDING_DISBURSEMENT: 'bg-lime-50 text-lime-700 dark:bg-lime-500/15 dark:text-lime-300',
+  DISBURSEMENT_IN_PROGRESS: 'bg-lime-50 text-lime-700 dark:bg-lime-500/15 dark:text-lime-300',
+  DISBURSED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  RETURNED: 'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  WITHDRAWN: 'bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-300',
+  EXPIRED: 'bg-slate-100 text-slate-500 dark:bg-slate-500/15 dark:text-slate-400',
+  CANCELLED: 'bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-300',
+  ACTIVE: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  CLOSED: 'bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-300',
 };
 
 function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] || status;
   const dot = STATUS_DOT[status] || 'bg-slate-400';
-  const bg = STATUS_BG[status] || 'bg-slate-50 text-slate-700';
+  const bg = STATUS_BG[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300';
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bg}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+    <span className={`badge ${bg}`}>
+      <span className={`badge-dot ${dot}`} />
       {label}
     </span>
   );
@@ -224,7 +222,7 @@ const FILTER_ICONS: Record<FilterStatus, React.ReactNode> = {
 
 /* ─── Skeleton ──────────────────────────────────────────────── */
 function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-slate-200/70 ${className}`} />;
+  return <div className={`skeleton ${className}`} />;
 }
 
 /* ─── Main ──────────────────────────────────────────────────── */
@@ -235,6 +233,8 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('ALL');
+
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     loadApplications();
@@ -253,10 +253,24 @@ export default function ApplicationsPage() {
     }
   }
 
-  const filtered =
+  const byStatus =
     filter === 'ALL'
       ? applications
       : applications.filter(a => FILTER_GROUPS[filter]?.includes(a.status));
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? byStatus.filter(a =>
+        [
+          a.applicationNumber,
+          LOAN_PURPOSE_LABELS[a.loanPurpose as LoanPurpose],
+          a.loanPurpose,
+          STATUS_LABELS[a.status],
+        ]
+          .filter(Boolean)
+          .some(v => String(v).toLowerCase().includes(q))
+      )
+    : byStatus;
 
   const counts: Record<FilterStatus, number> = {
     ALL: applications.length,
@@ -266,54 +280,66 @@ export default function ApplicationsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── Hero header ────────────────────────────────────── */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-6 sm:p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-white/5 translate-y-1/2" />
+      <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
+        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" />
 
-        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">My Applications</h1>
-            <p className="mt-1 text-sm text-white/70">Track and manage your loan applications</p>
+            <h2 className="text-xl font-bold text-white sm:text-2xl">My applications</h2>
+            <p className="mt-1 text-sm text-white/70">
+              {loading
+                ? 'Loading your applications…'
+                : `${counts.ACTIVE} in progress · ${counts.ALL} total`}
+            </p>
           </div>
           <button
             onClick={() => router.push('/portal/applications/new')}
-            className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-white/25 transition-all border border-white/20 shadow-lg"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-white/25"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            New Application
+            New application
           </button>
         </div>
+      </div>
 
-        {/* Filter pills */}
-        <div className="relative mt-6 flex flex-wrap gap-2">
+      {/* ── Toolbar: filters + search ──────────────────────── */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="segmented no-scrollbar max-w-full overflow-x-auto" role="tablist" aria-label="Filter applications">
           {(Object.keys(FILTER_GROUPS) as FilterStatus[]).map(f => (
             <button
               key={f}
+              role="tab"
+              aria-selected={filter === f}
               onClick={() => setFilter(f)}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                filter === f
-                  ? 'bg-white text-[#7f2b7b] shadow-md'
-                  : 'bg-white/10 text-white/90 hover:bg-white/20 border border-white/10'
-              }`}
+              className="segmented-item"
             >
               {FILTER_ICONS[f]}
               {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
-              <span
-                className={`ml-1 text-xs tabular-nums ${filter === f ? 'text-[#7f2b7b]/60' : 'text-white/50'}`}
-              >
-                {counts[f]}
-              </span>
+              <span className="ml-0.5 text-xs tabular-nums opacity-60">{counts[f]}</span>
             </button>
           ))}
+        </div>
+
+        <div className="relative w-full lg:max-w-xs">
+          <svg
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+            style={{ color: 'var(--text-muted)' }}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search by reference, purpose or status"
+            aria-label="Search applications"
+            className="input py-2 pl-9 pr-4 text-sm"
+          />
         </div>
       </div>
 
@@ -321,10 +347,10 @@ export default function ApplicationsPage() {
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="bg-white rounded-2xl border border-slate-200/80 p-5">
+            <div key={i} className="card p-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Skeleton className="w-10 h-10 rounded-xl" />
+                  <Skeleton className="h-10 w-10" />
                   <div className="space-y-2">
                     <Skeleton className="h-4 w-40" />
                     <Skeleton className="h-3 w-56" />
@@ -336,85 +362,69 @@ export default function ApplicationsPage() {
           ))}
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200/60 rounded-2xl p-8 text-center">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center mb-3">
-            <svg
-              className="w-6 h-6 text-red-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
+        <div className="alert alert-error flex-col text-center sm:flex-row sm:text-left">
+          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <div className="flex-1">
+            <p className="font-semibold">Failed to load applications</p>
+            <p className="mt-0.5 text-sm opacity-80">{error}</p>
           </div>
-          <p className="text-red-700 font-medium">Failed to load applications</p>
-          <p className="text-sm text-red-500 mt-1">{error}</p>
-          <button
-            onClick={loadApplications}
-            className="mt-4 text-sm font-medium text-red-700 underline decoration-red-300 underline-offset-4"
-          >
+          <button onClick={loadApplications} className="btn btn-sm btn-outline shrink-0">
             Try again
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7f2b7b]/10 to-[#a0369b]/10 flex items-center justify-center mb-4">
-            <svg
-              className="w-8 h-8 text-[#7f2b7b]"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
           {applications.length === 0 ? (
             <>
-              <h3 className="text-lg font-semibold text-slate-900">No applications yet</h3>
-              <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-                Start your first loan application to get started on your financial journey.
+              <h3 className="empty-state-title">No applications yet</h3>
+              <p className="empty-state-text">
+                Start your first loan application to get going on your financial journey.
               </p>
               <button
                 onClick={() => router.push('/portal/applications/new')}
-                className="mt-5 bg-[#7f2b7b] text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-[#6b2568] transition-colors shadow-sm"
+                className="btn btn-primary mt-5"
               >
-                Start Application
+                Start application
               </button>
             </>
           ) : (
             <>
-              <h3 className="text-lg font-semibold text-slate-900">No matching applications</h3>
-              <p className="text-sm text-slate-500 mt-1">Try changing the filter above.</p>
+              <h3 className="empty-state-title">No matching applications</h3>
+              <p className="empty-state-text">
+                Try a different filter{q ? ' or search term' : ''} to find what you&apos;re looking for.
+              </p>
+              {q && (
+                <button onClick={() => setQuery('')} className="btn btn-secondary btn-sm mt-4">
+                  Clear search
+                </button>
+              )}
             </>
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="stagger space-y-3">
           {filtered.map(app => (
             <button
               key={app.applicationId}
               onClick={() => router.push(`/portal/applications/${app.applicationId}`)}
-              className="w-full text-left bg-white rounded-2xl border border-slate-200/80 p-5 hover:border-[#7f2b7b]/30 hover:shadow-md transition-all duration-200 group"
+              className="card card-hover group w-full p-5 text-left"
             >
               <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <div className="hidden sm:flex shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-[#7f2b7b]/10 to-[#a0369b]/10 items-center justify-center">
-                    <svg
-                      className="w-5 h-5 text-[#7f2b7b]"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                <div className="flex min-w-0 flex-1 items-start gap-4">
+                  <div
+                    className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:flex"
+                    style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -424,20 +434,18 @@ export default function ApplicationsPage() {
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h3 className="text-sm font-semibold text-slate-900 group-hover:text-[#7f2b7b] transition-colors">
-                        {app.applicationNumber || 'Draft Application'}
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {app.applicationNumber || 'Draft application'}
                       </h3>
                       <StatusBadge status={app.status} />
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+                    <div
+                      className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
                       <span className="inline-flex items-center gap-1">
-                        <svg
-                          className="w-3.5 h-3.5 text-slate-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
+                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -447,7 +455,7 @@ export default function ApplicationsPage() {
                         </svg>
                         {LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose}
                       </span>
-                      <span className="font-medium text-slate-700 tabular-nums">
+                      <span className="font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
                         {formatCurrency(app.requestedAmount)}
                       </span>
                       <span>{app.requestedTermMonths} months</span>
@@ -455,34 +463,33 @@ export default function ApplicationsPage() {
                   </div>
                 </div>
 
-                <div className="text-right shrink-0 space-y-1">
-                  <p className="text-xs text-slate-400">
+                <div className="shrink-0 space-y-1 text-right">
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     {app.status === 'DRAFT' ? 'Created' : 'Updated'}{' '}
                     {formatDate(app.updatedAt || app.createdAt)}
                   </p>
                   {app.approvedAmount && (
-                    <p className="text-sm font-semibold text-emerald-600 tabular-nums">
+                    <p className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                       Approved: {formatCurrency(app.approvedAmount)}
                     </p>
                   )}
                   <svg
-                    className="w-5 h-5 text-slate-300 group-hover:text-[#7f2b7b] transition-colors ml-auto mt-1"
+                    className="ml-auto mt-1 h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5"
+                    style={{ color: 'var(--text-muted)' }}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
               </div>
 
               {app.status !== 'DRAFT' && (
-                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3 text-xs text-slate-400">
+                <div
+                  className="mt-3 flex flex-wrap items-center gap-3 pt-3 text-xs"
+                  style={{ borderTop: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}
+                >
                   {app.daysInCurrentStatus !== undefined && app.daysInCurrentStatus !== null && (
                     <span className="inline-flex items-center gap-1">
                       <svg

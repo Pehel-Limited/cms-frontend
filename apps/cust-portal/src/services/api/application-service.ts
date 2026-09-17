@@ -187,6 +187,26 @@ export const LOAN_PURPOSE_LABELS: Record<LoanPurpose, string> = {
   OTHER: 'Other',
 };
 
+/**
+ * Maps AI Credit Assistant intent codes (IntentCatalog / DEFAULT_INTENT_OPTIONS)
+ * to this wizard's LoanPurpose values, so a confirmed AI credit-journey need
+ * can be carried straight into the application form instead of the customer
+ * re-entering it.
+ */
+export const INTENT_TO_LOAN_PURPOSE: Record<string, LoanPurpose> = {
+  HOME_PURCHASE: 'HOME_PURCHASE',
+  VEHICLE_PURCHASE: 'VEHICLE_PURCHASE',
+  BUSINESS_EXPANSION: 'BUSINESS_EXPANSION',
+  BUSINESS_EQUIPMENT_PURCHASE: 'EQUIPMENT_PURCHASE',
+  CASH_FLOW_MANAGEMENT: 'WORKING_CAPITAL',
+  REFINANCE_EXISTING_BORROWING: 'DEBT_CONSOLIDATION',
+  PERSONAL_BORROWING: 'PERSONAL_USE',
+  COMMERCIAL_PROPERTY_PURCHASE: 'OTHER',
+  OVERDRAFT: 'OTHER',
+  CREDIT_CARD: 'OTHER',
+  OTHER: 'OTHER',
+};
+
 // ─── Types ─────────────────────────────────────────────────────
 
 export interface ProductSummary {

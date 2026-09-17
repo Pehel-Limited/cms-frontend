@@ -110,27 +110,31 @@ export default function TeamPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-blue-600" />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div
+          className="spinner h-10 w-10"
+          style={{ color: 'var(--brand)' }}
+          role="status"
+          aria-label="Loading team"
+        />
       </div>
     );
   }
 
   if (error && !data) {
     return (
-      <div className="max-w-4xl mx-auto px-6 py-10">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-          <p className="text-red-800 font-medium mb-2">Unable to load team</p>
-          <p className="text-red-600 text-sm">{error}</p>
-          <p className="text-gray-500 text-sm mt-3">
-            This feature is only available for business customers.
-          </p>
-          <Link
-            href="/portal/company"
-            className="inline-block mt-4 text-blue-600 hover:underline text-sm"
-          >
-            ← Back to Company
-          </Link>
+      <div className="mx-auto max-w-4xl py-10">
+        <div className="alert alert-error" role="alert">
+          <div className="flex-1">
+            <p className="font-semibold">Unable to load team</p>
+            <p className="mt-1">{error}</p>
+            <p className="mt-2 opacity-80">
+              This feature is only available for business customers.
+            </p>
+            <Link href="/portal/company" className="btn btn-secondary btn-sm mt-4">
+              ← Back to company
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -141,29 +145,32 @@ export default function TeamPage() {
   const canManage = data.canManageTeam;
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8">
+    <div className="mx-auto max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <Link href="/portal/company" className="hover:text-blue-600">
+          <div
+            className="mb-1 flex items-center gap-2 text-sm"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <Link href="/portal/company" className="transition-colors hover:underline">
               Company
             </Link>
-            <span>/</span>
-            <span className="text-gray-900">Team Management</span>
+            <span aria-hidden="true">/</span>
+            <span style={{ color: 'var(--text-primary)' }}>Team management</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1
+            className="text-xl font-bold tracking-tight sm:text-2xl"
+            style={{ color: 'var(--text-primary)' }}
+          >
             {data.entityName || 'Company'} — Team
           </h1>
-          <p className="text-gray-500 mt-1">
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
             {data.totalMembers} member{data.totalMembers !== 1 ? 's' : ''}
           </p>
         </div>
         {canManage && (
-          <button
-            onClick={() => setShowInvite(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-          >
+          <button onClick={() => setShowInvite(true)} className="btn btn-primary">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -172,20 +179,15 @@ export default function TeamPage() {
                 d="M12 6v6m0 0v6m0-6h6m-6 0H6"
               />
             </svg>
-            Invite Member
+            Invite member
           </button>
         )}
       </div>
 
       {/* Success banner */}
       {inviteSuccess && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
-          <svg
-            className="w-5 h-5 flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+        <div className="alert alert-success mb-4" role="status">
+          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -199,216 +201,240 @@ export default function TeamPage() {
 
       {/* Error banner */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {error}
-          <button onClick={() => setError(null)} className="ml-2 underline">
+        <div className="alert alert-error mb-4" role="alert">
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="underline">
             Dismiss
           </button>
         </div>
       )}
 
       {/* Role legend */}
-      <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(Object.keys(ROLE_LABELS) as PortalRole[]).map(role => (
-          <div key={role} className="p-3 bg-white border border-gray-200 rounded-lg">
-            <span
-              className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[role]}`}
-            >
-              {ROLE_LABELS[role]}
-            </span>
-            <p className="text-xs text-gray-500 mt-1">{ROLE_DESCRIPTIONS[role]}</p>
+          <div key={role} className="card p-3">
+            <span className={`badge ${ROLE_COLORS[role]}`}>{ROLE_LABELS[role]}</span>
+            <p className="mt-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {ROLE_DESCRIPTIONS[role]}
+            </p>
           </div>
         ))}
       </div>
 
       {/* Team members table */}
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Entity Role
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Portal Role
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Attributes
-              </th>
-              {canManage && (
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {data.members.map(member => (
-              <tr key={member.id} className={member.isCurrentUser ? 'bg-blue-50/50' : ''}>
-                {/* Name / email */}
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
-                      {(member.name || member.email || '?').charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {member.name || '—'}
-                        {member.isCurrentUser && (
-                          <span className="ml-2 text-xs text-blue-600 font-normal">(You)</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-500">{member.email || '—'}</p>
-                    </div>
-                  </div>
-                </td>
-
-                {/* Entity role */}
-                <td className="px-4 py-3 text-sm text-gray-700 capitalize">
-                  {member.entityRole?.toLowerCase() || '—'}
-                </td>
-
-                {/* Portal role */}
-                <td className="px-4 py-3">
-                  {editingMemberId === member.id ? (
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={editRole}
-                        onChange={e => setEditRole(e.target.value as PortalRole)}
-                        className="text-sm border border-gray-300 rounded px-2 py-1"
+      <div className="card overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="data-table w-full">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Entity role</th>
+                <th>Portal role</th>
+                <th>Attributes</th>
+                {canManage && <th className="text-right">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {data.members.map(member => (
+                <tr
+                  key={member.id}
+                  style={
+                    member.isCurrentUser ? { backgroundColor: 'var(--brand-soft)' } : undefined
+                  }
+                >
+                  {/* Name / email */}
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+                        style={{
+                          backgroundColor: 'var(--brand-soft)',
+                          color: 'var(--brand-on-soft)',
+                        }}
                       >
-                        {(Object.keys(ROLE_LABELS) as PortalRole[]).map(r => (
-                          <option key={r} value={r}>
-                            {ROLE_LABELS[r]}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => handleUpdateRole(member.id)}
-                        disabled={updatingRole}
-                        className="text-xs text-green-600 hover:underline"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingMemberId(null)}
-                        className="text-xs text-gray-500 hover:underline"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[member.portalRole]}`}
-                    >
-                      {ROLE_LABELS[member.portalRole] || member.portalRole}
-                    </span>
-                  )}
-                </td>
-
-                {/* Attributes */}
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {member.isAuthorizedSignatory && (
-                      <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
-                        Signatory
-                      </span>
-                    )}
-                    {member.isBeneficialOwner && (
-                      <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
-                        Beneficial Owner
-                      </span>
-                    )}
-                    {member.ownershipPercentage != null && member.ownershipPercentage > 0 && (
-                      <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                        {member.ownershipPercentage}% ownership
-                      </span>
-                    )}
-                  </div>
-                </td>
-
-                {/* Actions */}
-                {canManage && (
-                  <td className="px-4 py-3 text-right">
-                    {member.isCurrentUser ? (
-                      <span className="text-xs text-gray-400">—</span>
-                    ) : confirmRemoveId === member.id ? (
-                      <div className="flex items-center gap-2 justify-end">
-                        <span className="text-xs text-red-600">Remove?</span>
-                        <button
-                          onClick={() => handleRemove(member.id)}
-                          disabled={removing}
-                          className="text-xs text-red-600 font-medium hover:underline"
+                        {(member.name || member.email || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p
+                          className="text-sm font-medium"
+                          style={{ color: 'var(--text-primary)' }}
                         >
-                          Yes
+                          {member.name || '—'}
+                          {member.isCurrentUser && (
+                            <span
+                              className="ml-2 text-xs font-normal"
+                              style={{ color: 'var(--brand-on-soft)' }}
+                            >
+                              (You)
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {member.email || '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Entity role */}
+                  <td className="capitalize">{member.entityRole?.toLowerCase() || '—'}</td>
+
+                  {/* Portal role */}
+                  <td>
+                    {editingMemberId === member.id ? (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={editRole}
+                          onChange={e => setEditRole(e.target.value as PortalRole)}
+                          className="select w-auto py-1.5 text-xs"
+                          aria-label="Portal role"
+                        >
+                          {(Object.keys(ROLE_LABELS) as PortalRole[]).map(r => (
+                            <option key={r} value={r}>
+                              {ROLE_LABELS[r]}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => handleUpdateRole(member.id)}
+                          disabled={updatingRole}
+                          className="text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                        >
+                          Save
                         </button>
                         <button
-                          onClick={() => setConfirmRemoveId(null)}
-                          className="text-xs text-gray-500 hover:underline"
+                          onClick={() => setEditingMemberId(null)}
+                          className="text-xs hover:underline"
+                          style={{ color: 'var(--text-muted)' }}
                         >
-                          No
+                          Cancel
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 justify-end">
-                        <button
-                          onClick={() => {
-                            setEditingMemberId(member.id);
-                            setEditRole(member.portalRole);
-                          }}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          Change Role
-                        </button>
-                        <button
-                          onClick={() => setConfirmRemoveId(member.id)}
-                          className="text-xs text-red-500 hover:underline"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <span className={`badge ${ROLE_COLORS[member.portalRole]}`}>
+                        {ROLE_LABELS[member.portalRole] || member.portalRole}
+                      </span>
                     )}
                   </td>
-                )}
-              </tr>
-            ))}
 
-            {data.members.length === 0 && (
-              <tr>
-                <td
-                  colSpan={canManage ? 5 : 4}
-                  className="px-4 py-8 text-center text-gray-500 text-sm"
-                >
-                  No team members found. Add members via the Company &gt; Parties page first.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  {/* Attributes */}
+                  <td>
+                    <div className="flex flex-wrap gap-1">
+                      {member.isAuthorizedSignatory && (
+                        <span className="badge badge-warning">Signatory</span>
+                      )}
+                      {member.isBeneficialOwner && (
+                        <span className="badge badge-info">Beneficial owner</span>
+                      )}
+                      {member.ownershipPercentage != null && member.ownershipPercentage > 0 && (
+                        <span className="badge badge-neutral">
+                          {member.ownershipPercentage}% ownership
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Actions */}
+                  {canManage && (
+                    <td className="text-right">
+                      {member.isCurrentUser ? (
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          —
+                        </span>
+                      ) : confirmRemoveId === member.id ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-red-500">Remove?</span>
+                          <button
+                            onClick={() => handleRemove(member.id)}
+                            disabled={removing}
+                            className="text-xs font-medium text-red-500 hover:underline"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setConfirmRemoveId(null)}
+                            className="text-xs hover:underline"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => {
+                              setEditingMemberId(member.id);
+                              setEditRole(member.portalRole);
+                            }}
+                            className="text-xs font-medium hover:underline"
+                            style={{ color: 'var(--brand-on-soft)' }}
+                          >
+                            Change role
+                          </button>
+                          <button
+                            onClick={() => setConfirmRemoveId(member.id)}
+                            className="text-xs font-medium text-red-500 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+
+              {data.members.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={canManage ? 5 : 4}
+                    className="py-8 text-center text-sm"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    No team members found. Add members via the Company &gt; Parties page first.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Your role badge */}
-      <div className="mt-4 text-sm text-gray-500">
+      <div className="mt-4 text-sm" style={{ color: 'var(--text-muted)' }}>
         Your portal role:{' '}
-        <span
-          className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[data.currentUserRole]}`}
-        >
+        <span className={`badge ${ROLE_COLORS[data.currentUserRole]}`}>
           {ROLE_LABELS[data.currentUserRole]}
         </span>
       </div>
 
       {/* ─── Invite Modal ──────────────────────────────────────── */}
       {showInvite && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Invite Team Member</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Invite team member"
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border"
+            style={{
+              backgroundColor: 'var(--surface-card)',
+              borderColor: 'var(--surface-border)',
+              boxShadow: 'var(--shadow-lg)',
+            }}
+          >
+            <div
+              className="flex items-center justify-between px-6 py-4"
+              style={{ borderBottom: '1px solid var(--surface-border)' }}
+            >
+              <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Invite team member
+              </h3>
               <button
                 onClick={() => setShowInvite(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="icon-btn"
+                aria-label="Close"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -420,37 +446,42 @@ export default function TeamPage() {
                 </svg>
               </button>
             </div>
-            <div className="px-6 py-4 space-y-4">
+            <div className="space-y-4 px-6 py-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email address *
+                <label className="field-label" htmlFor="invite-email">
+                  Email address <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="invite-email"
                   type="email"
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
                   placeholder="colleague@company.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
+                <label className="field-label" htmlFor="invite-name">
+                  Full name
+                </label>
                 <input
+                  id="invite-name"
                   type="text"
                   value={inviteName}
                   onChange={e => setInviteName(e.target.value)}
                   placeholder="John Smith"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Portal Role *
+                <label className="field-label" htmlFor="invite-role">
+                  Portal role <span className="text-red-500">*</span>
                 </label>
                 <select
+                  id="invite-role"
                   value={inviteRole}
                   onChange={e => setInviteRole(e.target.value as PortalRole)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="select"
                 >
                   {(Object.keys(ROLE_LABELS) as PortalRole[]).map(r => (
                     <option key={r} value={r}>
@@ -460,19 +491,19 @@ export default function TeamPage() {
                 </select>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={() => setShowInvite(false)}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
+            <div
+              className="flex justify-end gap-2 px-6 py-4"
+              style={{ borderTop: '1px solid var(--surface-border)' }}
+            >
+              <button onClick={() => setShowInvite(false)} className="btn btn-secondary">
                 Cancel
               </button>
               <button
                 onClick={handleInvite}
                 disabled={inviting || !inviteEmail.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="btn btn-primary"
               >
-                {inviting ? 'Sending...' : 'Send Invitation'}
+                {inviting ? 'Sending…' : 'Send invitation'}
               </button>
             </div>
           </div>

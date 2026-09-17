@@ -190,6 +190,53 @@ export interface ProductsResponse {
   total: number;
 }
 
+export interface RatePlan {
+  ratePlanId: string;
+  productId: string;
+  planCode: string;
+  label: string;
+  rateType: string;
+  ltvMinPercentage?: number;
+  ltvMaxPercentage?: number;
+  fixedTermYears?: number;
+  interestRate: number;
+  aprc?: number;
+  costPerThousand?: number;
+  isGreen?: boolean;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export interface CreateRatePlanRequest {
+  planCode: string;
+  label: string;
+  rateType: string;
+  ltvMinPercentage?: number;
+  ltvMaxPercentage?: number;
+  fixedTermYears?: number;
+  interestRate: number;
+  aprc?: number;
+  costPerThousand?: number;
+  isGreen?: boolean;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export interface UpdateRatePlanRequest {
+  planCode?: string;
+  label?: string;
+  rateType?: string;
+  ltvMinPercentage?: number;
+  ltvMaxPercentage?: number;
+  fixedTermYears?: number;
+  interestRate?: number;
+  aprc?: number;
+  costPerThousand?: number;
+  isGreen?: boolean;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
 class ProductService {
   private getAuthToken(): string | null {
     if (typeof window !== 'undefined') {
@@ -369,6 +416,64 @@ class ProductService {
       return response.data;
     } catch (error) {
       console.error('Error counting products:', error);
+      throw error;
+    }
+  }
+
+  // ─── Rate Plans ─────────────────────────────────────────────
+
+  async getRatePlans(productId: string, activeOnly = false): Promise<RatePlan[]> {
+    try {
+      const response = await axios.get(`${API_URL}/api/admin/products/${productId}/rate-plans`, {
+        params: { activeOnly },
+        headers: this.getHeaders(),
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching rate plans:', error);
+      throw error;
+    }
+  }
+
+  async createRatePlan(productId: string, request: CreateRatePlanRequest): Promise<RatePlan> {
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/admin/products/${productId}/rate-plans`,
+        request,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error creating rate plan:', error);
+      throw error;
+    }
+  }
+
+  async updateRatePlan(
+    productId: string,
+    ratePlanId: string,
+    request: UpdateRatePlanRequest
+  ): Promise<RatePlan> {
+    try {
+      const response = await axios.put(
+        `${API_URL}/api/admin/products/${productId}/rate-plans/${ratePlanId}`,
+        request,
+        { headers: this.getHeaders() }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error updating rate plan:', error);
+      throw error;
+    }
+  }
+
+  async deleteRatePlan(productId: string, ratePlanId: string): Promise<void> {
+    try {
+      await axios.delete(`${API_URL}/api/admin/products/${productId}/rate-plans/${ratePlanId}`, {
+        headers: this.getHeaders(),
+      });
+    } catch (error) {
+      console.error('Error deleting rate plan:', error);
       throw error;
     }
   }

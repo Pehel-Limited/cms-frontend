@@ -6,7 +6,10 @@ import { toast } from 'react-toastify';
 
 interface DrawdownRequest {
   id: string;
-  requestedAmount: number;
+  amount: number;
+  iban?: string;
+  accountName?: string;
+  requestedDrawdownDate?: string;
   status: string;
   requestedAt?: string;
   reviewedAt?: string;
@@ -33,6 +36,9 @@ export default function DrawdownPanel({
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [amount, setAmount] = useState('');
+  const [iban, setIban] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [requestedDrawdownDate, setRequestedDrawdownDate] = useState('');
   const [purpose, setPurpose] = useState('');
   const [reviewReason, setReviewReason] = useState('');
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -57,11 +63,32 @@ export default function DrawdownPanel({
       toast.error('Enter a valid amount');
       return;
     }
+    if (!iban.trim()) {
+      toast.error('IBAN is required');
+      return;
+    }
+    if (!accountName.trim()) {
+      toast.error('Account name is required');
+      return;
+    }
+    if (!requestedDrawdownDate) {
+      toast.error('Drawdown date is required');
+      return;
+    }
     try {
-      await caseService.requestDrawdown(caseId, { requestedAmount: parseFloat(amount), purpose });
+      await caseService.requestDrawdown(caseId, {
+        amount: parseFloat(amount),
+        iban: iban.trim(),
+        accountName: accountName.trim(),
+        requestedDrawdownDate,
+        purpose,
+      });
       toast.success('Drawdown request submitted');
       setShowForm(false);
       setAmount('');
+      setIban('');
+      setAccountName('');
+      setRequestedDrawdownDate('');
       setPurpose('');
       load();
     } catch (err: unknown) {
@@ -130,6 +157,29 @@ export default function DrawdownPanel({
               />
               <input
                 type="text"
+                placeholder="IBAN"
+                value={iban}
+                onChange={e => setIban(e.target.value)}
+                className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <input
+                type="text"
+                placeholder="Account holder name"
+                value={accountName}
+                onChange={e => setAccountName(e.target.value)}
+                className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Requested drawdown date</label>
+                <input
+                  type="date"
+                  value={requestedDrawdownDate}
+                  onChange={e => setRequestedDrawdownDate(e.target.value)}
+                  className="w-full text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+              <input
+                type="text"
                 placeholder="Purpose (optional)"
                 value={purpose}
                 onChange={e => setPurpose(e.target.value)}
@@ -163,9 +213,14 @@ export default function DrawdownPanel({
           <div key={req.id} className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-start justify-between">
               <div>
-                <p className="font-medium text-sm text-gray-800">
-                  €{req.requestedAmount.toLocaleString()}
-                </p>
+                <p className="font-medium text-sm text-gray-800">€{req.amount?.toLocaleString()}</p>
+                {req.accountName && <p className="text-xs text-gray-500">{req.accountName}</p>}
+                {req.iban && <p className="text-xs text-gray-400 font-mono">{req.iban}</p>}
+                {req.requestedDrawdownDate && (
+                  <p className="text-xs text-gray-400">
+                    Date: {new Date(req.requestedDrawdownDate).toLocaleDateString()}
+                  </p>
+                )}
                 {req.requestedAt && (
                   <p className="text-xs text-gray-400">
                     Requested {new Date(req.requestedAt).toLocaleDateString()}

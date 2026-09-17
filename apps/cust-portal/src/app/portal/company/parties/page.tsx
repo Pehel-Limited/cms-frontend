@@ -101,19 +101,25 @@ export default function PartiesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full" />
+        <div
+          className="spinner h-8 w-8"
+          style={{ color: 'var(--brand)' }}
+          role="status"
+          aria-label="Loading people and roles"
+        />
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="mx-auto max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push('/portal/company')}
-            className="text-gray-400 hover:text-gray-600"
+            className="icon-btn"
+            aria-label="Back to company profile"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -125,8 +131,13 @@ export default function PartiesPage() {
             </svg>
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">People &amp; Roles</h2>
-            <p className="text-sm text-gray-500">
+            <h2
+              className="text-xl font-bold tracking-tight sm:text-2xl"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              People &amp; roles
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
               Manage directors, shareholders, UBOs and authorized signatories
             </p>
           </div>
@@ -136,26 +147,26 @@ export default function PartiesPage() {
             setEditingMember(null);
             setModalMode('add');
           }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors shadow-sm flex items-center gap-2"
+          className="btn btn-primary"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Add Party
+          Add party
         </button>
       </div>
 
       {/* Alerts */}
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-          {error}
-          <button onClick={() => setError(null)} className="ml-2 underline">
+        <div className="alert alert-error mb-4" role="alert">
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="underline">
             Dismiss
           </button>
         </div>
       )}
       {successMsg && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">
+        <div className="alert alert-success mb-4" role="status">
           {successMsg}
         </div>
       )}
@@ -163,147 +174,148 @@ export default function PartiesPage() {
       {/* Validation Banner */}
       {validation && (
         <div
-          className={`mb-6 rounded-lg border p-4 ${
-            validation.isComplete ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'
-          }`}
+          className={`alert mb-6 items-start ${validation.isComplete ? 'alert-success' : 'alert-warning'}`}
         >
-          <div className="flex items-start gap-3">
-            <span
-              className={`text-lg ${validation.isComplete ? 'text-green-600' : 'text-amber-500'}`}
-            >
-              {validation.isComplete ? '✓' : '⚠'}
-            </span>
-            <div className="flex-1">
-              <h3
-                className={`text-sm font-semibold ${validation.isComplete ? 'text-green-800' : 'text-amber-800'}`}
-              >
-                {validation.isComplete ? 'Party requirements met' : 'Action required'}
-              </h3>
-              {!validation.isComplete && validation.issues.length > 0 && (
-                <ul className="mt-1 text-sm text-amber-700 list-disc list-inside">
-                  {validation.issues.map((issue, i) => (
-                    <li key={i}>{issue}</li>
-                  ))}
-                </ul>
-              )}
-              <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-600">
-                <span>
-                  {validation.summary.directors} Director
-                  {validation.summary.directors !== 1 ? 's' : ''}
-                </span>
-                <span>
-                  {validation.summary.shareholders} Shareholder
-                  {validation.summary.shareholders !== 1 ? 's' : ''}
-                </span>
-                <span>
-                  {validation.summary.ubos} UBO{validation.summary.ubos !== 1 ? 's' : ''} (
-                  {validation.summary.totalUboOwnership}%)
-                </span>
-                <span>
-                  {validation.summary.signatories} Signator
-                  {validation.summary.signatories !== 1 ? 'ies' : 'y'}
-                </span>
-              </div>
+          <span className="text-lg leading-none">{validation.isComplete ? '✓' : '⚠'}</span>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold">
+              {validation.isComplete ? 'Party requirements met' : 'Action required'}
+            </h3>
+            {!validation.isComplete && validation.issues.length > 0 && (
+              <ul className="mt-1 list-inside list-disc text-sm">
+                {validation.issues.map((issue, i) => (
+                  <li key={i}>{issue}</li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2 flex flex-wrap gap-4 text-xs opacity-80">
+              <span>
+                {validation.summary.directors} Director
+                {validation.summary.directors !== 1 ? 's' : ''}
+              </span>
+              <span>
+                {validation.summary.shareholders} Shareholder
+                {validation.summary.shareholders !== 1 ? 's' : ''}
+              </span>
+              <span>
+                {validation.summary.ubos} UBO{validation.summary.ubos !== 1 ? 's' : ''} (
+                {validation.summary.totalUboOwnership}%)
+              </span>
+              <span>
+                {validation.summary.signatories} Signator
+                {validation.summary.signatories !== 1 ? 'ies' : 'y'}
+              </span>
             </div>
           </div>
         </div>
       )}
 
       {/* Filter */}
-      <div className="mb-4 flex items-center gap-3">
-        <label className="text-sm text-gray-500">Filter by role:</label>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label className="text-sm" style={{ color: 'var(--text-muted)' }} htmlFor="role-filter">
+          Filter by role
+        </label>
         <select
+          id="role-filter"
           value={roleFilter}
           onChange={e => setRoleFilter(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-primary-500"
+          className="select w-auto min-w-[10rem]"
         >
-          <option value="">All Roles</option>
+          <option value="">All roles</option>
           {AVAILABLE_ROLES.map(r => (
             <option key={r} value={r}>
               {PARTY_ROLE_LABELS[r] || r}
             </option>
           ))}
         </select>
-        <span className="text-sm text-gray-400">
+        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
           {filtered.length} member{filtered.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {/* Members Table */}
       {activeParties.length > 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Name</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Role</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Ownership</th>
-                <th className="px-4 py-3 text-center font-medium text-gray-500">Signatory</th>
-                <th className="px-4 py-3 text-center font-medium text-gray-500">UBO</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {activeParties.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{m.customerName || 'Unknown'}</div>
-                    <div className="text-xs text-gray-500">{m.customerEmail || ''}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                      {PARTY_ROLE_LABELS[m.role] || m.role}
-                    </span>
-                    {m.roleTitle && (
-                      <div className="text-xs text-gray-400 mt-0.5">{m.roleTitle}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {m.ownershipPercentage != null ? `${m.ownershipPercentage}%` : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {m.isAuthorizedSignatory ? (
-                      <span className="text-green-600 font-medium">✓</span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {m.isBeneficialOwner ? (
-                      <span className="text-green-600 font-medium">✓</span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingMember(m);
-                          setModalMode('edit');
-                        }}
-                        className="text-primary-600 hover:text-primary-800 text-xs font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirmId(m.id)}
-                        className="text-red-500 hover:text-red-700 text-xs font-medium"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </td>
+        <div className="card overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="data-table min-w-full">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th>Ownership</th>
+                  <th className="text-center">Signatory</th>
+                  <th className="text-center">UBO</th>
+                  <th className="text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {activeParties.map(m => (
+                  <tr key={m.id}>
+                    <td>
+                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {m.customerName || 'Unknown'}
+                      </div>
+                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {m.customerEmail || ''}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="badge badge-neutral">
+                        {PARTY_ROLE_LABELS[m.role] || m.role}
+                      </span>
+                      {m.roleTitle && (
+                        <div className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {m.roleTitle}
+                        </div>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {m.ownershipPercentage != null ? `${m.ownershipPercentage}%` : '—'}
+                    </td>
+                    <td className="text-center">
+                      {m.isAuthorizedSignatory ? (
+                        <span className="font-medium text-emerald-500">✓</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                      )}
+                    </td>
+                    <td className="text-center">
+                      {m.isBeneficialOwner ? (
+                        <span className="font-medium text-emerald-500">✓</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingMember(m);
+                            setModalMode('edit');
+                          }}
+                          className="btn btn-ghost btn-sm"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(m.id)}
+                          className="btn btn-ghost btn-sm text-red-500 hover:text-red-600"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <div className="text-gray-400 text-4xl mb-3">👥</div>
-          <h3 className="text-gray-900 font-semibold">No active parties</h3>
-          <p className="text-sm text-gray-500 mt-1">
+        <div className="empty-state">
+          <div className="empty-state-icon text-2xl">👥</div>
+          <h3 className="empty-state-title">No active parties</h3>
+          <p className="empty-state-text">
             Add directors, shareholders and signatories to your company.
           </p>
         </div>
@@ -312,12 +324,19 @@ export default function PartiesPage() {
       {/* Inactive members */}
       {inactiveParties.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-sm font-semibold text-gray-500 mb-2">Inactive Members</h3>
-          <div className="bg-gray-50 rounded-lg border border-gray-200 divide-y divide-gray-200">
+          <h3 className="section-title mb-2">Inactive members</h3>
+          <div
+            className="divide-token overflow-hidden rounded-xl border"
+            style={{
+              backgroundColor: 'var(--surface-input)',
+              borderColor: 'var(--surface-border)',
+            }}
+          >
             {inactiveParties.map(m => (
               <div
                 key={m.id}
-                className="px-4 py-3 flex items-center justify-between text-sm text-gray-500"
+                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+                style={{ color: 'var(--text-muted)' }}
               >
                 <span>
                   {m.customerName || 'Unknown'} — {PARTY_ROLE_LABELS[m.role] || m.role}
@@ -332,23 +351,22 @@ export default function PartiesPage() {
       {/* Delete Confirmation */}
       {deleteConfirmId && (
         <Modal onClose={() => setDeleteConfirmId(null)}>
-          <h3 className="text-lg font-semibold text-gray-900">Confirm Removal</h3>
-          <p className="mt-2 text-sm text-gray-600">
+          <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Confirm removal
+          </h3>
+          <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
             Are you sure you want to remove this party member? This action cannot be undone.
           </p>
-          <div className="mt-4 flex justify-end gap-3">
-            <button
-              onClick={() => setDeleteConfirmId(null)}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
-            >
+          <div className="mt-5 flex justify-end gap-2">
+            <button onClick={() => setDeleteConfirmId(null)} className="btn btn-secondary">
               Cancel
             </button>
             <button
               onClick={() => handleDelete(deleteConfirmId)}
               disabled={saving}
-              className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              className="btn btn-danger"
             >
-              {saving ? 'Removing...' : 'Remove'}
+              {saving ? 'Removing…' : 'Remove'}
             </button>
           </div>
         </Modal>
@@ -456,12 +474,12 @@ function PartyModal({
 
   return (
     <Modal onClose={onClose}>
-      <h3 className="text-lg font-semibold text-gray-900">
-        {mode === 'add' ? 'Add Party Member' : 'Edit Party Member'}
+      <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+        {mode === 'add' ? 'Add party member' : 'Edit party member'}
       </h3>
 
       {error && (
-        <div className="mt-3 bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700">
+        <div className="alert alert-error mt-3" role="alert">
           {error}
         </div>
       )}
@@ -470,40 +488,48 @@ function PartyModal({
         {/* Customer ID (add only) */}
         {mode === 'add' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="field-label" htmlFor="party-customer-id">
               Customer ID <span className="text-red-500">*</span>
             </label>
             <input
+              id="party-customer-id"
               type="text"
               value={form.customerId}
               onChange={e => handleChange('customerId', e.target.value)}
               placeholder="UUID of existing customer"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+              className="input"
             />
-            <p className="mt-1 text-xs text-gray-400">
-              The customer must already exist in the system
-            </p>
+            <p className="field-hint">The customer must already exist in the system</p>
           </div>
         )}
 
         {mode === 'edit' && member && (
-          <div className="bg-gray-50 rounded-lg p-3">
-            <div className="text-sm font-medium text-gray-900">
+          <div
+            className="rounded-xl border p-3"
+            style={{
+              backgroundColor: 'var(--surface-input)',
+              borderColor: 'var(--surface-border)',
+            }}
+          >
+            <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
               {member.customerName || 'Unknown'}
             </div>
-            <div className="text-xs text-gray-500">{member.customerEmail || member.customerId}</div>
+            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {member.customerEmail || member.customerId}
+            </div>
           </div>
         )}
 
         {/* Role */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="field-label" htmlFor="party-role">
             Role <span className="text-red-500">*</span>
           </label>
           <select
+            id="party-role"
             value={form.role}
             onChange={e => handleChange('role', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+            className="select"
           >
             {AVAILABLE_ROLES.map(r => (
               <option key={r} value={r}>
@@ -515,21 +541,27 @@ function PartyModal({
 
         {/* Role Title */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title / Position</label>
+          <label className="field-label" htmlFor="party-role-title">
+            Title / position
+          </label>
           <input
+            id="party-role-title"
             type="text"
             value={form.roleTitle}
             onChange={e => handleChange('roleTitle', e.target.value)}
             placeholder="e.g. Managing Director, CFO"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+            className="input"
           />
         </div>
 
         {/* Ownership */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ownership %</label>
+            <label className="field-label" htmlFor="party-ownership">
+              Ownership %
+            </label>
             <input
+              id="party-ownership"
               type="number"
               value={form.ownershipPercentage}
               onChange={e => handleChange('ownershipPercentage', e.target.value)}
@@ -537,59 +569,69 @@ function PartyModal({
               max={100}
               step={0.01}
               placeholder="e.g. 25.5"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Appointment Date</label>
+            <label className="field-label" htmlFor="party-appointment-date">
+              Appointment date
+            </label>
             <input
+              id="party-appointment-date"
               type="date"
               value={form.appointmentDate}
               onChange={e => handleChange('appointmentDate', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+              className="input"
             />
           </div>
         </div>
 
         {/* Checkboxes */}
         <div className="space-y-3">
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               checked={form.isAuthorizedSignatory}
               onChange={e => handleChange('isAuthorizedSignatory', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="rounded text-primary-600 focus:ring-primary-500"
+              style={{ borderColor: 'var(--surface-border-strong)' }}
             />
-            <span className="text-sm text-gray-700">Authorized Signatory</span>
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Authorized signatory
+            </span>
           </label>
 
           {form.isAuthorizedSignatory && (
             <div className="ml-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Signing Limit ({getCurrencySymbol()})
+              <label className="field-label" htmlFor="party-signing-limit">
+                Signing limit ({getCurrencySymbol()})
               </label>
               <input
+                id="party-signing-limit"
                 type="number"
                 value={form.signingLimit}
                 onChange={e => handleChange('signingLimit', e.target.value)}
                 min={0}
-                placeholder="e.g. 5000000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                placeholder="e.g. 500000"
+                className="input"
               />
             </div>
           )}
 
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               checked={form.isBeneficialOwner}
               onChange={e => handleChange('isBeneficialOwner', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="rounded text-primary-600 focus:ring-primary-500"
+              style={{ borderColor: 'var(--surface-border-strong)' }}
             />
-            <span className="text-sm text-gray-700">Ultimate Beneficial Owner (UBO)</span>
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Ultimate beneficial owner (UBO)
+            </span>
           </label>
           {form.isBeneficialOwner && (
-            <p className="ml-6 text-xs text-gray-500">
+            <p className="ml-6 text-xs" style={{ color: 'var(--text-muted)' }}>
               Person who directly or indirectly owns &ge;25% of the entity or exercises significant
               control.
             </p>
@@ -598,32 +640,28 @@ function PartyModal({
 
         {/* Status (edit only) */}
         {mode === 'edit' && (
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               checked={form.isActive}
               onChange={e => handleChange('isActive', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              className="rounded text-primary-600 focus:ring-primary-500"
+              style={{ borderColor: 'var(--surface-border-strong)' }}
             />
-            <span className="text-sm text-gray-700">Active</span>
+            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Active
+            </span>
           </label>
         )}
       </div>
 
       {/* Actions */}
-      <div className="mt-6 flex justify-end gap-3">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
-        >
+      <div className="mt-6 flex justify-end gap-2">
+        <button onClick={onClose} className="btn btn-secondary">
           Cancel
         </button>
-        <button
-          onClick={handleSubmit}
-          disabled={saving}
-          className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 font-medium shadow-sm"
-        >
-          {saving ? 'Saving...' : mode === 'add' ? 'Add Member' : 'Save Changes'}
+        <button onClick={handleSubmit} disabled={saving} className="btn btn-primary">
+          {saving ? 'Saving…' : mode === 'add' ? 'Add member' : 'Save changes'}
         </button>
       </div>
     </Modal>
@@ -634,9 +672,20 @@ function PartyModal({
 
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-6"
+        style={{
+          backgroundColor: 'var(--surface-card)',
+          borderColor: 'var(--surface-border)',
+          boxShadow: 'var(--shadow-lg)',
+        }}
+      >
         {children}
       </div>
     </div>

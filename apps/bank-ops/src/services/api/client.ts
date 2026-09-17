@@ -44,6 +44,20 @@ export class ApiClient {
         console.warn('No userId found, using default admin user ID');
         headers['X-User-Id'] = '11111111-1111-1111-1111-111111111111'; // Default admin user from seed data
       }
+
+      // Inject bank ID for multi-tenant API calls
+      const userDataStr = localStorage.getItem(config.auth.userKey);
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr);
+          const bankId = userData.bankId || config.bank.defaultBankId;
+          if (bankId) headers['X-Bank-Id'] = bankId;
+        } catch {
+          headers['X-Bank-Id'] = config.bank.defaultBankId;
+        }
+      } else {
+        headers['X-Bank-Id'] = config.bank.defaultBankId;
+      }
     }
 
     // Add JWT token if available

@@ -14,8 +14,10 @@ import CertificatePanel from './panels/CertificatePanel';
 import DrawdownPanel from './panels/DrawdownPanel';
 import QueriesPanel from './panels/QueriesPanel';
 import AuditPanel from './panels/AuditPanel';
+import OfferPanel from './panels/OfferPanel';
 
 const TABS = [
+  { key: 'offer', label: 'Offer Preview' },
   { key: 'checklist', label: 'Checklist' },
   { key: 'documents', label: 'Documents' },
   { key: 'undertaking', label: 'Undertaking' },
@@ -40,7 +42,7 @@ export default function CaseWorkspacePage() {
 
   const [caseData, setCaseData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('checklist');
+  const [activeTab, setActiveTab] = useState('offer');
 
   useEffect(() => {
     loadCase();
@@ -136,6 +138,7 @@ export default function CaseWorkspacePage() {
         </div>
 
         <div className="p-6">
+          {activeTab === 'offer' && <OfferPanel caseData={caseData} />}
           {activeTab === 'checklist' && <ChecklistPanel caseId={id} isBankUser={isBankUser} />}
           {activeTab === 'documents' && <DocumentsPanel caseId={id} isBankUser={isBankUser} />}
           {activeTab === 'undertaking' && (

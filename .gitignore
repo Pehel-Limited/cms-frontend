@@ -41,6 +41,10 @@ public/sw.js.map
 public/workbox-*.js.map
 public/worker-*.js.map
 
+# Logs
+logs/
+*.log
+
 # IDE
 .vscode
 .idea

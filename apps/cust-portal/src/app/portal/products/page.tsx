@@ -74,21 +74,18 @@ export default function ProductsPage() {
   // ─── Loading ──────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-2xl bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-8">
-          <div className="h-7 bg-white/20 rounded-xl w-48 animate-pulse" />
-          <div className="h-4 bg-white/10 rounded-xl w-72 mt-2 animate-pulse" />
+      <div className="space-y-5">
+        <div className="mesh-hero rounded-3xl p-6 sm:p-7">
+          <div className="h-7 w-48 animate-pulse rounded-xl bg-white/20" />
+          <div className="mt-2 h-4 w-72 animate-pulse rounded-xl bg-white/10" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div
-              key={i}
-              className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4 animate-pulse"
-            >
-              <div className="h-6 bg-slate-200/70 rounded-xl w-3/4" />
-              <div className="h-4 bg-slate-100 rounded-xl w-full" />
-              <div className="h-4 bg-slate-100 rounded-xl w-2/3" />
-              <div className="h-10 bg-slate-200/70 rounded-xl" />
+            <div key={i} className="card space-y-4">
+              <div className="skeleton h-6 w-3/4" />
+              <div className="skeleton h-4 w-full" />
+              <div className="skeleton h-4 w-2/3" />
+              <div className="skeleton h-16 w-full" />
             </div>
           ))}
         </div>
@@ -99,27 +96,16 @@ export default function ProductsPage() {
   // ─── Error ────────────────────────────────────────
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200/60 rounded-2xl p-8 text-center">
-        <div className="mx-auto w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center mb-3">
-          <svg
-            className="w-6 h-6 text-red-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-            />
-          </svg>
+      <div className="alert alert-error">
+        <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+        <div className="flex-1">
+          <p className="font-semibold">Couldn&apos;t load products</p>
+          <p className="mt-0.5 text-sm opacity-80">{error}</p>
         </div>
-        <p className="text-red-700 font-medium">{error}</p>
-        <button
-          onClick={loadProducts}
-          className="mt-4 text-sm font-medium text-red-700 underline decoration-red-300 underline-offset-4"
-        >
+        <button onClick={loadProducts} className="btn btn-sm btn-outline shrink-0">
           Try again
         </button>
       </div>
@@ -127,26 +113,26 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Hero Header */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-6 sm:p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-white/5 translate-y-1/2" />
+      <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
+        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" />
         <div className="relative">
-          <h1 className="text-2xl font-bold text-white">Loan Products</h1>
-          <p className="text-white/70 mt-1">
-            Browse available loan products and check your eligibility
+          <h2 className="text-xl font-bold text-white sm:text-2xl">Loan products</h2>
+          <p className="mt-1 text-sm text-white/70">
+            Browse what&apos;s available and check your eligibility — {products.length} product{products.length === 1 ? '' : 's'} on offer
           </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
+      <div className="card p-4">
+        <div className="flex flex-col gap-3 sm:flex-row">
           {/* Search */}
-          <div className="flex-1 relative">
+          <div className="relative flex-1">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+              style={{ color: 'var(--text-muted)' }}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -159,11 +145,12 @@ export default function ProductsPage() {
               />
             </svg>
             <input
-              type="text"
+              type="search"
               placeholder="Search products..."
+              aria-label="Search products"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
+              className="input pl-10"
             />
           </div>
 
@@ -171,9 +158,10 @@ export default function ProductsPage() {
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:ring-1 focus:ring-[#7f2b7b]"
+            aria-label="Filter by product type"
+            className="select sm:w-44"
           >
-            <option value="">All Types</option>
+            <option value="">All types</option>
             {productTypes.map(t => (
               <option key={t} value={t}>
                 {PRODUCT_TYPE_LABELS[t] || t}
@@ -185,9 +173,10 @@ export default function ProductsPage() {
           <select
             value={categoryFilter}
             onChange={e => setCategoryFilter(e.target.value)}
-            className="px-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:ring-1 focus:ring-[#7f2b7b]"
+            aria-label="Filter by category"
+            className="select sm:w-44"
           >
-            <option value="">All Categories</option>
+            <option value="">All categories</option>
             {productCategories.map(c => (
               <option key={c} value={c}>
                 {c}
@@ -199,10 +188,11 @@ export default function ProductsPage() {
           {featuredCount > 0 && (
             <button
               onClick={() => setShowFeatured(!showFeatured)}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+              aria-pressed={showFeatured}
+              className={`btn shrink-0 ${
                 showFeatured
-                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                  : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  ? 'border border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-500/25 dark:bg-amber-500/15 dark:text-amber-300'
+                  : 'btn-secondary'
               }`}
             >
               Featured
@@ -212,7 +202,7 @@ export default function ProductsPage() {
 
         {/* Active filters summary */}
         {(search || typeFilter || categoryFilter || showFeatured) && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
+          <div className="mt-3 flex items-center gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
             <span>
               Showing {filtered.length} of {products.length} products
             </span>
@@ -223,7 +213,7 @@ export default function ProductsPage() {
                 setCategoryFilter('');
                 setShowFeatured(false);
               }}
-              className="text-[#7f2b7b] hover:underline ml-2"
+              className="link-arrow ml-1"
             >
               Clear filters
             </button>
@@ -233,24 +223,22 @@ export default function ProductsPage() {
 
       {/* Product Grid */}
       {filtered.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-2xl border border-slate-200/80">
-          <svg
-            className="w-12 h-12 text-slate-300 mx-auto mb-3"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-            />
-          </svg>
-          <p className="text-slate-500">No products match your filters</p>
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+              />
+            </svg>
+          </div>
+          <p className="empty-state-title">No products match your filters</p>
+          <p className="empty-state-text">Try broadening your search or clearing the filters above.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="stagger grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(product => (
             <ProductCard key={product.productId} product={product} />
           ))}
@@ -334,93 +322,98 @@ function ProductCard({ product }: { product: LoanProduct }) {
   return (
     <Link
       href={`/portal/products/${product.productCode}`}
-      className="group bg-white rounded-2xl border border-slate-200/80 hover:border-[#7f2b7b]/30 hover:shadow-md transition-all duration-200 flex flex-col"
+      className="card card-hover group flex flex-col p-0"
     >
-      <div className="p-6 flex-1">
+      <div className="flex-1 p-6">
         {/* Header */}
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7f2b7b]/10 to-[#a0369b]/10 flex items-center justify-center text-[#7f2b7b]">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+              style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+            >
               {svgIcon}
             </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 group-hover:text-[#7f2b7b] transition-colors">
+            <div className="min-w-0">
+              <h3 className="truncate font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {product.productName}
               </h3>
-              <p className="text-xs text-slate-500">{typeLabel}</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{typeLabel}</p>
             </div>
           </div>
-          {product.isFeatured && (
-            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
-              Featured
-            </span>
-          )}
+          {product.isFeatured && <span className="badge badge-warning shrink-0">Featured</span>}
         </div>
 
         {/* Description */}
         {product.shortDescription && (
-          <p className="text-sm text-slate-600 mb-4 line-clamp-2">{product.shortDescription}</p>
+          <p className="mb-4 line-clamp-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            {product.shortDescription}
+          </p>
         )}
 
         {/* Key Info Grid */}
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="bg-slate-50/50 rounded-xl px-3 py-2">
-            <p className="text-slate-400 text-xs uppercase tracking-wider">Amount</p>
-            <p className="font-medium text-slate-900">
-              {formatCurrency(product.minLoanAmount)} – {formatCurrency(product.maxLoanAmount)}
-            </p>
-          </div>
-          <div className="bg-slate-50/50 rounded-xl px-3 py-2">
-            <p className="text-slate-400 text-xs uppercase tracking-wider">Rate</p>
-            <p className="font-medium text-slate-900">
-              {formatRate(product.minInterestRate)}
-              {product.minInterestRate !== product.maxInterestRate &&
-                ` – ${formatRate(product.maxInterestRate)}`}
-            </p>
-          </div>
-          <div className="bg-slate-50/50 rounded-xl px-3 py-2">
-            <p className="text-slate-400 text-xs uppercase tracking-wider">Term</p>
-            <p className="font-medium text-slate-900">
-              {product.minTermMonths} – {product.maxTermMonths} months
-            </p>
-          </div>
-          <div className="bg-slate-50/50 rounded-xl px-3 py-2">
-            <p className="text-slate-400 text-xs uppercase tracking-wider">Repayment</p>
-            <p className="font-medium text-slate-900 capitalize">
-              {(product.repaymentFrequency || 'Monthly').toLowerCase()}
-            </p>
-          </div>
+        <div className="grid grid-cols-2 gap-2.5 text-sm">
+          {[
+            {
+              label: 'Amount',
+              value: `${formatCurrency(product.minLoanAmount)} – ${formatCurrency(product.maxLoanAmount)}`,
+            },
+            {
+              label: 'Rate',
+              value:
+                product.minInterestRate !== product.maxInterestRate
+                  ? `${formatRate(product.minInterestRate)} – ${formatRate(product.maxInterestRate)}`
+                  : formatRate(product.minInterestRate),
+            },
+            { label: 'Term', value: `${product.minTermMonths} – ${product.maxTermMonths} months` },
+            {
+              label: 'Repayment',
+              value: (product.repaymentFrequency || 'Monthly').toLowerCase(),
+              capitalize: true,
+            },
+          ].map(info => (
+            <div
+              key={info.label}
+              className="rounded-xl px-3 py-2"
+              style={{ backgroundColor: 'var(--surface-input)' }}
+            >
+              <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                {info.label}
+              </p>
+              <p
+                className={`text-sm font-semibold ${info.capitalize ? 'capitalize' : ''}`}
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {info.value}
+              </p>
+            </div>
+          ))}
         </div>
 
         {/* Feature Badges */}
-        <div className="flex flex-wrap gap-1.5 mt-4">
+        <div className="mt-4 flex flex-wrap gap-1.5">
           {product.collateralRequired && (
-            <span className="px-2 py-0.5 bg-orange-50 text-orange-600 text-xs rounded-full">
-              Collateral Required
-            </span>
+            <span className="badge badge-warning">Collateral required</span>
           )}
           {product.prepaymentAllowed && (
-            <span className="px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full">
-              Early Repayment
-            </span>
+            <span className="badge badge-success">Early repayment</span>
           )}
           {product.requiresGuarantor && (
-            <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
-              Guarantor Required
-            </span>
+            <span className="badge badge-info">Guarantor required</span>
           )}
           {product.downPaymentRequired && (
-            <span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-xs rounded-full">
-              Down Payment
-            </span>
+            <span className="badge badge-primary">Down payment</span>
           )}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
-        <span className="text-sm font-medium text-[#7f2b7b] group-hover:text-[#6b2568]">
-          View Details →
+      <div
+        className="rounded-b-2xl px-6 py-3"
+        style={{ borderTop: '1px solid var(--surface-border)', backgroundColor: 'var(--surface-input)' }}
+      >
+        <span className="link-arrow text-sm">
+          View details <span data-arrow aria-hidden="true">→</span>
         </span>
       </div>
     </Link>

@@ -3,134 +3,83 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { productService, type Product } from '@/services/api/productService';
+import {
+  productService,
+  type Product,
+  type RatePlan,
+  type CreateRatePlanRequest,
+  type UpdateRatePlanRequest,
+} from '@/services/api/productService';
 import { useAppSelector } from '@/store';
 import config from '@/config';
 import { formatCurrency as sharedFormatCurrency } from '@/lib/format';
 
-const STATUS_DOT: Record<string, string> = {
-  ACTIVE: 'bg-emerald-400',
-  INACTIVE: 'bg-slate-400',
-  DISCONTINUED: 'bg-red-400',
-};
+// ============================================================================
+// Theme-aware colour map (hex → works in light & dark)
+// ============================================================================
 
-const STATUS_BG: Record<string, string> = {
-  ACTIVE: 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/20',
-  INACTIVE: 'bg-white/10 text-white/80 border border-white/20',
-  DISCONTINUED: 'bg-red-400/20 text-red-200 border border-red-400/20',
+const STATUS_COLOR: Record<string, string> = {
+  ACTIVE: '#10b981',
+  INACTIVE: '#64748b',
+  DISCONTINUED: '#ef4444',
 };
 
 const PRODUCT_SVG: Record<string, React.ReactNode> = {
   PERSONAL_LOAN: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   PCP: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M8 17h.01M12 17h.01M16 17h.01M3 9h18M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 17h.01M12 17h.01M16 17h.01M3 9h18M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" />
     </svg>
   ),
   HIRE_PURCHASE: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
     </svg>
   ),
   CREDIT_CARD: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
     </svg>
   ),
   OVERDRAFT: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
     </svg>
   ),
   MORTGAGE: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
     </svg>
   ),
   HOME_LOAN: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
     </svg>
   ),
   AUTO_LOAN: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M8 17h.01M12 17h.01M16 17h.01M3 9h18M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 17h.01M12 17h.01M16 17h.01M3 9h18M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" />
     </svg>
   ),
   BUSINESS_LOAN: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
     </svg>
   ),
   SME_TERM_LOAN: (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
     </svg>
   ),
 };
 
 const DEFAULT_SVG = (
   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.5}
-      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-    />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
   </svg>
 );
 
@@ -219,484 +168,220 @@ export default function ProductDetailsPage() {
     return types.map(t => (t === 'INDIVIDUAL' ? 'Individual' : 'Business')).join(', ');
   };
 
+  // ------------------------------------------------------------------ loading
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="rounded-2xl bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-8 animate-pulse">
-          <div className="h-4 bg-white/20 rounded-xl w-32 mb-4" />
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-white/10" />
-            <div className="space-y-2">
-              <div className="h-6 bg-white/20 rounded-xl w-56" />
-              <div className="h-4 bg-white/10 rounded-xl w-40" />
+      <div className="min-h-screen" style={{ backgroundColor: 'var(--rm-bg)' }}>
+        <div className="mx-auto max-w-[1600px] px-6 py-6 space-y-5">
+          <div className="h-32 animate-pulse rounded-2xl" style={{ backgroundColor: 'var(--rm-card-hover)' }} />
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="space-y-5 lg:col-span-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-40 animate-pulse rounded-2xl" style={{ backgroundColor: 'var(--rm-card-hover)' }} />
+              ))}
             </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {[1, 2, 3].map(i => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-slate-200/80 p-6 animate-pulse"
-              >
-                <div className="h-5 bg-slate-200/70 rounded-xl w-40 mb-4" />
-                <div className="grid grid-cols-2 gap-4">
-                  {[1, 2, 3, 4].map(j => (
-                    <div key={j} className="h-16 bg-slate-100 rounded-xl" />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-6">
-            {[1, 2].map(i => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-slate-200/80 p-6 animate-pulse"
-              >
-                <div className="h-5 bg-slate-200/70 rounded-xl w-28 mb-4" />
-                <div className="space-y-3">
-                  {[1, 2, 3].map(j => (
-                    <div key={j} className="h-4 bg-slate-100 rounded-xl" />
-                  ))}
-                </div>
-              </div>
-            ))}
+            <div className="space-y-5">
+              {[1, 2].map(i => (
+                <div key={i} className="h-40 animate-pulse rounded-2xl" style={{ backgroundColor: 'var(--rm-card-hover)' }} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
+  // -------------------------------------------------------------------- error
   if (error || !product) {
     return (
-      <div className="p-6">
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-8 text-center max-w-lg mx-auto">
-          <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-6 h-6 text-red-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
+      <div className="min-h-screen" style={{ backgroundColor: 'var(--rm-bg)' }}>
+        <div className="mx-auto max-w-3xl px-6 py-16">
+          <div className="rounded-2xl p-12 text-center" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+            <h3 className="text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>Error Loading Product</h3>
+            <p className="mt-1" style={{ color: 'var(--rm-text-muted)' }}>{error || 'Product not found'}</p>
+            <Link href="/dashboard/products" className="mt-4 inline-block text-sm font-medium" style={{ color: 'var(--rm-accent)' }}>
+              ← Back to Products
+            </Link>
           </div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-1">
-            {error || 'Product not found'}
-          </h2>
-          <Link
-            href="/dashboard/products"
-            className="text-sm text-[#7f2b7b] hover:text-[#6b2568] font-medium mt-3 inline-block"
-          >
-            &larr; Back to Products
-          </Link>
         </div>
       </div>
     );
   }
 
   const icon = PRODUCT_SVG[product.productType] || DEFAULT_SVG;
+  const statusColor = STATUS_COLOR[product.productStatus] || '#64748b';
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Hero Header */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-6 sm:p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-white/5 translate-y-1/2" />
-        <div className="relative">
-          <Link
-            href="/dashboard/products"
-            className="text-white/60 hover:text-white text-sm mb-3 inline-flex items-center gap-1 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Back to Products
-          </Link>
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--rm-bg)' }}>
+      <div className="mx-auto max-w-[1600px] px-6 py-6 space-y-5">
+        {/* Back link */}
+        <Link href="/dashboard/products" className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: 'var(--rm-text-muted)' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 19l-7-7 7-7" /></svg>
+          Back to Products
+        </Link>
+
+        {/* Header */}
+        <div className="rounded-2xl p-6" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center text-white">
+              <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl text-white" style={{ background: 'linear-gradient(135deg,#0ea5e9,#6366f1)' }}>
                 {icon}
-              </div>
+              </span>
               <div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h1 className="text-2xl font-bold text-white">{product.productName}</h1>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${STATUS_BG[product.productStatus] || 'bg-white/10 text-white/80 border border-white/20'}`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[product.productStatus] || 'bg-white/60'}`}
-                    />
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--rm-text)' }}>{product.productName}</h1>
+                  <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: `${statusColor}22`, color: statusColor }}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
                     {product.productStatus}
                   </span>
                 </div>
-                <p className="text-white/60 text-sm mt-0.5">Code: {product.productCode}</p>
+                <p className="mt-1 font-mono text-sm" style={{ color: 'var(--rm-text-muted)' }}>Code: {product.productCode}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => router.push(`/dashboard/products/${productId}/edit`)}
-                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-colors inline-flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => router.push(`/dashboard/products/${productId}/edit`)} className="rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors" style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-card)' }}>
                 Edit
               </button>
-              <button
-                onClick={() => setDeleteConfirm(true)}
-                className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-400/20 text-red-200 text-sm font-medium transition-colors inline-flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+              <button onClick={() => setDeleteConfirm(true)} className="rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors" style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.30)' }}>
                 Delete
               </button>
-              <Link
-                href={`/dashboard/applications/new?productId=${productId}`}
-                className="px-4 py-2 bg-white text-[#7f2b7b] rounded-xl font-semibold text-sm hover:bg-white/90 transition-colors"
-              >
+              <Link href={`/dashboard/applications/new?productId=${productId}`} className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--rm-accent)' }}>
                 + New Application
               </Link>
             </div>
           </div>
+
+          {/* Info row */}
+          <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t pt-5 sm:grid-cols-4" style={{ borderColor: 'var(--rm-border)' }}>
+            <InfoItem label="Category" value={product.productCategory?.replace(/_/g, ' ') || '—'} />
+            <InfoItem label="Type" value={product.productType?.replace(/_/g, ' ') || '—'} />
+            <InfoItem label="Eligible For" value={formatCustomerTypes(product.eligibleCustomerTypes)} />
+            <InfoItem label="SLA" value={`${product.slaDays || 3} days`} />
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Description */}
-          {(product.shortDescription || product.detailedDescription) && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-3">Description</h2>
-              {product.shortDescription && (
-                <p className="text-sm text-slate-600 mb-2">{product.shortDescription}</p>
-              )}
-              {product.detailedDescription && (
-                <p className="text-sm text-slate-500">{product.detailedDescription}</p>
-              )}
-            </div>
-          )}
-
-          {/* Financial Details */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <svg
-                className="w-5 h-5 text-[#7f2b7b]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              Financial Details
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                {
-                  label: 'Loan Amount Range',
-                  value: `${formatCurrency(product.minLoanAmount)} – ${formatCurrency(product.maxLoanAmount)}`,
-                },
-                {
-                  label: 'Interest Rate Range',
-                  value: `${formatPercentage(product.minInterestRate)} – ${formatPercentage(product.maxInterestRate)}`,
-                },
-                {
-                  label: 'Term Range',
-                  value: `${product.minTermMonths} – ${product.maxTermMonths} months`,
-                },
-                { label: 'Interest Type', value: product.interestType },
-                {
-                  label: 'Processing Fee',
-                  value: product.processingFeePercentage
-                    ? formatPercentage(product.processingFeePercentage)
-                    : formatCurrency(product.processingFee),
-                },
-                { label: 'Repayment Frequency', value: product.repaymentFrequency || 'Monthly' },
-              ].map(item => (
-                <div key={item.label} className="p-3 bg-slate-50/50 rounded-xl">
-                  <p className="text-xs text-slate-500 mb-1">{item.label}</p>
-                  <p className="text-sm font-semibold text-slate-900 tabular-nums">{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Eligibility Criteria */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <svg
-                className="w-5 h-5 text-[#7f2b7b]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                />
-              </svg>
-              Eligibility Criteria
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                {
-                  label: 'Customer Age',
-                  value: `${product.minCustomerAge || 18} – ${product.maxCustomerAge || 65} years`,
-                },
-                { label: 'Min Credit Score', value: product.minCreditScore || 'N/A' },
-                { label: 'Min Annual Income', value: formatCurrency(product.minAnnualIncome) },
-                { label: 'Min Years in Business', value: product.minYearsInBusiness || 'N/A' },
-              ].map(item => (
-                <div key={item.label} className="p-3 bg-slate-50/50 rounded-xl">
-                  <p className="text-xs text-slate-500 mb-1">{item.label}</p>
-                  <p className="text-sm font-semibold text-slate-900 tabular-nums">
-                    {String(item.value)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Irish/EU Details */}
-          {(product.regulatoryBody ||
-            product.interestLogicDescription ||
-            product.principalStructure) && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <svg
-                  className="w-5 h-5 text-[#7f2b7b]"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"
-                  />
-                </svg>
-                Regulatory &amp; EU Details
-              </h2>
-              <div className="space-y-4">
-                {product.regulatoryBody && (
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 mb-1">Regulatory Body</p>
-                    <p className="text-sm text-slate-900">{product.regulatoryBody}</p>
-                  </div>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {/* Main column */}
+          <div className="space-y-5 lg:col-span-2">
+            {/* Description */}
+            {(product.shortDescription || product.detailedDescription) && (
+              <Panel>
+                <PanelHeader title="Description" />
+                {product.shortDescription && (
+                  <p className="mt-3 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>{product.shortDescription}</p>
                 )}
-                {product.interestLogicDescription && (
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 mb-1">Interest Logic</p>
-                    <p className="text-sm text-slate-900">{product.interestLogicDescription}</p>
-                  </div>
+                {product.detailedDescription && (
+                  <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }}>{product.detailedDescription}</p>
                 )}
-                {product.principalStructure && (
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 mb-1">Principal Structure</p>
-                    <p className="text-sm text-slate-900">{product.principalStructure}</p>
-                  </div>
-                )}
+              </Panel>
+            )}
+
+            {/* Financial Details */}
+            <Panel>
+              <PanelHeader icon={<CoinIcon />} title="Financial Details" />
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Loan Amount Range', value: `${formatCurrency(product.minLoanAmount)} – ${formatCurrency(product.maxLoanAmount)}` },
+                  { label: 'Interest Rate Range', value: `${formatPercentage(product.minInterestRate)} – ${formatPercentage(product.maxInterestRate)}` },
+                  { label: 'Term Range', value: `${product.minTermMonths} – ${product.maxTermMonths} months` },
+                  { label: 'Interest Type', value: product.interestType },
+                  { label: 'Processing Fee', value: product.processingFeePercentage ? formatPercentage(product.processingFeePercentage) : formatCurrency(product.processingFee) },
+                  { label: 'Repayment Frequency', value: product.repaymentFrequency || 'Monthly' },
+                ].map(item => (
+                  <Tile key={item.label} label={item.label} value={String(item.value ?? '—')} />
+                ))}
               </div>
-            </div>
-          )}
-        </div>
+            </Panel>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Info */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">Product Info</h3>
-            <dl className="space-y-3">
-              {[
-                { label: 'Category', value: product.productCategory?.replace(/_/g, ' ') },
-                { label: 'Type', value: product.productType?.replace(/_/g, ' ') },
-                {
-                  label: 'Eligible For',
-                  value: formatCustomerTypes(product.eligibleCustomerTypes),
-                },
-                { label: 'SLA', value: `${product.slaDays || 3} days` },
-              ].map(item => (
-                <div key={item.label}>
-                  <dt className="text-xs text-slate-500">{item.label}</dt>
-                  <dd className="text-sm font-medium text-slate-900">{item.value}</dd>
+            {/* Rate Plans */}
+            <RatePlansPanel productId={productId} />
+
+            {/* Eligibility Criteria */}
+            <Panel>
+              <PanelHeader icon={<ShieldIcon />} title="Eligibility Criteria" />
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Customer Age', value: `${product.minCustomerAge || 18} – ${product.maxCustomerAge || 65} years` },
+                  { label: 'Min Credit Score', value: product.minCreditScore || 'N/A' },
+                  { label: 'Min Annual Income', value: formatCurrency(product.minAnnualIncome) },
+                  { label: 'Min Years in Business', value: product.minYearsInBusiness || 'N/A' },
+                ].map(item => (
+                  <Tile key={item.label} label={item.label} value={String(item.value)} />
+                ))}
+              </div>
+            </Panel>
+
+            {/* Regulatory & EU Details */}
+            {(product.regulatoryBody || product.interestLogicDescription || product.principalStructure) && (
+              <Panel>
+                <PanelHeader icon={<DocIcon />} title="Regulatory & EU Details" />
+                <div className="mt-4 space-y-4">
+                  {product.regulatoryBody && <DetailRow label="Regulatory Body" value={product.regulatoryBody} />}
+                  {product.interestLogicDescription && <DetailRow label="Interest Logic" value={product.interestLogicDescription} />}
+                  {product.principalStructure && <DetailRow label="Principal Structure" value={product.principalStructure} />}
                 </div>
-              ))}
-            </dl>
+              </Panel>
+            )}
           </div>
 
-          {/* Features */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">Features</h3>
-            <ul className="space-y-2.5">
-              {[
-                { enabled: product.prepaymentAllowed, label: 'Prepayment Allowed', warn: false },
-                {
-                  enabled: !product.collateralRequired,
-                  label: product.collateralRequired ? 'Collateral Required' : 'No Collateral',
-                  warn: product.collateralRequired,
-                },
-                {
-                  enabled: product.isOnlineApplicationEnabled,
-                  label: 'Online Application',
-                  warn: false,
-                },
-                { enabled: product.autoApprovalEnabled, label: 'Auto-Approval', warn: false },
-                {
-                  enabled: !product.requiresGuarantor,
-                  label: product.requiresGuarantor ? 'Guarantor Required' : 'No Guarantor',
-                  warn: product.requiresGuarantor,
-                },
-              ].map(item => (
-                <li key={item.label} className="flex items-center gap-2.5 text-sm">
-                  {item.warn ? (
-                    <span className="w-5 h-5 rounded-full bg-amber-50 flex items-center justify-center flex-shrink-0">
-                      <svg
-                        className="w-3.5 h-3.5 text-amber-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 9v2m0 4h.01"
-                        />
-                      </svg>
-                    </span>
-                  ) : item.enabled ? (
-                    <span className="w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                      <svg
-                        className="w-3.5 h-3.5 text-emerald-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                    </span>
-                  ) : (
-                    <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                      <svg
-                        className="w-3.5 h-3.5 text-slate-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </span>
-                  )}
-                  <span className="text-slate-700">{item.label}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {/* Sidebar */}
+          <div className="space-y-5">
+            {/* Features */}
+            <Panel>
+              <PanelHeader title="Features" />
+              <ul className="mt-3 space-y-2.5">
+                {[
+                  { enabled: product.prepaymentAllowed, label: 'Prepayment Allowed', warn: false },
+                  { enabled: !product.collateralRequired, label: product.collateralRequired ? 'Collateral Required' : 'No Collateral', warn: product.collateralRequired },
+                  { enabled: product.isOnlineApplicationEnabled, label: 'Online Application', warn: false },
+                  { enabled: product.autoApprovalEnabled, label: 'Auto-Approval', warn: false },
+                  { enabled: !product.requiresGuarantor, label: product.requiresGuarantor ? 'Guarantor Required' : 'No Guarantor', warn: product.requiresGuarantor },
+                ].map(item => (
+                  <li key={item.label} className="flex items-center gap-2.5 text-sm">
+                    <FeatureIcon warn={!!item.warn} enabled={!!item.enabled} />
+                    <span style={{ color: 'var(--rm-text-secondary)' }}>{item.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
 
-          {/* Quick Actions */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h3 className="text-sm font-semibold text-slate-900 mb-4">Quick Actions</h3>
-            <div className="space-y-2">
-              <Link
-                href={`/dashboard/applications/new?productId=${productId}`}
-                className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-[#7f2b7b] text-white text-sm font-medium rounded-xl hover:bg-[#6b2568] transition-colors"
-              >
-                Create Application
-              </Link>
-              <Link
-                href={`/dashboard/products/${productId}/edit`}
-                className="w-full inline-flex justify-center items-center px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors"
-              >
-                Edit Product
-              </Link>
-            </div>
+            {/* Quick Actions */}
+            <Panel>
+              <PanelHeader title="Quick Actions" />
+              <div className="mt-3 space-y-2">
+                <Link href={`/dashboard/applications/new?productId=${productId}`} className="flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--rm-accent)' }}>
+                  Create Application
+                </Link>
+                <Link href={`/dashboard/products/${productId}/edit`} className="flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors" style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}>
+                  Edit Product
+                </Link>
+              </div>
+            </Panel>
           </div>
         </div>
       </div>
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md mx-4">
-            <div className="flex items-center mb-4">
-              <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-xl bg-red-50">
-                <svg
-                  className="h-6 w-6 text-red-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                  />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDeleteConfirm(false)}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }} onClick={e => e.stopPropagation()}>
+            <div className="mb-4 flex justify-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl" style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}>
+                <svg className="h-6 w-6" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 text-center mb-2">
-              Delete Product
-            </h3>
-            <p className="text-sm text-slate-500 text-center mb-6">
-              Are you sure you want to delete &quot;{product.productName}&quot;? This action cannot
-              be undone.
+            <h3 className="mb-2 text-center text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>Delete Product</h3>
+            <p className="mb-6 text-center text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Are you sure you want to delete &quot;{product.productName}&quot;? This action cannot be undone.
             </p>
             <div className="flex justify-center gap-3">
-              <button
-                onClick={() => setDeleteConfirm(false)}
-                disabled={deleting}
-                className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 transition-colors"
-              >
+              <button onClick={() => setDeleteConfirm(false)} disabled={deleting} className="rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50" style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}>
                 Cancel
               </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
-                {deleting ? 'Deleting...' : 'Delete'}
+              <button onClick={handleDelete} disabled={deleting} className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#ef4444' }}>
+                {deleting ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
@@ -704,4 +389,529 @@ export default function ProductDetailsPage() {
       )}
     </div>
   );
+}
+
+// ============================================================================
+// Rate Plans management
+// ============================================================================
+
+const RATE_TYPE_OPTIONS = ['VARIABLE', 'FIXED', 'GREEN_FIXED', 'GREEN_VARIABLE'];
+
+type RatePlanFormState = {
+  planCode: string;
+  label: string;
+  rateType: string;
+  ltvMinPercentage: string;
+  ltvMaxPercentage: string;
+  fixedTermYears: string;
+  interestRate: string;
+  aprc: string;
+  costPerThousand: string;
+  isGreen: boolean;
+  displayOrder: string;
+  isActive: boolean;
+};
+
+const EMPTY_RATE_PLAN_FORM: RatePlanFormState = {
+  planCode: '',
+  label: '',
+  rateType: 'FIXED',
+  ltvMinPercentage: '',
+  ltvMaxPercentage: '',
+  fixedTermYears: '',
+  interestRate: '',
+  aprc: '',
+  costPerThousand: '',
+  isGreen: false,
+  displayOrder: '0',
+  isActive: true,
+};
+
+function ratePlanToForm(plan: RatePlan): RatePlanFormState {
+  return {
+    planCode: plan.planCode,
+    label: plan.label,
+    rateType: plan.rateType,
+    ltvMinPercentage: plan.ltvMinPercentage?.toString() ?? '',
+    ltvMaxPercentage: plan.ltvMaxPercentage?.toString() ?? '',
+    fixedTermYears: plan.fixedTermYears?.toString() ?? '',
+    interestRate: plan.interestRate?.toString() ?? '',
+    aprc: plan.aprc?.toString() ?? '',
+    costPerThousand: plan.costPerThousand?.toString() ?? '',
+    isGreen: !!plan.isGreen,
+    displayOrder: plan.displayOrder?.toString() ?? '0',
+    isActive: plan.isActive !== false,
+  };
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  if (value.trim() === '') return undefined;
+  const n = Number(value);
+  return Number.isNaN(n) ? undefined : n;
+}
+
+function formToRequest(form: RatePlanFormState): CreateRatePlanRequest {
+  return {
+    planCode: form.planCode.trim().toUpperCase(),
+    label: form.label.trim(),
+    rateType: form.rateType,
+    ltvMinPercentage: parseOptionalNumber(form.ltvMinPercentage),
+    ltvMaxPercentage: parseOptionalNumber(form.ltvMaxPercentage),
+    fixedTermYears: parseOptionalNumber(form.fixedTermYears),
+    interestRate: Number(form.interestRate),
+    aprc: parseOptionalNumber(form.aprc),
+    costPerThousand: parseOptionalNumber(form.costPerThousand),
+    isGreen: form.isGreen,
+    displayOrder: parseOptionalNumber(form.displayOrder) ?? 0,
+    isActive: form.isActive,
+  };
+}
+
+function RatePlansPanel({ productId }: { productId: string }) {
+  const [ratePlans, setRatePlans] = useState<RatePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [showModal, setShowModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<RatePlan | null>(null);
+  const [form, setForm] = useState<RatePlanFormState>(EMPTY_RATE_PLAN_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RatePlan | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadRatePlans = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const plans = await productService.getRatePlans(productId, false);
+      setRatePlans(plans);
+    } catch (err) {
+      console.error('Failed to load rate plans:', err);
+      setLoadError('Failed to load rate plans.');
+    } finally {
+      setLoading(false);
+    }
+  }, [productId]);
+
+  useEffect(() => {
+    loadRatePlans();
+  }, [loadRatePlans]);
+
+  const openCreateModal = () => {
+    setEditingPlan(null);
+    setForm(EMPTY_RATE_PLAN_FORM);
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (plan: RatePlan) => {
+    setEditingPlan(plan);
+    setForm(ratePlanToForm(plan));
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.planCode.trim() || !form.label.trim() || form.interestRate.trim() === '') {
+      setFormError('Plan code, label and interest rate are required.');
+      return;
+    }
+    if (!/^[A-Z0-9_]+$/.test(form.planCode.trim().toUpperCase())) {
+      setFormError('Plan code must contain only letters, digits and underscores.');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setFormError(null);
+      const request = formToRequest(form);
+
+      if (editingPlan) {
+        const update: UpdateRatePlanRequest = request;
+        await productService.updateRatePlan(productId, editingPlan.ratePlanId, update);
+      } else {
+        await productService.createRatePlan(productId, request);
+      }
+
+      setShowModal(false);
+      await loadRatePlans();
+    } catch (err: unknown) {
+      console.error('Failed to save rate plan:', err);
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Failed to save rate plan. Please check the values and try again.';
+      setFormError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      await productService.deleteRatePlan(productId, deleteTarget.ratePlanId);
+      setDeleteTarget(null);
+      await loadRatePlans();
+    } catch (err) {
+      console.error('Failed to delete rate plan:', err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleActive = async (plan: RatePlan) => {
+    try {
+      await productService.updateRatePlan(productId, plan.ratePlanId, { isActive: !plan.isActive });
+      await loadRatePlans();
+    } catch (err) {
+      console.error('Failed to toggle rate plan status:', err);
+    }
+  };
+
+  return (
+    <Panel>
+      <div className="flex items-center justify-between">
+        <PanelHeader icon={<CoinIcon />} title="Rate Plans" />
+        <button
+          onClick={openCreateModal}
+          className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+          style={{ backgroundColor: 'var(--rm-accent)' }}
+        >
+          + Add Rate Plan
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="mt-4 space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-10 animate-pulse rounded-lg" style={{ backgroundColor: 'var(--rm-card-hover)' }} />
+          ))}
+        </div>
+      ) : loadError ? (
+        <p className="mt-4 text-sm" style={{ color: '#ef4444' }}>{loadError}</p>
+      ) : ratePlans.length === 0 ? (
+        <p className="mt-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          No rate plans configured yet. Add one so customers see real, admin-managed rates instead of a generic range.
+        </p>
+      ) : (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr style={{ color: 'var(--rm-text-muted)' }}>
+                <th className="pb-2 pr-3 font-medium">Plan</th>
+                <th className="pb-2 pr-3 font-medium">Type</th>
+                <th className="pb-2 pr-3 font-medium">LTV</th>
+                <th className="pb-2 pr-3 font-medium">Term</th>
+                <th className="pb-2 pr-3 font-medium">Rate</th>
+                <th className="pb-2 pr-3 font-medium">APRC</th>
+                <th className="pb-2 pr-3 font-medium">Status</th>
+                <th className="pb-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ratePlans.map(plan => (
+                <tr key={plan.ratePlanId} className="border-t" style={{ borderColor: 'var(--rm-border)' }}>
+                  <td className="py-2 pr-3">
+                    <div className="font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {plan.label} {plan.isGreen && <span className="ml-1 text-xs" style={{ color: '#10b981' }}>🌱</span>}
+                    </div>
+                    <div className="font-mono text-xs" style={{ color: 'var(--rm-text-muted)' }}>{plan.planCode}</div>
+                  </td>
+                  <td className="py-2 pr-3" style={{ color: 'var(--rm-text-secondary)' }}>{plan.rateType.replace(/_/g, ' ')}</td>
+                  <td className="py-2 pr-3" style={{ color: 'var(--rm-text-secondary)' }}>
+                    {plan.ltvMinPercentage != null || plan.ltvMaxPercentage != null
+                      ? `${plan.ltvMinPercentage ?? 0}–${plan.ltvMaxPercentage ?? 100}%`
+                      : '—'}
+                  </td>
+                  <td className="py-2 pr-3" style={{ color: 'var(--rm-text-secondary)' }}>
+                    {plan.fixedTermYears ? `${plan.fixedTermYears} yr fixed` : 'Variable'}
+                  </td>
+                  <td className="py-2 pr-3 font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {Number(plan.interestRate).toFixed(2)}%
+                  </td>
+                  <td className="py-2 pr-3 tabular-nums" style={{ color: 'var(--rm-text-secondary)' }}>
+                    {plan.aprc != null ? `${Number(plan.aprc).toFixed(2)}%` : '—'}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <button
+                      onClick={() => toggleActive(plan)}
+                      className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                      style={{
+                        backgroundColor: plan.isActive ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.15)',
+                        color: plan.isActive ? '#10b981' : '#64748b',
+                      }}
+                    >
+                      {plan.isActive ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td className="py-2">
+                    <div className="flex gap-2">
+                      <button onClick={() => openEditModal(plan)} className="text-xs font-semibold" style={{ color: 'var(--rm-accent)' }}>
+                        Edit
+                      </button>
+                      <button onClick={() => setDeleteTarget(plan)} className="text-xs font-semibold" style={{ color: '#ef4444' }}>
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add/Edit modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !saving && setShowModal(false)}>
+          <div
+            className="w-full max-w-lg rounded-2xl p-6"
+            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="mb-4 text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
+              {editingPlan ? 'Edit Rate Plan' : 'Add Rate Plan'}
+            </h3>
+
+            {formError && (
+              <p className="mb-3 rounded-lg px-3 py-2 text-sm" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                {formError}
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Plan Code" span={2}>
+                <input
+                  value={form.planCode}
+                  onChange={e => setForm({ ...form, planCode: e.target.value.toUpperCase() })}
+                  placeholder="e.g. FIXED_3YR_LTV"
+                  disabled={!!editingPlan}
+                  className="w-full rounded-lg px-3 py-2 text-sm disabled:opacity-60"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Label" span={2}>
+                <input
+                  value={form.label}
+                  onChange={e => setForm({ ...form, label: e.target.value })}
+                  placeholder="e.g. 3 Year LTV Fixed"
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Rate Type">
+                <select
+                  value={form.rateType}
+                  onChange={e => setForm({ ...form, rateType: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                >
+                  {RATE_TYPE_OPTIONS.map(t => (
+                    <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Interest Rate (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.interestRate}
+                  onChange={e => setForm({ ...form, interestRate: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="LTV Min (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.ltvMinPercentage}
+                  onChange={e => setForm({ ...form, ltvMinPercentage: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="LTV Max (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.ltvMaxPercentage}
+                  onChange={e => setForm({ ...form, ltvMaxPercentage: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Fixed Term (years)">
+                <input
+                  type="number"
+                  value={form.fixedTermYears}
+                  onChange={e => setForm({ ...form, fixedTermYears: e.target.value })}
+                  placeholder="Blank = variable"
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="APRC (%)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.aprc}
+                  onChange={e => setForm({ ...form, aprc: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Cost per €1,000">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.costPerThousand}
+                  onChange={e => setForm({ ...form, costPerThousand: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <FormField label="Display Order">
+                <input
+                  type="number"
+                  value={form.displayOrder}
+                  onChange={e => setForm({ ...form, displayOrder: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm"
+                  style={{ border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-bg)', color: 'var(--rm-text)' }}
+                />
+              </FormField>
+              <div className="col-span-2 flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  <input type="checkbox" checked={form.isGreen} onChange={e => setForm({ ...form, isGreen: e.target.checked })} />
+                  Green / sustainability discount
+                </label>
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} />
+                  Active
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setShowModal(false)}
+                disabled={saving}
+                className="rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
+                style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                {saving ? 'Saving…' : editingPlan ? 'Save Changes' : 'Add Rate Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="w-full max-w-md rounded-2xl p-6" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }} onClick={e => e.stopPropagation()}>
+            <h3 className="mb-2 text-center text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>Delete Rate Plan</h3>
+            <p className="mb-6 text-center text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Are you sure you want to delete &quot;{deleteTarget.label}&quot;? This cannot be undone.
+            </p>
+            <div className="flex justify-center gap-3">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50" style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)' }}>
+                Cancel
+              </button>
+              <button onClick={handleDelete} disabled={deleting} className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#ef4444' }}>
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function FormField({ label, children, span }: { label: string; children: React.ReactNode; span?: number }) {
+  return (
+    <div className={span === 2 ? 'col-span-2' : undefined}>
+      <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--rm-text-muted)' }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ============================================================================
+// Presentational helpers
+// ============================================================================
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-2xl p-6" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>{children}</div>;
+}
+
+function PanelHeader({ title, icon }: { title: string; icon?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      {icon && <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}>{icon}</span>}
+      <h3 className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>{title}</h3>
+    </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>{label}</p>
+      <p className="mt-1 text-sm font-medium capitalize" style={{ color: 'var(--rm-text)' }}>{value}</p>
+    </div>
+  );
+}
+
+function Tile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl p-3" style={{ backgroundColor: 'var(--rm-card-hover)', border: '1px solid var(--rm-border)' }}>
+      <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>{label}</p>
+      <p className="mt-1 text-sm font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>{value}</p>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-medium" style={{ color: 'var(--rm-text-muted)' }}>{label}</p>
+      <p className="text-sm" style={{ color: 'var(--rm-text)' }}>{value}</p>
+    </div>
+  );
+}
+
+function FeatureIcon({ warn, enabled }: { warn: boolean; enabled: boolean }) {
+  const color = warn ? '#f59e0b' : enabled ? '#10b981' : '#64748b';
+  const path = warn ? 'M12 9v2m0 4h.01' : enabled ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12';
+  return (
+    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: `${color}22` }}>
+      <svg className="h-3.5 w-3.5" style={{ color }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={path} />
+      </svg>
+    </span>
+  );
+}
+
+function CoinIcon() {
+  return (<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>);
+}
+
+function ShieldIcon() {
+  return (<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>);
+}
+
+function DocIcon() {
+  return (<svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>);
 }

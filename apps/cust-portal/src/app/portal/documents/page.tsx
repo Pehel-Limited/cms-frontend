@@ -19,7 +19,7 @@ type ViewMode = 'all' | 'by-application';
 
 /* ─── Skeleton ──────────────────────────────────────────────── */
 function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-slate-200/70 ${className}`} />;
+  return <div className={`skeleton ${className}`} />;
 }
 
 /* ─── Category SVG icons (replace emojis) ───────────────────── */
@@ -86,11 +86,11 @@ const DOC_STATUS_DOT: Record<string, string> = {
 };
 
 const DOC_STATUS_BG: Record<string, string> = {
-  UPLOADED: 'bg-blue-50 text-blue-700',
-  VERIFIED: 'bg-emerald-50 text-emerald-700',
-  REJECTED: 'bg-red-50 text-red-700',
-  PENDING: 'bg-amber-50 text-amber-700',
-  UNDER_REVIEW: 'bg-violet-50 text-violet-700',
+  UPLOADED: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  VERIFIED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  REJECTED: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  UNDER_REVIEW: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
 };
 
 export default function DocumentsPage() {
@@ -147,15 +147,14 @@ export default function DocumentsPage() {
   }, {});
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── Hero header ────────────────────────────────────── */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-6 sm:p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-white/5 translate-y-1/2" />
+      <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
+        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" />
 
-        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Documents</h1>
+            <h2 className="text-xl font-bold text-white sm:text-2xl">Documents</h2>
             <p className="mt-1 text-sm text-white/70">
               Upload and manage documents for your loan applications.
             </p>
@@ -166,9 +165,9 @@ export default function DocumentsPage() {
                 setShowUpload(true);
                 setUploadError(null);
               }}
-              className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-white/25 transition-all border border-white/20 shadow-lg"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-white/25"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -176,60 +175,56 @@ export default function DocumentsPage() {
                   d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
                 />
               </svg>
-              Upload Document
+              Upload document
             </button>
           )}
         </div>
+      </div>
 
-        {/* View mode pills */}
-        <div className="relative mt-6 flex gap-2">
-          {(['all', 'by-application'] as ViewMode[]).map(mode => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                viewMode === mode
-                  ? 'bg-white text-[#7f2b7b] shadow-md'
-                  : 'bg-white/10 text-white/90 hover:bg-white/20 border border-white/10'
-              }`}
-            >
-              {mode === 'all' ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                  />
-                </svg>
-              )}
-              {mode === 'all' ? 'All Documents' : 'By Application'}
-              <span
-                className={`text-xs tabular-nums ${viewMode === mode ? 'text-[#7f2b7b]/60' : 'text-white/50'}`}
-              >
-                {mode === 'all' ? documents.length : Object.keys(grouped).length}
-              </span>
-            </button>
-          ))}
-        </div>
+      {/* View mode segmented control */}
+      <div className="segmented" role="tablist" aria-label="Document view">
+        {(['all', 'by-application'] as ViewMode[]).map(mode => (
+          <button
+            key={mode}
+            role="tab"
+            aria-selected={viewMode === mode}
+            onClick={() => setViewMode(mode)}
+            className="segmented-item"
+          >
+            {mode === 'all' ? (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
+              </svg>
+            )}
+            {mode === 'all' ? 'All documents' : 'By application'}
+            <span className="ml-0.5 text-xs tabular-nums opacity-60">
+              {mode === 'all' ? documents.length : Object.keys(grouped).length}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* ── Content ────────────────────────────────────────── */}
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white rounded-2xl border border-slate-200/80 p-5">
+            <div key={i} className="card p-5">
               <div className="flex items-start gap-3">
-                <Skeleton className="w-10 h-10 rounded-xl" />
+                <Skeleton className="h-10 w-10" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-48" />
                   <Skeleton className="h-3 w-80" />
@@ -240,27 +235,17 @@ export default function DocumentsPage() {
           ))}
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200/60 rounded-2xl p-8 text-center">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center mb-3">
-            <svg
-              className="w-6 h-6 text-red-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
-          </div>
-          <p className="text-red-700 font-medium">{error}</p>
-          <button
-            onClick={fetchData}
-            className="mt-4 text-sm font-medium text-red-700 hover:text-red-800 underline decoration-red-300 underline-offset-4 hover:decoration-red-500"
-          >
+        <div className="alert alert-error">
+          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+            />
+          </svg>
+          <p className="flex-1 font-medium">{error}</p>
+          <button onClick={fetchData} className="btn btn-sm btn-outline shrink-0">
             Try again
           </button>
         </div>
@@ -299,7 +284,7 @@ export default function DocumentsPage() {
 
 function DocumentList({ documents }: { documents: ApplicationDocument[] }) {
   return (
-    <div className="space-y-3">
+    <div className="stagger space-y-3">
       {documents.map(doc => (
         <DocumentCard key={doc.id} doc={doc} />
       ))}
@@ -310,35 +295,34 @@ function DocumentList({ documents }: { documents: ApplicationDocument[] }) {
 function DocumentCard({ doc }: { doc: ApplicationDocument }) {
   const statusLabel = UPLOAD_STATUS_LABELS[doc.uploadStatus] || doc.uploadStatus;
   const dot = DOC_STATUS_DOT[doc.uploadStatus] || 'bg-slate-400';
-  const bg = DOC_STATUS_BG[doc.uploadStatus] || 'bg-slate-50 text-slate-600';
+  const bg = DOC_STATUS_BG[doc.uploadStatus] || 'badge-neutral';
   const catLabel = CATEGORY_LABELS[doc.category] || doc.category;
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 hover:border-[#7f2b7b]/20 hover:shadow-md transition-all duration-200 group">
+    <div className="card card-hover group p-5">
       <div className="flex items-start gap-3">
-        <div className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-[#7f2b7b]/10 to-[#a0369b]/10 flex items-center justify-center text-[#7f2b7b]">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+        >
           {getCategorySvg(doc.category)}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="text-sm font-semibold text-slate-900 truncate group-hover:text-[#7f2b7b] transition-colors">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
               {doc.fileName}
             </h4>
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${bg}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+            <span className={`badge ${bg}`}>
+              <span className={`badge-dot ${dot}`} />
               {statusLabel}
             </span>
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+          <div
+            className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+            style={{ color: 'var(--text-muted)' }}
+          >
             <span className="inline-flex items-center gap-1">
-              <svg
-                className="w-3.5 h-3.5 text-slate-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -357,16 +341,13 @@ function DocumentCard({ doc }: { doc: ApplicationDocument }) {
               })}
             </span>
             {doc.applicationId && (
-              <Link
-                href={`/portal/applications/${doc.applicationId}`}
-                className="text-[#7f2b7b] hover:text-[#6b2568] font-medium"
-              >
-                View Application →
+              <Link href={`/portal/applications/${doc.applicationId}`} className="link-arrow">
+                View application <span data-arrow aria-hidden="true">→</span>
               </Link>
             )}
           </div>
           {doc.rejectionReason && (
-            <p className="mt-1.5 text-xs text-red-600 bg-red-50 px-2 py-1 rounded-lg inline-block">
+            <p className="mt-2 inline-block rounded-lg bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
               Reason: {doc.rejectionReason}
             </p>
           )}
@@ -393,14 +374,12 @@ function GroupedView({
         const app = appMap.get(appId);
         return (
           <div key={appId}>
-            <div className="flex items-center gap-3 mb-3 px-1">
-              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                <svg
-                  className="w-4 h-4 text-slate-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+            <div className="mb-3 flex items-center gap-3 px-1">
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-secondary)' }}
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -410,18 +389,13 @@ function GroupedView({
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-slate-700">
-                  {app?.applicationNumber || appId}
-                </h3>
-                <span className="text-xs text-slate-400">
+                <h3 className="section-title">{app?.applicationNumber || appId}</h3>
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                   {docs.length} document{docs.length !== 1 ? 's' : ''}
                 </span>
               </div>
-              <Link
-                href={`/portal/applications/${appId}`}
-                className="ml-auto text-xs text-[#7f2b7b] hover:text-[#6b2568] font-medium"
-              >
-                View Application →
+              <Link href={`/portal/applications/${appId}`} className="link-arrow ml-auto">
+                View application <span data-arrow aria-hidden="true">→</span>
               </Link>
             </div>
             <div className="space-y-2">
@@ -475,14 +449,28 @@ function UploadModal({
   const canSubmit = selectedApp && category && fileName.trim();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h3 className="text-lg font-semibold text-slate-900">Upload Document</h3>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
-          >
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Upload document"
+    >
+      <div
+        className="w-full max-w-lg overflow-hidden rounded-2xl border"
+        style={{
+          backgroundColor: 'var(--surface-card)',
+          borderColor: 'var(--surface-border)',
+          boxShadow: 'var(--shadow-lg)',
+        }}
+      >
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1px solid var(--surface-border)' }}
+        >
+          <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Upload document
+          </h3>
+          <button onClick={onClose} className="icon-btn" aria-label="Close">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -496,17 +484,20 @@ function UploadModal({
 
         <div className="space-y-4 px-6 py-5">
           {uploadError && (
-            <div className="bg-red-50 border border-red-200/60 rounded-xl px-4 py-3 text-sm text-red-700">
+            <div className="alert alert-error" role="alert">
               {uploadError}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Application</label>
+            <label className="field-label" htmlFor="upload-application">
+              Application
+            </label>
             <select
+              id="upload-application"
               value={selectedApp}
               onChange={e => setSelectedApp(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-[#7f2b7b] focus:ring-1 focus:ring-[#7f2b7b] bg-white"
+              className="select"
             >
               {applications.map(app => (
                 <option key={app.applicationId} value={app.applicationId}>
@@ -517,11 +508,14 @@ function UploadModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Category</label>
+            <label className="field-label" htmlFor="upload-category">
+              Category
+            </label>
             <select
+              id="upload-category"
               value={category}
               onChange={e => setCategory(e.target.value as DocumentCategory)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-[#7f2b7b] focus:ring-1 focus:ring-[#7f2b7b] bg-white"
+              className="select"
             >
               {CATEGORIES.map(cat => (
                 <option key={cat} value={cat}>
@@ -532,38 +526,42 @@ function UploadModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Document Name</label>
+            <label className="field-label" htmlFor="upload-name">
+              Document name
+            </label>
             <input
+              id="upload-name"
               type="text"
               value={fileName}
               onChange={e => setFileName(e.target.value)}
               placeholder="e.g. Passport_Front.pdf"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-[#7f2b7b] focus:ring-1 focus:ring-[#7f2b7b]"
+              className="input"
             />
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="field-hint">
               File upload is metadata-only until ECM integration is ready.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label className="field-label" htmlFor="upload-notes">
               Notes (optional)
             </label>
             <textarea
+              id="upload-notes"
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={2}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-[#7f2b7b] focus:ring-1 focus:ring-[#7f2b7b]"
+              className="input"
               placeholder="Any additional information…"
             />
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-          >
+        <div
+          className="flex justify-end gap-3 px-6 py-4"
+          style={{ borderTop: '1px solid var(--surface-border)' }}
+        >
+          <button onClick={onClose} className="btn btn-secondary">
             Cancel
           </button>
           <button
@@ -576,7 +574,7 @@ function UploadModal({
               });
             }}
             disabled={!canSubmit || uploading}
-            className="px-5 py-2.5 rounded-xl bg-[#7f2b7b] text-sm font-medium text-white shadow-sm hover:bg-[#6b2568] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="btn btn-primary"
           >
             {uploading ? (
               <span className="flex items-center gap-1.5">
@@ -597,14 +595,9 @@ function UploadModal({
 
 function EmptyState({ hasApps, onUpload }: { hasApps: boolean; onUpload: () => void }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center">
-      <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7f2b7b]/10 to-[#a0369b]/10 flex items-center justify-center mb-4">
-        <svg
-          className="w-8 h-8 text-[#7f2b7b]"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+    <div className="empty-state">
+      <div className="empty-state-icon">
+        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -613,18 +606,15 @@ function EmptyState({ hasApps, onUpload }: { hasApps: boolean; onUpload: () => v
           />
         </svg>
       </div>
-      <h3 className="text-lg font-semibold text-slate-900">No documents uploaded yet</h3>
-      <p className="mt-1 text-sm text-slate-500 max-w-sm mx-auto">
+      <h3 className="empty-state-title">No documents uploaded yet</h3>
+      <p className="empty-state-text">
         {hasApps
           ? 'Upload documents for your loan applications to get started.'
           : 'Create a loan application first, then upload the required documents.'}
       </p>
       {hasApps && (
-        <button
-          onClick={onUpload}
-          className="mt-5 bg-[#7f2b7b] text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-[#6b2568] transition-colors shadow-sm"
-        >
-          Upload Document
+        <button onClick={onUpload} className="btn btn-primary mt-5">
+          Upload document
         </button>
       )}
     </div>

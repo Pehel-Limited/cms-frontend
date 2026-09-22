@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/format';
 import {
@@ -53,17 +54,6 @@ const FACT_LABELS: Record<string, string> = {
 
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-xl bg-slate-200 dark:bg-white/10 ${className}`} />;
-}
-
-/** Builds an application-wizard link that carries the confirmed credit need
- * (product, amount, purpose, target date) so the customer doesn't have to
- * re-enter details already captured by the AI assistant. */
-function buildApplyHref(product: LoanProduct, facts: CreditNeedFacts): string {
-  const params = new URLSearchParams({ product: product.productCode });
-  if (facts.purpose) params.set('purpose', facts.purpose);
-  if (facts.estimatedCost != null) params.set('amount', String(facts.estimatedCost));
-  if (facts.targetDate) params.set('targetDate', facts.targetDate);
-  return `/portal/applications/new?${params.toString()}`;
 }
 
 /* ─── Review / confirmation card ────────────────────────────── */
@@ -285,6 +275,7 @@ function ReviewCard({
 /* ─── Main page ─────────────────────────────────────────────── */
 
 export default function AiAssistantPage() {
+  const router = useRouter();
   const [journey, setJourney] = useState<CreditJourney | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -293,6 +284,7 @@ export default function AiAssistantPage() {
   const [intentOptions, setIntentOptions] = useState<IntentOption[]>(DEFAULT_INTENT_OPTIONS);
   const [matchedProducts, setMatchedProducts] = useState<LoanProduct[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+  const [preparingProductId, setPreparingProductId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -379,6 +371,19 @@ export default function AiAssistantPage() {
       handleApiError(err);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleStartApplication(product: LoanProduct) {
+    if (!journey || preparingProductId) return;
+    setPreparingProductId(product.productId);
+    setError(null);
+    try {
+      const result = await aiCreditJourneyService.prepareApplication(journey.journeyId, product.productId);
+      router.push(`/portal/applications/${result.applicationId}`);
+    } catch (err) {
+      handleApiError(err);
+      setPreparingProductId(null);
     }
   }
 
@@ -662,12 +667,13 @@ export default function AiAssistantPage() {
                       {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)} &middot;{' '}
                       {p.minInterestRate}%–{p.maxInterestRate}% p.a.
                     </p>
-                    <Link
-                      href={buildApplyHref(p, review.facts)}
-                      className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#7f2b7b] px-4 py-2 text-xs font-semibold text-white hover:bg-[#5e1f5b]"
+                    <button
+                      onClick={() => handleStartApplication(p)}
+                      disabled={preparingProductId !== null}
+                      className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#7f2b7b] px-4 py-2 text-xs font-semibold text-white hover:bg-[#5e1f5b] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Apply for {p.productName} →
-                    </Link>
+                      {preparingProductId === p.productId ? 'Starting your application…' : `Start this application →`}
+                    </button>
                   </div>
                 );
               })}

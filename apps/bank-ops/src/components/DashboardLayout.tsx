@@ -96,6 +96,17 @@ const AI_KNOWLEDGE_ITEM = {
   ),
 };
 
+const AI_APPROVALS_ITEM = {
+  name: 'AI Approvals',
+  path: '/dashboard/ai-approvals',
+  icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+        d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+};
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -124,7 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     path === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(path);
 
   const navItems = user?.userType === 'BANK_USER'
-    ? [...NAV_ITEMS, AI_KNOWLEDGE_ITEM, ADMIN_ITEM]
+    ? [...NAV_ITEMS, AI_APPROVALS_ITEM, AI_KNOWLEDGE_ITEM, ADMIN_ITEM]
     : NAV_ITEMS;
 
   const getUserRole = () => {

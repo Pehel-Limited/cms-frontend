@@ -7,7 +7,9 @@ import { toast } from 'react-toastify';
 import { customerService, Customer } from '@/services/api/customerService';
 import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
 import { accountService, AccountSummaryResponse } from '@/services/api/accountService';
+import { aiCustomerIntelligenceService, CustomerIntelligenceState, Recommendation } from '@/services/api/aiCustomerIntelligenceService';
 import { formatCurrency as sharedFormatCurrency, getCurrencySymbol } from '@/lib/format';
+import config from '@/config';
 
 // ============================================================================
 // Constants
@@ -78,6 +80,12 @@ const RISK_COLOR: Record<string, string> = {
   CRITICAL: '#dc2626',
 };
 
+const SIGNAL_SEVERITY_COLOR: Record<string, string> = {
+  LOW: '#10b981',
+  MEDIUM: '#f59e0b',
+  HIGH: '#ef4444',
+};
+
 const MIX_PALETTE = ['#0ea5e9', '#10b981', '#8b5cf6', '#f59e0b', '#38bdf8', '#ec4899', '#64748b'];
 
 const TERMINAL_APP = /APPROV|REJECT|BOOK|DISBURS|CLOSED|CANCEL|WITHDRAW|FUNDED|COMPLETED|DECLIN/i;
@@ -136,6 +144,11 @@ export default function CustomerDetailPage() {
   const [accounts, setAccounts] = useState<AccountSummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [intelligence, setIntelligence] = useState<CustomerIntelligenceState | null>(null);
+  const [intelligenceLoading, setIntelligenceLoading] = useState(true);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [recommendationActionLoadingId, setRecommendationActionLoadingId] = useState<string | null>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedCustomer, setEditedCustomer] = useState<Partial<Customer>>({});
@@ -180,6 +193,35 @@ export default function CustomerDetailPage() {
       setError(err instanceof Error ? err.message : 'Failed to load customer data');
     } finally {
       setLoading(false);
+    }
+
+    // Loaded independently so a degraded/unavailable AI service never blocks the customer page.
+    setIntelligenceLoading(true);
+    aiCustomerIntelligenceService
+      .getCustomerState(customerId, config.bank.defaultBankId)
+      .then(setIntelligence)
+      .catch(() => setIntelligence(null))
+      .finally(() => setIntelligenceLoading(false));
+
+    setRecommendationsLoading(true);
+    aiCustomerIntelligenceService
+      .getRecommendations(customerId, config.bank.defaultBankId)
+      .then(setRecommendations)
+      .catch(() => setRecommendations([]))
+      .finally(() => setRecommendationsLoading(false));
+  };
+
+  const handleRecommendationDecision = async (recommendationId: string, decision: 'accept' | 'dismiss') => {
+    setRecommendationActionLoadingId(recommendationId);
+    try {
+      const updated = decision === 'accept'
+        ? await aiCustomerIntelligenceService.acceptRecommendation(recommendationId, config.bank.defaultBankId)
+        : await aiCustomerIntelligenceService.dismissRecommendation(recommendationId, config.bank.defaultBankId);
+      setRecommendations(prev => prev.filter(rec => rec.id !== updated.id));
+    } catch (err) {
+      console.error(`Failed to ${decision} recommendation:`, err);
+    } finally {
+      setRecommendationActionLoadingId(null);
     }
   };
 
@@ -824,6 +866,97 @@ export default function CustomerDetailPage() {
                   </p>
                 </Panel>
               )}
+
+              {/* Customer Intelligence Signals — real, evidence-backed (AI_roadmap.md §6.2) */}
+              <Panel>
+                <PanelHeader icon={<SparkIcon />} title="Intelligence Signals" beta />
+                {intelligenceLoading ? (
+                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>Computing signals…</p>
+                ) : !intelligence || intelligence.activeSignals.length === 0 ? (
+                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                    No active signals — nothing requires attention right now.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {intelligence.activeSignals.map((sig, idx) => (
+                      <div
+                        key={`${sig.signalType}-${sig.evidence?.applicationId ?? idx}`}
+                        className="flex items-start gap-2.5 rounded-lg px-3 py-2.5"
+                        style={{ backgroundColor: 'var(--rm-card-hover)', border: '1px solid var(--rm-border)' }}
+                      >
+                        <span
+                          className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: SIGNAL_SEVERITY_COLOR[sig.severity || 'MEDIUM'] || '#64748b' }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold" style={{ color: 'var(--rm-text)' }}>
+                            {formatEnum(sig.signalType)}
+                          </p>
+                          <p className="text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>
+                            {sig.evidence?.applicationNumber ? `${sig.evidence.applicationNumber} · ` : ''}
+                            {new Date(sig.detectedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {intelligence && intelligence.warnings.length > 0 && (
+                  <p className="mt-2 text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>
+                    {intelligence.warnings.join(' ')}
+                  </p>
+                )}
+              </Panel>
+
+              {/* Proactive Journey recommendations — Kafka-driven, async (AI_roadmap.md §8.5/§20) */}
+              <Panel>
+                <PanelHeader icon={<SparkIcon />} title="Proactive Insights" beta />
+                {recommendationsLoading ? (
+                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>Checking for insights…</p>
+                ) : recommendations.length === 0 ? (
+                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                    No proactive insights right now.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {recommendations.map(rec => (
+                      <div
+                        key={rec.id}
+                        className="rounded-lg px-3 py-2.5"
+                        style={{ backgroundColor: 'var(--rm-card-hover)', border: '1px solid var(--rm-border)' }}
+                      >
+                        <p className="text-xs font-semibold" style={{ color: 'var(--rm-text)' }}>
+                          {formatEnum(rec.recommendationType)}
+                        </p>
+                        <p className="mt-0.5 text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>
+                          {typeof rec.rationale?.reason === 'string' ? rec.rationale.reason : 'New activity detected'}
+                        </p>
+                        <p className="mt-1 text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>
+                          {new Date(rec.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            onClick={() => handleRecommendationDecision(rec.id, 'accept')}
+                            disabled={recommendationActionLoadingId === rec.id}
+                            className="rounded-md px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+                            style={{ backgroundColor: '#10b981', color: '#fff' }}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => handleRecommendationDecision(rec.id, 'dismiss')}
+                            disabled={recommendationActionLoadingId === rec.id}
+                            className="rounded-md px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+                            style={{ border: '1px solid var(--rm-border)', color: 'var(--rm-text-secondary)' }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Panel>
 
               {/* KYC / AML Status */}
               <Panel>

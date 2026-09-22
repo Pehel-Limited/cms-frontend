@@ -13,6 +13,7 @@ import {
   INTENT_TO_LOAN_PURPOSE,
 } from '@/services/api/application-service';
 import { productService, LoanProduct, RatePlan, PRODUCT_TYPE_LABELS } from '@/services/api/product-service';
+import { documentExtractionService, DocumentType, DocumentExtractionResult } from '@/services/api/document-extraction-service';
 import { formatCurrency } from '@/lib/format';
 import {
   partyService,
@@ -92,9 +93,12 @@ export default function NewApplicationPage() {
   const prefillAmount = searchParams.get('amount');
   const prefillPurpose = searchParams.get('purpose');
   const prefillTargetDate = searchParams.get('targetDate');
+  // Continuing an existing DRAFT/RETURNED application — reload its saved
+  // product + form data instead of starting the wizard from scratch.
+  const resumeId = searchParams.get('resume');
 
   // State
-  const [step, setStep] = useState<WizardStep>(preselectedCode ? 'loan' : 'product');
+  const [step, setStep] = useState<WizardStep>(preselectedCode || resumeId ? 'loan' : 'product');
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<LoanProduct | null>(null);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -204,7 +208,46 @@ export default function NewApplicationPage() {
       const data = await productService.getProducts();
       setProducts(data.filter(p => p.isOnlineApplicationEnabled !== false));
 
-      if (preselectedCode) {
+      if (resumeId) {
+        try {
+          const existing = await applicationService.getById(resumeId);
+          setSavedApp(existing);
+          const match = data.find(p => p.productId === existing.productId);
+          if (match) setSelectedProduct(match);
+          setForm(prev => ({
+            ...prev,
+            requestedAmount: existing.requestedAmount?.toString() ?? prev.requestedAmount,
+            requestedTermMonths: existing.requestedTermMonths?.toString() ?? prev.requestedTermMonths,
+            requestedInterestRate: existing.requestedInterestRate?.toString() ?? prev.requestedInterestRate,
+            loanPurpose: existing.loanPurpose ?? prev.loanPurpose,
+            loanPurposeDescription: existing.loanPurposeDescription ?? prev.loanPurposeDescription,
+            statedAnnualIncome: existing.statedAnnualIncome?.toString() ?? prev.statedAnnualIncome,
+            statedMonthlyIncome: existing.statedMonthlyIncome?.toString() ?? prev.statedMonthlyIncome,
+            statedMonthlyExpenses: existing.statedMonthlyExpenses?.toString() ?? prev.statedMonthlyExpenses,
+            employmentStatus: existing.employmentStatus ?? prev.employmentStatus,
+            employerName: existing.employerName ?? prev.employerName,
+            yearsWithEmployer: existing.yearsWithEmployer?.toString() ?? prev.yearsWithEmployer,
+            jobTitle: existing.jobTitle ?? prev.jobTitle,
+            businessAnnualRevenue: existing.businessAnnualRevenue?.toString() ?? prev.businessAnnualRevenue,
+            businessVintageYears: existing.businessVintageYears?.toString() ?? prev.businessVintageYears,
+            propertyAddress: existing.propertyAddress ?? prev.propertyAddress,
+            propertyCity: existing.propertyCity ?? prev.propertyCity,
+            propertyState: existing.propertyState ?? prev.propertyState,
+            propertyPostalCode: existing.propertyPostalCode ?? prev.propertyPostalCode,
+            propertyType: existing.propertyType ?? prev.propertyType,
+            propertyValue: existing.propertyValue?.toString() ?? prev.propertyValue,
+            downPaymentAmount: existing.downPaymentAmount?.toString() ?? prev.downPaymentAmount,
+            vehicleMake: existing.vehicleMake ?? prev.vehicleMake,
+            vehicleModel: existing.vehicleModel ?? prev.vehicleModel,
+            vehicleYear: existing.vehicleYear?.toString() ?? prev.vehicleYear,
+            vehicleCondition: existing.vehicleCondition ?? prev.vehicleCondition,
+            vehicleValue: existing.vehicleValue?.toString() ?? prev.vehicleValue,
+          }));
+          setStep('loan');
+        } catch (err: any) {
+          setError(err.message || 'Failed to load your saved application');
+        }
+      } else if (preselectedCode) {
         const match = data.find(p => p.productCode === preselectedCode);
         if (match) {
           setSelectedProduct(match);
@@ -243,6 +286,13 @@ export default function NewApplicationPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  }
+
+  // Applies a customer-confirmed subset of an AI document-extraction draft —
+  // never called automatically, only from the explicit "Apply" action after
+  // the customer reviews the extracted values (AI_roadmap.md §15.1).
+  function applyExtractedFields(patch: Record<string, string>) {
+    setForm(prev => ({ ...prev, ...patch }));
   }
 
   function buildPayload(): CreateApplicationPayload {
@@ -512,10 +562,17 @@ export default function NewApplicationPage() {
         )}
 
         {step === 'financial' && (
-          <StepFinancial form={form} onChange={handleChange} isBusiness={isBusiness} />
+          <StepFinancial
+            form={form}
+            onChange={handleChange}
+            isBusiness={isBusiness}
+            onApplyExtracted={applyExtractedFields}
+          />
         )}
 
-        {step === 'employment' && <StepEmployment form={form} onChange={handleChange} />}
+        {step === 'employment' && (
+          <StepEmployment form={form} onChange={handleChange} onApplyExtracted={applyExtractedFields} />
+        )}
 
         {step === 'review' && selectedProduct && (
           <StepReview
@@ -762,18 +819,15 @@ function StepLoan({
               </p>
             </>
           ) : (
-            <input
-              id="requestedInterestRate"
-              type="number"
-              name="requestedInterestRate"
-              value={form.requestedInterestRate}
-              onChange={onChange}
-              step="0.01"
-              min={product.minInterestRate}
-              max={product.maxInterestRate}
-              placeholder={`${product.minInterestRate} – ${product.maxInterestRate}`}
-              className="input"
-            />
+            <>
+              {/* Bank-set rate, not customer-editable */}
+              <p id="requestedInterestRate" className="input flex items-center">
+                {form.requestedInterestRate ? `${form.requestedInterestRate}% p.a.` : '—'}
+              </p>
+              <p className="field-hint">
+                Set by the bank for this product — not editable.
+              </p>
+            </>
           )}
         </div>
 
@@ -1039,16 +1093,147 @@ function StepLoan({
   );
 }
 
+// ─── AI document extraction (upload + review, AI_roadmap.md §15.1) ────
+//
+// Lets the customer upload a bank statement or payslip and get back a
+// DRAFT of extracted values to review before applying them to the form.
+// Nothing is ever applied automatically — the customer must press "Apply"
+// after seeing exactly what was read.
+
+function extractedFieldPatch(
+  documentType: DocumentType,
+  fields: Record<string, unknown>
+): Record<string, string> {
+  if (documentType === 'PAYSLIP') {
+    const patch: Record<string, string> = {};
+    if (typeof fields.employerName === 'string') patch.employerName = fields.employerName;
+    const monthlyIncome = fields.netPay ?? fields.grossPay;
+    if (monthlyIncome != null && !Number.isNaN(Number(monthlyIncome))) {
+      patch.statedMonthlyIncome = String(monthlyIncome);
+    }
+    return patch;
+  }
+
+  // BANK_STATEMENT: estimate monthly expenses from the sum of debit transactions.
+  const transactions = Array.isArray(fields.transactions) ? fields.transactions : [];
+  const totalDebits = transactions.reduce((sum: number, tx) => {
+    if (!tx || typeof tx !== 'object') return sum;
+    const t = tx as Record<string, unknown>;
+    if (String(t.type).toUpperCase() !== 'DEBIT') return sum;
+    const amount = Number(t.amount);
+    return Number.isNaN(amount) ? sum : sum + Math.abs(amount);
+  }, 0);
+  return totalDebits > 0 ? { statedMonthlyExpenses: totalDebits.toFixed(2) } : {};
+}
+
+function DocumentExtractionUpload({
+  documentType,
+  onApplyExtracted,
+}: {
+  documentType: DocumentType;
+  onApplyExtracted: (patch: Record<string, string>) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<DocumentExtractionResult | null>(null);
+  const [applied, setApplied] = useState(false);
+
+  const label = documentType === 'PAYSLIP' ? 'payslip' : 'bank statement';
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError(null);
+    setDraft(null);
+    setApplied(false);
+    try {
+      const result = await documentExtractionService.extract(documentType, file);
+      if (result.status === 'FAILED' || result.status === 'AI_PROVIDER_UNAVAILABLE') {
+        setUploadError(result.errorMessage || result.warnings[0] || 'Could not read this document.');
+      } else {
+        setDraft(result);
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleApply() {
+    if (!draft) return;
+    onApplyExtracted(extractedFieldPatch(documentType, draft.extractedFields));
+    setApplied(true);
+  }
+
+  return (
+    <div className="mb-6 rounded-lg border border-dashed border-slate-300 p-4">
+      <p className="field-label mb-1">Upload a {label} (optional)</p>
+      <p className="field-hint mb-3">
+        We&apos;ll read it and suggest values below for you to review — nothing is filled in
+        automatically.
+      </p>
+      <label className="btn btn-ghost btn-sm inline-block cursor-pointer">
+        {uploading ? 'Reading document…' : `Choose ${label} file`}
+        <input
+          type="file"
+          accept="application/pdf,image/*"
+          className="hidden"
+          disabled={uploading}
+          onChange={handleFileSelected}
+        />
+      </label>
+
+      {uploadError && <p className="mt-2 text-sm text-red-600">{uploadError}</p>}
+
+      {draft && (
+        <div className="mt-3 rounded-md bg-slate-50 p-3">
+          <p className="text-sm font-medium text-slate-700">Extracted values (draft)</p>
+          <ul className="mt-1 space-y-1 text-sm text-slate-600">
+            {Object.entries(draft.extractedFields)
+              .filter(([key]) => key !== 'transactions')
+              .map(([key, value]) => (
+                <li key={key}>
+                  <span className="text-slate-500">{key}:</span> {String(value)}
+                </li>
+              ))}
+          </ul>
+          {draft.warnings.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-amber-700">
+              {draft.warnings.map((w, i) => (
+                <li key={i}>⚠ {w}</li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={applied}
+            className="btn btn-primary btn-sm mt-3"
+          >
+            {applied ? 'Applied ✓' : 'Apply suggested values'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StepFinancial({
   form,
   onChange,
   isBusiness,
+  onApplyExtracted,
 }: {
   form: Record<string, string>;
   isBusiness: boolean;
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => void;
+  onApplyExtracted: (patch: Record<string, string>) => void;
 }) {
   return (
     <div>
@@ -1058,6 +1243,8 @@ function StepFinancial({
       <p className="field-hint">
         Help us evaluate your application. All fields are optional but improve approval chances.
       </p>
+
+      <DocumentExtractionUpload documentType="BANK_STATEMENT" onApplyExtracted={onApplyExtracted} />
 
       {/* Business-specific fields */}
       {isBusiness && (
@@ -1171,11 +1358,13 @@ function StepFinancial({
 function StepEmployment({
   form,
   onChange,
+  onApplyExtracted,
 }: {
   form: Record<string, string>;
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => void;
+  onApplyExtracted: (patch: Record<string, string>) => void;
 }) {
   return (
     <div>
@@ -1183,6 +1372,8 @@ function StepEmployment({
       <p className="field-hint">
         Provide your employment information. Optional but recommended.
       </p>
+
+      <DocumentExtractionUpload documentType="PAYSLIP" onApplyExtracted={onApplyExtracted} />
 
       <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>

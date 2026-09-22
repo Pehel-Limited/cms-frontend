@@ -14,6 +14,7 @@ import { userService, User } from '@/services/api/userService';
 import { ApplicationWorkflowPanel } from '@/components/workflow';
 import { SolicitorTab } from '@/components/solicitor/SolicitorTab';
 import { ApplicationAiSummaryTab } from '@/components/ai/ApplicationAiSummaryTab';
+import { CreditMemoTab } from '@/components/ai/CreditMemoTab';
 import { formatCurrency } from '@/lib/format';
 
 interface ActionModalProps {
@@ -423,7 +424,7 @@ export default function ApplicationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [mainTab, setMainTab] = useState<'workflow' | 'solicitor' | 'ai-summary'>('workflow');
+  const [mainTab, setMainTab] = useState<'workflow' | 'solicitor' | 'ai-summary' | 'credit-memo'>('workflow');
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -842,6 +843,16 @@ export default function ApplicationDetailPage() {
         >
           AI Summary
         </button>
+        <button
+          onClick={() => setMainTab('credit-memo')}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mainTab === 'credit-memo'
+              ? 'bg-white text-[#7f2b7b] shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          Credit Memo
+        </button>
       </div>
 
       {/* LOMS Workflow Panel - Loan Origination Workflow */}
@@ -870,6 +881,11 @@ export default function ApplicationDetailPage() {
       {/* AI Summary Tab */}
       {mainTab === 'ai-summary' && (
         <ApplicationAiSummaryTab applicationId={applicationId} bankId={application.bankId} />
+      )}
+
+      {/* Credit Memo Tab */}
+      {mainTab === 'credit-memo' && (
+        <CreditMemoTab applicationId={applicationId} bankId={application.bankId} />
       )}
 
       {/* Legacy Actions */}

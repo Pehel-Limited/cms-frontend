@@ -127,6 +127,7 @@ export interface CreditJourney {
   journeyId: string;
   bankId: string;
   customerId: string;
+  applicationId?: string | null;
   status: string;
   currentStage: string;
   pausedReason?: string | null;
@@ -188,5 +189,20 @@ export const aiCreditJourneyService = {
 
   async resume(journeyId: string): Promise<CreditJourney> {
     return apiClient.post<CreditJourney>(`/api/customer/ai/credit-journeys/${journeyId}/resume`);
+  },
+
+  /**
+   * Turns the confirmed credit need into a REAL draft application —
+   * prefilled from the journey's confirmed facts, no re-entry required.
+   * The customer still reviews and explicitly submits it via the normal
+   * application flow; nothing is auto-submitted here.
+   */
+  async prepareApplication(
+    journeyId: string,
+    productId: string
+  ): Promise<{ applicationId: string; applicationNumber: string }> {
+    return apiClient.post(`/api/customer/ai/credit-journeys/${journeyId}/prepare-application`, {
+      productId,
+    });
   },
 };

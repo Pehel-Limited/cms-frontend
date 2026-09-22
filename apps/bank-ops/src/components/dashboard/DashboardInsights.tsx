@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import ChartTooltip from './ChartTooltip';
 import type { PerformanceMetrics, MissingItem } from '@/services/api/dashboard-service';
 
-/* Humanise a SCREAMING_SNAKE category into Title Case */
 function humanise(s: string): string {
   return s
     .toLowerCase()
@@ -11,25 +12,37 @@ function humanise(s: string): string {
     .replace(/\b\w/g, c => c.toUpperCase());
 }
 
-const CATEGORY_META: Record<string, { glyph: string; tint: string }> = {
-  KYC: { glyph: '🪪', tint: 'bg-cyan-50 text-cyan-600' },
-  AML: { glyph: '🛡️', tint: 'bg-blue-50 text-blue-600' },
-  DOCUMENTS: { glyph: '📄', tint: 'bg-violet-50 text-violet-600' },
-  DOCUMENT: { glyph: '📄', tint: 'bg-violet-50 text-violet-600' },
-  CREDIT_CHECK: { glyph: '📊', tint: 'bg-amber-50 text-amber-600' },
-  INCOME: { glyph: '💷', tint: 'bg-emerald-50 text-emerald-600' },
-  IDENTITY: { glyph: '🪪', tint: 'bg-cyan-50 text-cyan-600' },
+const IDENTITY_PATH = 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z';
+const SHIELD_PATH =
+  'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z';
+const DOC_PATH =
+  'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z';
+const CHART_PATH =
+  'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z';
+const COIN_PATH =
+  'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
+const PIN_PATH =
+  'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z';
+
+const CATEGORY_META: Record<string, { path: string; color: string }> = {
+  KYC: { path: IDENTITY_PATH, color: '#06b6d4' },
+  IDENTITY: { path: IDENTITY_PATH, color: '#06b6d4' },
+  AML: { path: SHIELD_PATH, color: '#3b82f6' },
+  DOCUMENTS: { path: DOC_PATH, color: '#8b5cf6' },
+  DOCUMENT: { path: DOC_PATH, color: '#8b5cf6' },
+  CREDIT_CHECK: { path: CHART_PATH, color: '#f59e0b' },
+  CREDIT: { path: CHART_PATH, color: '#f59e0b' },
+  INCOME: { path: COIN_PATH, color: '#10b981' },
 };
 
 function metaFor(category: string) {
   const key = Object.keys(CATEGORY_META).find(k => category.toUpperCase().includes(k));
-  return key ? CATEGORY_META[key] : { glyph: '📌', tint: 'bg-slate-100 text-slate-500' };
+  return key ? CATEGORY_META[key] : { path: PIN_PATH, color: '#64748b' };
 }
 
 function daysAgo(iso: string): string {
   if (!iso) return '';
-  const ms = Date.now() - new Date(iso).getTime();
-  const d = Math.max(0, Math.floor(ms / 86400000));
+  const d = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
   if (d === 0) return 'today';
   if (d === 1) return '1 day';
   return `${d} days`;
@@ -45,85 +58,74 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
 
   if (!performance && missingItems.length === 0) return null;
 
-  // decline reason breakdown
   const declineSegments = performance
     ? [
-        { label: 'Credit risk', value: performance.declinedCreditRisk, color: '#ef4444' },
-        { label: 'Fraud', value: performance.declinedFraud, color: '#a855f7' },
-        { label: 'Policy', value: performance.declinedPolicy, color: '#f59e0b' },
-        { label: 'Incomplete', value: performance.declinedIncomplete, color: '#64748b' },
+        { label: 'Credit risk', value: performance.declinedCreditRisk ?? 0, color: '#ef4444' },
+        { label: 'Fraud', value: performance.declinedFraud ?? 0, color: '#a855f7' },
+        { label: 'Policy', value: performance.declinedPolicy ?? 0, color: '#f59e0b' },
+        { label: 'Incomplete', value: performance.declinedIncomplete ?? 0, color: '#64748b' },
       ].filter(s => s.value > 0)
     : [];
   const declineTotal = declineSegments.reduce((s, x) => s + x.value, 0);
 
   return (
-    <section
-      className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-slide-up"
-      style={{ animationDelay: '250ms' }}
-    >
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* ─── Performance ─── */}
       {performance && (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-              Performance
-            </h2>
-            <span className="text-[11px] text-slate-400">Rolling average</span>
-          </div>
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Performance
+          </h2>
+          <p className="text-sm mt-1 mb-6" style={{ color: 'var(--rm-text-muted)' }}>
+            How quickly deals move, and where they drop out
+          </p>
 
-          {/* speed tiles */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-4">
             {[
-              {
-                label: 'Avg to approval',
-                value: performance.avgDaysToApproval,
-                suffix: 'd',
-                accent: 'from-blue-500 to-cyan-500',
-              },
-              {
-                label: 'Median to approval',
-                value: performance.medianDaysToApproval,
-                suffix: 'd',
-                accent: 'from-violet-500 to-purple-500',
-              },
-              {
-                label: 'Approval → booked',
-                value: performance.avgDaysApprovalToBooked,
-                suffix: 'd',
-                accent: 'from-emerald-500 to-teal-500',
-              },
+              { label: 'To approval', value: performance.avgDaysToApproval, color: '#0ea5e9' },
+              { label: 'Median', value: performance.medianDaysToApproval, color: '#8b5cf6' },
+              { label: 'Approve → book', value: performance.avgDaysApprovalToBooked, color: '#10b981' },
             ].map(t => (
-              <div key={t.label} className="rounded-xl bg-slate-50 p-3 text-center">
-                <p className={`bg-gradient-to-r ${t.accent} bg-clip-text text-2xl font-bold text-transparent tabular-nums`}>
+              <div key={t.label}>
+                <p className="text-3xl font-semibold tracking-tight tabular-nums" style={{ color: t.color }}>
                   {t.value > 0 ? Math.round(t.value) : '—'}
-                  {t.value > 0 && <span className="text-sm">{t.suffix}</span>}
+                  {t.value > 0 && <span className="text-base font-medium">d</span>}
                 </p>
-                <p className="mt-1 text-[10px] leading-tight text-slate-500">{t.label}</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+                  {t.label}
+                </p>
               </div>
             ))}
           </div>
 
-          {/* quality rates */}
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-6 space-y-4">
             {[
               { label: 'Rework rate', value: performance.reworkRate, warn: 15 },
               { label: 'Post-approval dropout', value: performance.postApprovalDropoutRate, warn: 10 },
-              { label: 'Referral → UW', value: performance.referralToUnderwritingRate, warn: 100 },
+              { label: 'Referred to underwriting', value: performance.referralToUnderwritingRate, warn: 100 },
             ].map(r => {
-              const pct = Math.round(r.value);
-              const isWarn = r.value > r.warn;
+              const pct = Math.round(r.value ?? 0);
+              const isWarn = (r.value ?? 0) > r.warn;
               return (
-                <div key={r.label} className="rounded-xl border border-slate-100 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">{r.label}</span>
-                    <span className={`text-xs font-bold tabular-nums ${isWarn ? 'text-amber-600' : 'text-slate-700'}`}>
+                <div key={r.label}>
+                  <div className="flex items-baseline justify-between gap-3 mb-1.5">
+                    <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                      {r.label}
+                    </span>
+                    <span
+                      className="text-sm font-semibold tabular-nums"
+                      style={{ color: isWarn ? '#f59e0b' : 'var(--rm-text)' }}
+                    >
                       {pct}%
                     </span>
                   </div>
-                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-2 w-full overflow-hidden rounded-full"
+                    style={{ backgroundColor: 'rgba(127,127,127,0.15)' }}
+                  >
                     <div
-                      className={`h-full rounded-full ${isWarn ? 'bg-amber-400' : 'bg-blue-400'}`}
-                      style={{ width: `${Math.min(100, pct)}%` }}
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${Math.min(100, pct)}%`, backgroundColor: isWarn ? '#f59e0b' : '#0ea5e9' }}
                     />
                   </div>
                 </div>
@@ -131,95 +133,126 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
             })}
           </div>
 
-          {/* decline reasons */}
           {declineTotal > 0 && (
-            <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">Decline reasons</span>
-                <span className="text-[11px] text-slate-400">{declineTotal} total</span>
-              </div>
-              <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                {declineSegments.map(s => (
-                  <div
-                    key={s.label}
-                    style={{ width: `${(s.value / declineTotal) * 100}%`, background: s.color }}
-                    title={`${s.label}: ${s.value}`}
-                  />
-                ))}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                {declineSegments.map(s => (
-                  <div key={s.label} className="flex items-center gap-1.5 text-[11px]">
-                    <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
-                    <span className="text-slate-500">{s.label}</span>
-                    <span className="font-semibold text-slate-700">{s.value}</span>
+            <div className="mt-7 pt-6" style={{ borderTop: '1px solid var(--rm-border)' }}>
+              <p className="text-sm font-medium mb-4" style={{ color: 'var(--rm-text-secondary)' }}>
+                Why deals were declined
+              </p>
+              <div className="flex items-center gap-6">
+                <div className="relative w-28 h-28 shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={declineSegments}
+                        dataKey="value"
+                        nameKey="label"
+                        innerRadius="64%"
+                        outerRadius="100%"
+                        paddingAngle={2}
+                        stroke="none"
+                        animationDuration={700}
+                      >
+                        {declineSegments.map(s => (
+                          <Cell key={s.label} fill={s.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={p => <ChartTooltip {...p} />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-xl font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {declineTotal}
+                    </span>
                   </div>
-                ))}
+                </div>
+                <div className="flex-1 space-y-2 min-w-0">
+                  {declineSegments.map(s => (
+                    <div key={s.label} className="flex items-center gap-2.5 text-sm">
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+                      <span className="truncate" style={{ color: 'var(--rm-text-muted)' }}>
+                        {s.label}
+                      </span>
+                      <span className="ml-auto font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                        {s.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* ─── Pipeline blockers ─── */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 shadow-soft p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
-            Pipeline Blockers
-          </h2>
-          <span className="text-[11px] text-slate-400">What&apos;s holding things up</span>
-        </div>
+      {/* ─── Blockers ─── */}
+      <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+          What&apos;s blocking
+        </h2>
+        <p className="text-sm mt-1 mb-6" style={{ color: 'var(--rm-text-muted)' }}>
+          Missing information holding applications up
+        </p>
 
         {missingItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50">
-              <svg className="h-6 w-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <div className="py-10 text-center">
+            <div
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full"
+              style={{ backgroundColor: 'rgba(16,185,129,0.14)' }}
+            >
+              <svg className="h-6 w-6" style={{ color: '#10b981' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p className="text-sm font-semibold text-slate-700">Nothing blocked</p>
-            <p className="text-xs text-slate-400">Your pipeline is flowing cleanly.</p>
+            <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+              Nothing blocked
+            </p>
+            <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              Your pipeline is flowing cleanly.
+            </p>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {missingItems.slice(0, 5).map(mi => {
               const meta = metaFor(mi.itemCategory);
               return (
-                <div
-                  key={mi.itemCategory}
-                  className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition-colors hover:border-slate-200 hover:bg-slate-50/60"
-                >
-                  <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-lg ${meta.tint}`}>
-                    {meta.glyph}
+                <div key={mi.itemCategory} className="flex items-center gap-4">
+                  <span
+                    className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl"
+                    style={{ backgroundColor: `${meta.color}1f` }}
+                  >
+                    <svg className="w-5 h-5" style={{ color: meta.color }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d={meta.path} />
+                    </svg>
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-900">{humanise(mi.itemCategory)}</p>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-base font-medium truncate" style={{ color: 'var(--rm-text)' }}>
+                      {humanise(mi.itemCategory)}
+                    </p>
+                    <p className="text-sm truncate" style={{ color: 'var(--rm-text-muted)' }}>
                       {mi.oldestCaseDate ? `Oldest waiting ${daysAgo(mi.oldestCaseDate)}` : 'Awaiting action'}
                       {mi.sampleApplicationNumbers?.length > 0 &&
                         ` · ${mi.sampleApplicationNumbers.slice(0, 2).join(', ')}`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-bold text-slate-700 tabular-nums">
-                      {mi.applicationCount}
-                    </span>
-                    <svg className="h-4 w-4 text-slate-300 transition-colors group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
+                  <span
+                    className="shrink-0 rounded-full px-3 py-1 text-sm font-semibold tabular-nums"
+                    style={{ backgroundColor: 'rgba(127,127,127,0.12)', color: 'var(--rm-text)' }}
+                  >
+                    {mi.applicationCount}
+                  </span>
                 </div>
               );
             })}
             <button
               onClick={() => router.push('/dashboard/applications')}
-              className="mt-1 w-full rounded-xl border border-dashed border-slate-200 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-blue-300 hover:text-blue-600"
+              className="mt-2 w-full rounded-full py-2.5 text-sm font-semibold transition-opacity hover:opacity-80"
+              style={{ backgroundColor: 'rgba(127,127,127,0.10)', color: 'var(--rm-text)' }}
             >
-              Resolve in Applications →
+              Resolve in applications
             </button>
           </div>
         )}
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }

@@ -7,7 +7,32 @@ import {
   accountService,
   type AccountResponse,
   type UpdateAccountRequest,
+  accountCategoryLabels,
+  accountStatusLabels,
+  accountTypeLabels,
 } from '@/services/api/accountService';
+
+const INPUT_STYLE: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  border: '1px solid var(--rm-border)',
+  color: 'var(--rm-text)',
+};
+
+const INPUT_CLASS = 'w-full rounded-xl px-4 py-2.5 text-sm';
+
+function errorInputStyle(hasError: boolean): React.CSSProperties {
+  return {
+    ...INPUT_STYLE,
+    border: `1px solid ${hasError ? 'rgba(239,68,68,0.6)' : 'var(--rm-border)'}`,
+  };
+}
+
+function formatDate(value?: string): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 export default function EditAccountPage() {
   const params = useParams();
@@ -15,8 +40,10 @@ export default function EditAccountPage() {
   const accountId = params.id as string;
   const [account, setAccount] = useState<AccountResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<UpdateAccountRequest>({
     accountName: '',
@@ -29,9 +56,9 @@ export default function EditAccountPage() {
   });
 
   const loadAccount = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      setLoading(true);
-      setError(null);
       const data = await accountService.getAccountById(accountId);
       setAccount(data);
       setFormData({
@@ -45,16 +72,14 @@ export default function EditAccountPage() {
       });
     } catch (err) {
       console.error('Failed to load account:', err);
-      setError('Failed to load account details.');
+      setLoadError('We could not load this account. Please try again.');
     } finally {
       setLoading(false);
     }
   }, [accountId]);
 
   useEffect(() => {
-    if (accountId) {
-      loadAccount();
-    }
+    if (accountId) loadAccount();
   }, [accountId, loadAccount]);
 
   const handleChange = (
@@ -67,19 +92,28 @@ export default function EditAccountPage() {
         type === 'checkbox'
           ? (e.target as HTMLInputElement).checked
           : type === 'number'
-            ? parseFloat(value) || 0
+            ? (value === '' ? undefined : parseFloat(value) || 0)
             : value,
     }));
+    if (name === 'accountName') setNameError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+
+    if (!formData.accountName || !formData.accountName.trim()) {
+      setNameError('An account name is required.');
+      document.getElementById('edit-accountName')?.focus();
+      return;
+    }
+    setNameError(null);
     setSaving(true);
-    setError(null);
 
     try {
       const request: UpdateAccountRequest = {
         ...formData,
+        accountName: formData.accountName.trim(),
         maturityDate: formData.maturityDate || undefined,
         termMonths: formData.termMonths || undefined,
         branchId: formData.branchId || undefined,
@@ -90,9 +124,12 @@ export default function EditAccountPage() {
       router.push(`/dashboard/accounts/${accountId}`);
     } catch (err) {
       console.error('Failed to update account:', err);
-      const errorMessage =
-        err instanceof Error ? err.message : 'Failed to update account. Please try again.';
-      setError(errorMessage);
+      // Input is preserved — only the banner reports the failure.
+      setSubmitError(
+        err instanceof Error
+          ? `${err.message} Your changes are still here — nothing was saved.`
+          : 'We could not save these changes. Your input has been kept — please try again.'
+      );
     } finally {
       setSaving(false);
     }
@@ -100,26 +137,41 @@ export default function EditAccountPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading account...</p>
-        </div>
+      <div className="space-y-6" aria-busy="true">
+        <p role="status" className="sr-only">
+          Loading account
+        </p>
+        <div className="h-28 animate-pulse rounded-3xl" style={{ backgroundColor: 'var(--rm-card)' }} />
+        <div className="h-40 animate-pulse rounded-3xl" style={{ backgroundColor: 'var(--rm-card)' }} />
+        <div className="h-80 animate-pulse rounded-3xl" style={{ backgroundColor: 'var(--rm-card)' }} />
       </div>
     );
   }
 
-  if (!account) {
+  if (loadError || !account) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4">❌</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Account Not Found</h3>
+      <div className="rounded-3xl p-7 text-center" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+          Account unavailable
+        </h1>
+        <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }} role="alert">
+          {loadError || 'We could not find this account.'}
+        </p>
+        <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={loadAccount}
+            className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: 'var(--rm-accent)' }}
+          >
+            Try again
+          </button>
           <Link
             href="/dashboard/accounts"
-            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700"
+            className="rounded-full px-5 py-2.5 text-sm font-medium"
+            style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
           >
-            Back to Accounts
+            Back to accounts
           </Link>
         </div>
       </div>
@@ -127,187 +179,279 @@ export default function EditAccountPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="space-y-6">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div>
-              <h1 className="text-2xl font-bold text-primary-600">Edit Account</h1>
-              <p className="text-xs text-gray-600 mt-0.5">{account.accountNumber}</p>
-            </div>
-            <Link
-              href={`/dashboard/accounts/${accountId}`}
-              className="inline-flex items-center px-4 py-2 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              Back to Details
-            </Link>
-          </div>
-        </div>
+      <header className="rounded-3xl p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <Link
+          href={`/dashboard/accounts/${accountId}`}
+          className="inline-flex items-center gap-1.5 text-sm font-medium rounded-lg"
+          style={{ color: 'var(--rm-text-muted)' }}
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to account
+        </Link>
+        <h1
+          className="mt-4 text-2xl font-semibold tracking-tight"
+          style={{ color: 'var(--rm-text)' }}
+        >
+          Edit account
+        </h1>
+        <p className="text-sm mt-1 tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+          {account.accountNumber} · {accountStatusLabels[account.status]}
+        </p>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-
-        {/* Read-only Info */}
-        <div className="bg-gray-100 rounded-lg p-4 mb-6">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">
-            Account Information (Read-only)
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500">Account Number:</span>
-              <p className="font-mono font-medium">{account.accountNumber}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Category:</span>
-              <p className="font-medium">{account.accountCategory}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Type:</span>
-              <p className="font-medium">{account.accountType}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Currency:</span>
-              <p className="font-medium">{account.currency}</p>
-            </div>
-          </div>
+      {submitError && (
+        <div
+          role="alert"
+          className="rounded-3xl px-6 py-5 flex items-start gap-3"
+          style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
+        >
+          <svg
+            className="w-5 h-5 mt-0.5 shrink-0 text-red-600 dark:text-red-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={1.8}
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+            />
+          </svg>
+          <p className="text-sm" style={{ color: 'var(--rm-text)' }}>
+            {submitError}
+          </p>
         </div>
+      )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Information */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Account Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="accountName"
-                  value={formData.accountName}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
+      {/* Read-only facts */}
+      <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+          Account information
+        </h2>
+        <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+          These details are set when the account is opened and cannot be edited here.
+        </p>
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4">
+          <Fact label="Account number" value={account.accountNumber} />
+          <Fact label="Category" value={accountCategoryLabels[account.accountCategory]} />
+          <Fact label="Type" value={accountTypeLabels[account.accountType]} />
+          <Fact label="Currency" value={account.currency} />
+          <Fact label="Opened" value={account.openedAt ? formatDate(account.openedAt) : 'Not yet opened'} />
+        </dl>
+      </section>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Branch ID</label>
-                <input
-                  type="text"
-                  name="branchId"
-                  value={formData.branchId || ''}
-                  onChange={handleChange}
-                  placeholder="Optional branch identifier"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Editable details
+          </h2>
+          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label
+                htmlFor="edit-accountName"
+                className="block text-sm mb-1.5"
+                style={{ color: 'var(--rm-text-secondary)' }}
+              >
+                Account name
+                <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+                  {' '}
+                  *
+                </span>
+                <span className="sr-only"> (required)</span>
+              </label>
+              <input
+                id="edit-accountName"
+                type="text"
+                name="accountName"
+                value={formData.accountName || ''}
+                onChange={handleChange}
+                required
+                aria-required="true"
+                aria-invalid={nameError ? true : undefined}
+                aria-describedby={nameError ? 'edit-accountName-error' : undefined}
+                className={INPUT_CLASS}
+                style={errorInputStyle(!!nameError)}
+              />
+              {nameError && (
+                <p
+                  id="edit-accountName-error"
+                  role="alert"
+                  className="text-xs mt-1.5 text-red-700 dark:text-red-300"
+                >
+                  {nameError}
+                </p>
+              )}
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Interest Rate (%)
-                </label>
-                <input
-                  type="number"
-                  name="interestRate"
-                  value={formData.interestRate}
-                  onChange={handleChange}
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
+            <div>
+              <label
+                htmlFor="edit-branchId"
+                className="block text-sm mb-1.5"
+                style={{ color: 'var(--rm-text-secondary)' }}
+              >
+                Branch ID
+              </label>
+              <input
+                id="edit-branchId"
+                type="text"
+                name="branchId"
+                value={formData.branchId || ''}
+                onChange={handleChange}
+                placeholder="Optional branch identifier"
+                className={INPUT_CLASS}
+                style={INPUT_STYLE}
+              />
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Term (Months)
-                </label>
-                <input
-                  type="number"
-                  name="termMonths"
-                  value={formData.termMonths || ''}
-                  onChange={handleChange}
-                  min="1"
-                  max="480"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
+            <div>
+              <label
+                htmlFor="edit-interestRate"
+                className="block text-sm mb-1.5"
+                style={{ color: 'var(--rm-text-secondary)' }}
+              >
+                Interest rate (%)
+              </label>
+              <input
+                id="edit-interestRate"
+                type="number"
+                name="interestRate"
+                value={formData.interestRate ?? ''}
+                onChange={handleChange}
+                min="0"
+                max="100"
+                step="0.01"
+                className={`${INPUT_CLASS} tabular-nums`}
+                style={INPUT_STYLE}
+              />
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Maturity Date
-                </label>
-                <input
-                  type="date"
-                  name="maturityDate"
-                  value={formData.maturityDate || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
+            <div>
+              <label
+                htmlFor="edit-termMonths"
+                className="block text-sm mb-1.5"
+                style={{ color: 'var(--rm-text-secondary)' }}
+              >
+                Term (months)
+              </label>
+              <input
+                id="edit-termMonths"
+                type="number"
+                name="termMonths"
+                value={formData.termMonths ?? ''}
+                onChange={handleChange}
+                min="1"
+                max="480"
+                className={`${INPUT_CLASS} tabular-nums`}
+                style={INPUT_STYLE}
+              />
+            </div>
 
-              <div className="flex items-center">
+            <div>
+              <label
+                htmlFor="edit-maturityDate"
+                className="block text-sm mb-1.5"
+                style={{ color: 'var(--rm-text-secondary)' }}
+              >
+                Maturity date
+              </label>
+              <input
+                id="edit-maturityDate"
+                type="date"
+                name="maturityDate"
+                value={formData.maturityDate || ''}
+                onChange={handleChange}
+                className={INPUT_CLASS}
+                style={INPUT_STYLE}
+              />
+            </div>
+
+            <div className="flex items-center">
+              <label
+                htmlFor="edit-autoRenew"
+                className="flex items-center gap-2.5 cursor-pointer"
+              >
                 <input
+                  id="edit-autoRenew"
                   type="checkbox"
-                  id="autoRenew"
                   name="autoRenew"
-                  checked={formData.autoRenew}
+                  checked={!!formData.autoRenew}
                   onChange={handleChange}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  className="h-4 w-4 rounded"
+                  style={{ accentColor: 'var(--rm-accent)' }}
                 />
-                <label htmlFor="autoRenew" className="ml-2 block text-sm text-gray-700">
+                <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
                   Auto-renew at maturity
-                </label>
-              </div>
+                </span>
+              </label>
             </div>
           </div>
+        </section>
 
-          {/* Notes */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Notes</h2>
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Notes
+          </h2>
+          <div className="mt-5">
+            <label htmlFor="edit-notes" className="sr-only">
+              Notes
+            </label>
             <textarea
+              id="edit-notes"
               name="notes"
               value={formData.notes || ''}
               onChange={handleChange}
               rows={4}
-              placeholder="Any additional notes about this account"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              placeholder="Anything worth recording about this account"
+              className={INPUT_CLASS}
+              style={INPUT_STYLE}
             />
           </div>
+        </section>
 
-          {/* Form Actions */}
-          <div className="flex justify-end space-x-4">
-            <Link
-              href={`/dashboard/accounts/${accountId}`}
-              className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </form>
-      </main>
+        <div className="flex justify-end gap-3 flex-wrap">
+          <Link
+            href={`/dashboard/accounts/${accountId}`}
+            className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
+            style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: 'var(--rm-accent)' }}
+          >
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+        {value}
+      </dd>
     </div>
   );
 }

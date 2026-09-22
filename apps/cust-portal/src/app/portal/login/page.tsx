@@ -14,6 +14,7 @@ export default function PortalLoginPage() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -56,9 +57,12 @@ export default function PortalLoginPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center">
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md"
+              aria-hidden="true"
+            >
               <svg
-                className="w-5 h-5 text-white"
+                className="h-5 w-5 text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -76,25 +80,25 @@ export default function PortalLoginPage() {
 
           {/* Hero content */}
           <div className="space-y-6">
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
-              Your Banking Portal,{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-300 to-purple-200">
-                Simplified.
+            <h1 className="text-4xl font-bold leading-tight text-white xl:text-5xl">
+              Your banking portal,{' '}
+              <span className="bg-gradient-to-r from-pink-300 to-purple-200 bg-clip-text text-transparent">
+                simplified.
               </span>
             </h1>
-            <p className="text-purple-200/80 text-lg leading-relaxed max-w-md">
+            <p className="max-w-md text-lg leading-relaxed text-purple-200/80">
               Access your applications, track progress, and manage your entire banking journey from
-              one beautiful, secure portal.
+              one secure portal.
             </p>
 
             {/* Feature pills */}
             <div className="flex flex-wrap gap-3 pt-2">
-              {['Apply Online', 'Track Status', 'E-Sign Docs', 'Secure Messaging'].map(f => (
+              {['Apply online', 'Track status', 'E-sign documents', 'Secure messaging'].map(f => (
                 <span
                   key={f}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-sm text-purple-100"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-3.5 py-1.5 text-sm text-purple-100 backdrop-blur-sm"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-pink-400" aria-hidden="true" />
                   {f}
                 </span>
               ))}
@@ -103,8 +107,8 @@ export default function PortalLoginPage() {
 
           {/* Bottom */}
           <div className="border-t border-white/10 pt-6">
-            <p className="text-purple-200/60 text-sm">
-              100% digital banking experience. Apply from anywhere, anytime.
+            <p className="text-sm text-purple-200/60">
+              A fully digital banking experience. Apply from anywhere, at any time.
             </p>
           </div>
         </div>
@@ -114,10 +118,13 @@ export default function PortalLoginPage() {
       <div className="flex-1 flex items-center justify-center bg-slate-50 px-6 py-12">
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4a1747] to-[#7f2b7b] flex items-center justify-center">
+          <div className="mb-10 flex items-center justify-center gap-2.5 lg:hidden">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#4a1747] to-[#7f2b7b]"
+              aria-hidden="true"
+            >
               <svg
-                className="w-4.5 h-4.5 text-white"
+                className="h-5 w-5 text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -130,23 +137,29 @@ export default function PortalLoginPage() {
                 />
               </svg>
             </div>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">Rayva</span>
+            <span className="text-xl font-bold tracking-tight text-slate-900">Rayva</span>
           </div>
 
           {/* Header */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
-            <p className="text-sm text-slate-500 mt-1">Sign in to access your portal</p>
+            <p className="mt-1 text-sm text-slate-500">Sign in to access your portal</p>
           </div>
 
           {/* Error */}
           {errorMsg && (
-            <div className="mb-5 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+            <div
+              id="login-error"
+              role="alert"
+              aria-live="assertive"
+              className="mb-5 flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            >
               <svg
-                className="w-4 h-4 shrink-0"
+                className="h-4 w-4 shrink-0"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -155,22 +168,23 @@ export default function PortalLoginPage() {
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-              {errorMsg}
+              <span className="flex-1">{errorMsg}</span>
             </div>
           )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">
                 Username
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -187,21 +201,24 @@ export default function PortalLoginPage() {
                   placeholder="Enter your username"
                   autoComplete="username"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                  aria-describedby={errorMsg ? 'login-error' : undefined}
+                  aria-invalid={errorMsg ? true : undefined}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
                 Password
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -212,28 +229,78 @@ export default function PortalLoginPage() {
                 </svg>
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   autoComplete="current-password"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                  aria-describedby={errorMsg ? 'login-error' : undefined}
+                  aria-invalid={errorMsg ? true : undefined}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-12 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  aria-pressed={showPassword}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                >
+                  {showPassword ? (
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                  )}
+                </button>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <div className="flex items-center gap-2">
                 <input
+                  id="remember-me"
                   type="checkbox"
                   className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-500"
                 />
-                <span className="text-sm text-slate-600">Remember me</span>
-              </label>
+                <label htmlFor="remember-me" className="cursor-pointer text-sm text-slate-600">
+                  Remember me
+                </label>
+              </div>
               <Link
                 href="/portal/forgot-password"
-                className="text-sm font-medium text-primary-700 hover:text-primary-800 transition-colors"
+                className="text-sm font-medium text-primary-700 transition-colors hover:text-primary-800"
               >
                 Forgot password?
               </Link>
@@ -242,17 +309,21 @@ export default function PortalLoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#4a1747] to-[#7f2b7b] text-white rounded-xl font-semibold text-sm hover:from-[#3d1040] hover:to-[#6b2568] transition-all shadow-lg shadow-purple-700/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-busy={isLoading}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#4a1747] to-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-purple-700/20 transition-all hover:from-[#3d1040] hover:to-[#6b2568] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Signing in...
+                  <div
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                    aria-hidden="true"
+                  />
+                  Signing in…
                 </>
               ) : (
                 <>
                   Sign in
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -266,11 +337,11 @@ export default function PortalLoginPage() {
           </form>
 
           {/* Register link */}
-          <p className="text-center text-sm text-slate-500 mt-7">
+          <p className="mt-7 text-center text-sm text-slate-500">
             Don&apos;t have an account?{' '}
             <Link
               href="/portal/register"
-              className="font-semibold text-primary-700 hover:text-primary-800 transition-colors"
+              className="font-semibold text-primary-700 transition-colors hover:text-primary-800"
             >
               Create one
             </Link>

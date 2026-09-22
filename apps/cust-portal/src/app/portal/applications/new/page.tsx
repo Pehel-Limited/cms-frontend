@@ -28,18 +28,18 @@ type WizardStep = 'product' | 'loan' | 'parties' | 'financial' | 'employment' | 
 
 const PERSONAL_STEPS: { key: WizardStep; label: string }[] = [
   { key: 'product', label: 'Product' },
-  { key: 'loan', label: 'Loan Details' },
-  { key: 'financial', label: 'Financial Info' },
+  { key: 'loan', label: 'Loan details' },
+  { key: 'financial', label: 'Financial information' },
   { key: 'employment', label: 'Employment' },
-  { key: 'review', label: 'Review & Submit' },
+  { key: 'review', label: 'Review and submit' },
 ];
 
 const BUSINESS_STEPS: { key: WizardStep; label: string }[] = [
   { key: 'product', label: 'Product' },
-  { key: 'loan', label: 'Facility Details' },
-  { key: 'parties', label: 'People & Roles' },
+  { key: 'loan', label: 'Facility details' },
+  { key: 'parties', label: 'People and roles' },
   { key: 'financial', label: 'Financials' },
-  { key: 'review', label: 'Review & Submit' },
+  { key: 'review', label: 'Review and submit' },
 ];
 
 const BUSINESS_PRODUCT_TYPES = [
@@ -108,6 +108,10 @@ export default function NewApplicationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [savedApp, setSavedApp] = useState<LoanApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* A failed product load must not masquerade as "no products available" */
+  const [productsError, setProductsError] = useState<string | null>(null);
+  /* Only show field validation once the customer has tried to move on */
+  const [attemptedNext, setAttemptedNext] = useState(false);
 
   // Party state (business applications)
   const [partyMembers, setPartyMembers] = useState<PartyMember[]>([]);
@@ -205,6 +209,7 @@ export default function NewApplicationPage() {
   async function loadProducts() {
     try {
       setLoadingProducts(true);
+      setProductsError(null);
       const data = await productService.getProducts();
       setProducts(data.filter(p => p.isOnlineApplicationEnabled !== false));
 
@@ -264,8 +269,12 @@ export default function NewApplicationPage() {
           }));
         }
       }
-    } catch {
-      // Products failed to load — user can still manually proceed
+    } catch (err: unknown) {
+      setProductsError(
+        err instanceof Error
+          ? err.message
+          : 'We couldn’t load the products available to apply for.'
+      );
     } finally {
       setLoadingProducts(false);
     }
@@ -411,12 +420,64 @@ export default function NewApplicationPage() {
 
   const stepIndex = STEPS.findIndex(s => s.key === step);
 
+  /* Field-level validation for the loan step. Messages are tied to each input
+     via aria-describedby and only surfaced once the customer tries to move on,
+     so the form never shouts before they have finished typing. */
+  const loanErrors = useMemo(() => {
+    const errs: {
+      requestedAmount?: string;
+      requestedTermMonths?: string;
+      loanPurpose?: string;
+    } = {};
+    if (!selectedProduct) return errs;
+
+    const rawAmount = form.requestedAmount.trim();
+    if (!rawAmount) {
+      errs.requestedAmount = 'Enter the amount you want to borrow.';
+    } else {
+      const amount = Number(rawAmount);
+      if (Number.isNaN(amount)) {
+        errs.requestedAmount = 'Enter the amount as a number.';
+      } else if (
+        amount < selectedProduct.minLoanAmount ||
+        amount > selectedProduct.maxLoanAmount
+      ) {
+        errs.requestedAmount = `Enter an amount between ${formatCurrency(
+          selectedProduct.minLoanAmount
+        )} and ${formatCurrency(selectedProduct.maxLoanAmount)}.`;
+      }
+    }
+
+    const rawTerm = form.requestedTermMonths.trim();
+    if (!rawTerm) {
+      errs.requestedTermMonths = 'Enter how many months you want to borrow for.';
+    } else {
+      const term = Number(rawTerm);
+      if (!Number.isInteger(term)) {
+        errs.requestedTermMonths = 'Enter the term as a whole number of months.';
+      } else if (
+        term < selectedProduct.minTermMonths ||
+        term > selectedProduct.maxTermMonths
+      ) {
+        errs.requestedTermMonths = `Enter a term between ${selectedProduct.minTermMonths} and ${selectedProduct.maxTermMonths} months.`;
+      }
+    }
+
+    if (!form.loanPurpose) {
+      errs.loanPurpose = 'Choose what the loan is for.';
+    }
+
+    return errs;
+  }, [form.requestedAmount, form.requestedTermMonths, form.loanPurpose, selectedProduct]);
+
+  const hasLoanErrors = Object.keys(loanErrors).length > 0;
+
   function canGoNext(): boolean {
     switch (step) {
       case 'product':
         return !!selectedProduct;
       case 'loan':
-        return !!(form.requestedAmount && form.requestedTermMonths && form.loanPurpose);
+        return !hasLoanErrors;
       case 'parties':
         return true; // can proceed with warnings
       case 'financial':
@@ -429,13 +490,24 @@ export default function NewApplicationPage() {
   }
 
   function goNext() {
+    if (!canGoNext()) {
+      setAttemptedNext(true);
+      return;
+    }
+    setAttemptedNext(false);
     const i = stepIndex;
     if (i < STEPS.length - 1) setStep(STEPS[i + 1].key);
   }
 
   function goBack() {
+    setAttemptedNext(false);
     const i = stepIndex;
     if (i > 0) setStep(STEPS[i - 1].key);
+  }
+
+  function goToStep(key: WizardStep) {
+    setAttemptedNext(false);
+    setStep(key);
   }
 
   // ─── Render ──────────────────────────────────────────────────
@@ -448,8 +520,9 @@ export default function NewApplicationPage() {
           onClick={() => router.push('/portal/applications')}
           className="icon-btn"
           aria-label="Back to applications"
+          type="button"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -459,19 +532,29 @@ export default function NewApplicationPage() {
           </svg>
         </button>
         <div>
-          <h2 className="text-xl font-bold sm:text-2xl" style={{ color: 'var(--text-primary)' }}>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
             New application
-          </h2>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
             {savedApp
-              ? `Draft saved — ${savedApp.applicationNumber || 'No number yet'}`
+              ? `Draft saved — ${savedApp.applicationNumber || 'no reference yet'}`
               : 'Fill in the details to apply for a loan'}
           </p>
         </div>
       </div>
 
-      {/* Stepper */}
-      <nav className="mb-6 overflow-x-auto no-scrollbar" aria-label="Progress">
+      {/* Stepper — plain step position, no scoring */}
+      <nav
+        className="no-scrollbar mb-6 overflow-x-auto"
+        aria-label={`Application steps: step ${stepIndex + 1} of ${STEPS.length}, ${
+          stepIndex >= 0 ? STEPS[stepIndex].label : ''
+        }`}
+        tabIndex={0}
+      >
+        <p className="mb-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+          Step {stepIndex + 1} of {STEPS.length}
+          {stepIndex >= 0 ? ` · ${STEPS[stepIndex].label}` : ''}
+        </p>
         <ol className="flex min-w-max items-center gap-1 sm:min-w-0">
           {STEPS.map((s, i) => {
             const isActive = i === stepIndex;
@@ -480,17 +563,22 @@ export default function NewApplicationPage() {
               <li key={s.key} className="flex flex-1 items-center">
                 <button
                   onClick={() => {
-                    if (isComplete) setStep(s.key);
+                    if (isComplete) goToStep(s.key);
                   }}
                   disabled={!isComplete && !isActive}
                   aria-current={isActive ? 'step' : undefined}
+                  aria-label={`Step ${i + 1} of ${STEPS.length}: ${s.label}${
+                    isComplete ? ' (completed)' : isActive ? ' (current step)' : ' (not reached yet)'
+                  }`}
                   className="flex items-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-default"
                   style={{
-                    color: isActive || isComplete ? 'var(--brand)' : 'var(--text-muted)',
+                    color: isActive || isComplete ? 'var(--brand-on-soft)' : 'var(--text-muted)',
+                    fontWeight: isActive ? 600 : 500,
                   }}
+                  type="button"
                 >
                   <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors"
                     style={
                       isActive
                         ? { borderColor: 'var(--brand)', backgroundColor: 'var(--brand)', color: '#fff' }
@@ -505,6 +593,7 @@ export default function NewApplicationPage() {
                               color: 'var(--text-muted)',
                             }
                     }
+                    aria-hidden="true"
                   >
                     {isComplete ? '✓' : i + 1}
                   </span>
@@ -513,6 +602,7 @@ export default function NewApplicationPage() {
                 {i < STEPS.length - 1 && (
                   <div
                     className="mx-2 h-0.5 flex-1 rounded-full"
+                    aria-hidden="true"
                     style={{
                       backgroundColor:
                         i < stepIndex ? 'var(--brand)' : 'var(--surface-border-strong)',
@@ -525,10 +615,12 @@ export default function NewApplicationPage() {
         </ol>
       </nav>
 
-      {/* Error */}
+      {/* Error — the customer's answers are never cleared on a failed save */}
       {error && (
         <div className="alert alert-error mb-5" role="alert">
-          {error}
+          <span>
+            {error} Your answers have been kept — you can try again.
+          </span>
         </div>
       )}
 
@@ -540,6 +632,8 @@ export default function NewApplicationPage() {
             loading={loadingProducts}
             selected={selectedProduct}
             onSelect={selectProduct}
+            error={productsError}
+            onRetry={loadProducts}
           />
         )}
 
@@ -549,6 +643,7 @@ export default function NewApplicationPage() {
             product={selectedProduct}
             onChange={handleChange}
             isBusiness={isBusiness}
+            errors={attemptedNext ? loanErrors : {}}
           />
         )}
 
@@ -589,14 +684,19 @@ export default function NewApplicationPage() {
       <div className="mt-6 flex items-center justify-between gap-3">
         <div>
           {stepIndex > 0 && (
-            <button onClick={goBack} className="btn btn-ghost">
-              &larr; Back
+            <button onClick={goBack} className="btn btn-ghost" type="button">
+              <span aria-hidden="true">&larr;</span> Back
             </button>
           )}
         </div>
         <div className="flex items-center gap-2">
           {step !== 'review' && selectedProduct && (
-            <button onClick={saveDraft} disabled={saving || !canGoNext()} className="btn btn-ghost">
+            <button
+              onClick={saveDraft}
+              disabled={saving || !canGoNext()}
+              className="btn btn-ghost"
+              type="button"
+            >
               {saving ? 'Saving…' : savedApp ? 'Update draft' : 'Save draft'}
             </button>
           )}
@@ -609,13 +709,29 @@ export default function NewApplicationPage() {
                 !declarations.consentCreditCheck ||
                 !declarations.termsAccepted
               }
-              className="btn bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+              className="btn btn-primary"
+              type="button"
+              aria-describedby={
+                declarations.informationAccurate &&
+                declarations.consentCreditCheck &&
+                declarations.termsAccepted
+                  ? undefined
+                  : 'declarations-hint'
+              }
             >
               {submitting ? 'Submitting…' : 'Submit application'}
             </button>
           ) : (
-            <button onClick={goNext} disabled={!canGoNext()} className="btn btn-primary">
-              Continue &rarr;
+            /* Stays clickable on the loan step so missing or out-of-range
+               values are explained next to the field instead of silently
+               disabling the way forward. */
+            <button
+              onClick={goNext}
+              disabled={step !== 'loan' && !canGoNext()}
+              className="btn btn-primary"
+              type="button"
+            >
+              Continue <span aria-hidden="true">&rarr;</span>
             </button>
           )}
         </div>
@@ -631,16 +747,21 @@ function StepProduct({
   loading,
   selected,
   onSelect,
+  error,
+  onRetry,
 }: {
   products: LoanProduct[];
   loading: boolean;
   selected: LoanProduct | null;
   onSelect: (p: LoanProduct) => void;
+  error: string | null;
+  onRetry: () => void;
 }) {
   if (loading) {
     return (
-      <div className="space-y-3">
-        <h3 className="section-title">Choose a product</h3>
+      <div className="space-y-3" aria-busy="true">
+        <h2 className="section-title">Choose a product</h2>
+        <p className="sr-only" role="status">Loading products…</p>
         {[1, 2, 3].map(i => (
           <div key={i} className="skeleton h-20" />
         ))}
@@ -650,50 +771,76 @@ function StepProduct({
 
   return (
     <div>
-      <h3 className="section-title">Choose a product</h3>
+      <h2 className="section-title">Choose a product</h2>
       <p className="field-hint">Select the loan product you want to apply for.</p>
-      <div className="mt-4 space-y-2">
-        {products.map(p => {
-          const isSelected = selected?.productId === p.productId;
-          return (
-            <button
-              key={p.productId}
-              onClick={() => onSelect(p)}
-              aria-pressed={isSelected}
-              className="w-full rounded-xl border-2 p-4 text-left transition-all"
-              style={{
-                borderColor: isSelected ? 'var(--brand)' : 'var(--surface-border)',
-                backgroundColor: isSelected ? 'var(--brand-soft)' : 'transparent',
-              }}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    {p.productName}
-                  </h4>
-                  <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {PRODUCT_TYPE_LABELS[p.productType] || p.productType}
-                    {p.shortDescription && ` — ${p.shortDescription}`}
-                  </p>
-                </div>
-                <div className="text-right text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <p>
-                    {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
-                  </p>
-                  <p>
-                    {p.minInterestRate}% – {p.maxInterestRate}% p.a.
-                  </p>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-        {products.length === 0 && (
-          <p className="py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-            No products available for online application.
+
+      {error && (
+        <div className="alert alert-error mt-4 flex-col sm:flex-row sm:items-center" role="alert">
+          <p className="flex-1">{error}</p>
+          <button onClick={onRetry} className="btn btn-sm btn-outline shrink-0" type="button">
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!error && products.length === 0 ? (
+        <div className="empty-state mt-4">
+          <div className="empty-state-icon">
+            <svg aria-hidden="true" className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+              />
+            </svg>
+          </div>
+          <h3 className="empty-state-title">No products available</h3>
+          <p className="empty-state-text">
+            There are no loan products open for online application right now. Contact your
+            relationship manager to discuss your options.
           </p>
-        )}
-      </div>
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {products.map(p => {
+            const isSelected = selected?.productId === p.productId;
+            return (
+              <li key={p.productId}>
+                <button
+                  onClick={() => onSelect(p)}
+                  aria-pressed={isSelected}
+                  className="w-full rounded-xl border-2 px-5 py-4 text-left transition-all"
+                  style={{
+                    borderColor: isSelected ? 'var(--brand)' : 'var(--surface-border)',
+                    backgroundColor: isSelected ? 'var(--brand-soft)' : 'transparent',
+                  }}
+                  type="button"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {p.productName}
+                      </h3>
+                      <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {PRODUCT_TYPE_LABELS[p.productType] || p.productType}
+                        {p.shortDescription && ` — ${p.shortDescription}`}
+                      </p>
+                    </div>
+                    <div className="text-right text-sm" style={{ color: 'var(--text-muted)' }}>
+                      <p className="tabular-nums">
+                        {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
+                      </p>
+                      <p className="tabular-nums">
+                        {p.minInterestRate}% – {p.maxInterestRate}% p.a.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -703,10 +850,12 @@ function StepLoan({
   product,
   onChange,
   isBusiness,
+  errors,
 }: {
   form: Record<string, string>;
   product: LoanProduct;
   isBusiness: boolean;
+  errors: { requestedAmount?: string; requestedTermMonths?: string; loanPurpose?: string };
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => void;
@@ -740,19 +889,23 @@ function StepLoan({
 
   return (
     <div>
-      <h3 className="section-title">{isBusiness ? 'Facility details' : 'Loan details'}</h3>
+      <h2 className="section-title">{isBusiness ? 'Facility details' : 'Loan details'}</h2>
       <p className="field-hint">
         Applying for{' '}
         <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
           {product.productName}
         </span>
+        . Fields marked <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+        <span className="sr-only">with an asterisk</span> are required.
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
         {/* Amount */}
         <div>
           <label className="field-label" htmlFor="requestedAmount">
-            {isBusiness ? 'Facility amount' : 'Loan amount'} <span className="text-red-500">*</span>
+            {isBusiness ? 'Facility amount' : 'Loan amount'}{' '}
+            <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+            <span className="sr-only">(required)</span>
           </label>
           <input
             id="requestedAmount"
@@ -763,17 +916,34 @@ function StepLoan({
             min={product.minLoanAmount}
             max={product.maxLoanAmount}
             placeholder={`${product.minLoanAmount} – ${product.maxLoanAmount}`}
-            className="input"
+            className="input tabular-nums"
+            required
+            aria-required="true"
+            aria-invalid={errors.requestedAmount ? true : undefined}
+            aria-describedby="requestedAmount-hint"
           />
-          <p className="field-hint">
-            Range: {formatCurrency(product.minLoanAmount)} – {formatCurrency(product.maxLoanAmount)}
-          </p>
+          {errors.requestedAmount ? (
+            <p
+              id="requestedAmount-hint"
+              className="mt-1.5 text-sm font-medium text-red-600 dark:text-red-300"
+              role="alert"
+            >
+              {errors.requestedAmount}
+            </p>
+          ) : (
+            <p id="requestedAmount-hint" className="field-hint">
+              Between {formatCurrency(product.minLoanAmount)} and{' '}
+              {formatCurrency(product.maxLoanAmount)}
+            </p>
+          )}
         </div>
 
         {/* Term */}
         <div>
           <label className="field-label" htmlFor="requestedTermMonths">
-            Term (months) <span className="text-red-500">*</span>
+            Term (months){' '}
+            <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+            <span className="sr-only">(required)</span>
           </label>
           <input
             id="requestedTermMonths"
@@ -784,11 +954,25 @@ function StepLoan({
             min={product.minTermMonths}
             max={product.maxTermMonths}
             placeholder={`${product.minTermMonths} – ${product.maxTermMonths}`}
-            className="input"
+            className="input tabular-nums"
+            required
+            aria-required="true"
+            aria-invalid={errors.requestedTermMonths ? true : undefined}
+            aria-describedby="requestedTermMonths-hint"
           />
-          <p className="field-hint">
-            Range: {product.minTermMonths} – {product.maxTermMonths} months
-          </p>
+          {errors.requestedTermMonths ? (
+            <p
+              id="requestedTermMonths-hint"
+              className="mt-1.5 text-sm font-medium text-red-600 dark:text-red-300"
+              role="alert"
+            >
+              {errors.requestedTermMonths}
+            </p>
+          ) : (
+            <p id="requestedTermMonths-hint" className="field-hint">
+              Between {product.minTermMonths} and {product.maxTermMonths} months
+            </p>
+          )}
         </div>
 
         {/* Interest Rate */}
@@ -797,7 +981,7 @@ function StepLoan({
             Interest rate
           </label>
           {loadingRatePlans ? (
-            <div className="skeleton h-10" />
+            <div className="skeleton h-10" aria-hidden="true" />
           ) : ratePlans.length > 0 ? (
             <>
               <select
@@ -810,23 +994,28 @@ function StepLoan({
                 <option value="">Select a rate plan…</option>
                 {ratePlans.map(plan => (
                   <option key={plan.ratePlanId} value={plan.interestRate}>
-                    {plan.label} — {plan.interestRate}%{plan.isGreen ? ' 🌱' : ''}
+                    {plan.label} — {plan.interestRate}%{plan.isGreen ? ' (green rate)' : ''}
                   </option>
                 ))}
               </select>
               <p className="field-hint">
-                Choose the LTV / fixed-term rate plan that applies to you.
+                Choose the LTV or fixed-term rate plan that applies to you.
               </p>
             </>
           ) : (
             <>
-              {/* Bank-set rate, not customer-editable */}
-              <p id="requestedInterestRate" className="input flex items-center">
-                {form.requestedInterestRate ? `${form.requestedInterestRate}% p.a.` : '—'}
-              </p>
-              <p className="field-hint">
-                Set by the bank for this product — not editable.
-              </p>
+              {/* Bank-set rate, not customer-editable — kept as a readonly input so
+                  the visible <label htmlFor> points at a real form control. */}
+              <input
+                id="requestedInterestRate"
+                type="text"
+                name="requestedInterestRate"
+                value={form.requestedInterestRate ? `${form.requestedInterestRate}% p.a.` : 'Not set'}
+                readOnly
+                aria-readonly="true"
+                className="input tabular-nums"
+              />
+              <p className="field-hint">Set by the bank for this product — not editable.</p>
             </>
           )}
         </div>
@@ -835,7 +1024,8 @@ function StepLoan({
         <div>
           <label className="field-label" htmlFor="loanPurpose">
             {isBusiness ? 'Facility purpose' : 'Loan purpose'}{' '}
-            <span className="text-red-500">*</span>
+            <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+            <span className="sr-only">(required)</span>
           </label>
           <select
             id="loanPurpose"
@@ -843,6 +1033,10 @@ function StepLoan({
             value={form.loanPurpose}
             onChange={onChange}
             className="select"
+            required
+            aria-required="true"
+            aria-invalid={errors.loanPurpose ? true : undefined}
+            aria-describedby={errors.loanPurpose ? 'loanPurpose-error' : undefined}
           >
             <option value="">Select purpose…</option>
             {Object.entries(LOAN_PURPOSE_LABELS).map(([key, label]) => (
@@ -851,6 +1045,15 @@ function StepLoan({
               </option>
             ))}
           </select>
+          {errors.loanPurpose && (
+            <p
+              id="loanPurpose-error"
+              className="mt-1.5 text-sm font-medium text-red-600 dark:text-red-300"
+              role="alert"
+            >
+              {errors.loanPurpose}
+            </p>
+          )}
         </div>
 
         {/* Business: Facility Type */}
@@ -897,7 +1100,7 @@ function StepLoan({
       {/* ─── Property Details (HOME purposes) ─────────────── */}
       {isHomePurpose && (
         <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
-          <h4 className="section-title">Property details</h4>
+          <h3 className="section-title">Property details</h3>
           <p className="field-hint mb-4">Enter details about the property for your home loan.</p>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -1006,7 +1209,7 @@ function StepLoan({
       {/* ─── Vehicle Details (VEHICLE purposes) ───────────── */}
       {isVehiclePurpose && (
         <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
-          <h4 className="section-title">Vehicle details</h4>
+          <h3 className="section-title">Vehicle details</h3>
           <p className="field-hint mb-4">Enter details about the vehicle you plan to purchase.</p>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
@@ -1100,6 +1303,13 @@ function StepLoan({
 // Nothing is ever applied automatically — the customer must press "Apply"
 // after seeing exactly what was read.
 
+/* Extracted field names arrive as raw camelCase API keys — show them as plain
+   sentence-case words rather than leaking the payload shape into the UI. */
+function humaniseFieldKey(key: string): string {
+  const words = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 function extractedFieldPatch(
   documentType: DocumentType,
   fields: Record<string, unknown>
@@ -1170,8 +1380,13 @@ function DocumentExtractionUpload({
   }
 
   return (
-    <div className="mb-6 rounded-lg border border-dashed border-slate-300 p-4">
-      <p className="field-label mb-1">Upload a {label} (optional)</p>
+    <div
+      className="mb-6 rounded-xl border border-dashed p-5"
+      style={{ borderColor: 'var(--surface-border-strong)' }}
+    >
+      <p className="field-label mb-1">
+        Upload a {label} <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
+      </p>
       <p className="field-hint mb-3">
         We&apos;ll read it and suggest values below for you to review — nothing is filled in
         automatically.
@@ -1181,30 +1396,46 @@ function DocumentExtractionUpload({
         <input
           type="file"
           accept="application/pdf,image/*"
-          className="hidden"
+          className="sr-only"
           disabled={uploading}
           onChange={handleFileSelected}
         />
       </label>
 
-      {uploadError && <p className="mt-2 text-sm text-red-600">{uploadError}</p>}
+      {uploadError && (
+        <p
+          className="mt-3 text-sm font-medium text-red-600 dark:text-red-300"
+          role="alert"
+        >
+          {uploadError}
+        </p>
+      )}
 
       {draft && (
-        <div className="mt-3 rounded-md bg-slate-50 p-3">
-          <p className="text-sm font-medium text-slate-700">Extracted values (draft)</p>
-          <ul className="mt-1 space-y-1 text-sm text-slate-600">
+        <div
+          className="mt-4 rounded-xl p-4"
+          style={{ backgroundColor: 'var(--surface-input)' }}
+        >
+          <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+            Extracted values (draft)
+          </p>
+          <ul className="mt-2 space-y-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
             {Object.entries(draft.extractedFields)
               .filter(([key]) => key !== 'transactions')
               .map(([key, value]) => (
-                <li key={key}>
-                  <span className="text-slate-500">{key}:</span> {String(value)}
+                <li key={key} className="flex flex-wrap justify-between gap-2">
+                  <span style={{ color: 'var(--text-muted)' }}>{humaniseFieldKey(key)}</span>
+                  <span className="font-medium tabular-nums">{String(value)}</span>
                 </li>
               ))}
           </ul>
           {draft.warnings.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-amber-700">
+            <ul className="mt-3 space-y-1 text-sm text-amber-700 dark:text-amber-300">
               {draft.warnings.map((w, i) => (
-                <li key={i}>⚠ {w}</li>
+                <li key={i}>
+                  <span aria-hidden="true">⚠ </span>
+                  {w}
+                </li>
               ))}
             </ul>
           )}
@@ -1212,9 +1443,16 @@ function DocumentExtractionUpload({
             type="button"
             onClick={handleApply}
             disabled={applied}
-            className="btn btn-primary btn-sm mt-3"
+            className="btn btn-primary btn-sm mt-4"
           >
-            {applied ? 'Applied ✓' : 'Apply suggested values'}
+            {applied ? (
+              <>
+                Applied <span aria-hidden="true">✓</span>
+                <span className="sr-only">— suggested values copied into the form</span>
+              </>
+            ) : (
+              'Apply suggested values'
+            )}
           </button>
         </div>
       )}
@@ -1237,11 +1475,11 @@ function StepFinancial({
 }) {
   return (
     <div>
-      <h3 className="section-title">
-        {isBusiness ? 'Business & financial information' : 'Financial information'}
-      </h3>
+      <h2 className="section-title">
+        {isBusiness ? 'Business and financial information' : 'Financial information'}
+      </h2>
       <p className="field-hint">
-        Help us evaluate your application. All fields are optional but improve approval chances.
+        Every field on this step is optional. Providing them helps us assess your application.
       </p>
 
       <DocumentExtractionUpload documentType="BANK_STATEMENT" onApplyExtracted={onApplyExtracted} />
@@ -1249,7 +1487,7 @@ function StepFinancial({
       {/* Business-specific fields */}
       {isBusiness && (
         <div className="mt-6">
-          <h4 className="section-title mb-3">Business financials</h4>
+          <h3 className="section-title mb-3">Business financials</h3>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className="field-label" htmlFor="businessAnnualRevenue">
@@ -1303,7 +1541,7 @@ function StepFinancial({
 
       {/* Personal financial fields */}
       <div className="mt-6">
-        {isBusiness && <h4 className="section-title mb-3">Personal financials</h4>}
+        {isBusiness && <h3 className="section-title mb-3">Personal financials</h3>}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
             <label className="field-label" htmlFor="statedAnnualIncome">
@@ -1368,9 +1606,10 @@ function StepEmployment({
 }) {
   return (
     <div>
-      <h3 className="section-title">Employment details</h3>
+      <h2 className="section-title">Employment details</h2>
       <p className="field-hint">
-        Provide your employment information. Optional but recommended.
+        Every field on this step is optional. Add your employment details if you want us to take
+        them into account.
       </p>
 
       <DocumentExtractionUpload documentType="PAYSLIP" onApplyExtracted={onApplyExtracted} />
@@ -1460,8 +1699,9 @@ function StepParties({
 }) {
   if (loading) {
     return (
-      <div className="space-y-3">
-        <h3 className="section-title">People &amp; roles</h3>
+      <div className="space-y-3" aria-busy="true">
+        <h2 className="section-title">People and roles</h2>
+        <p className="sr-only" role="status">Loading the people linked to your company…</p>
         {[1, 2, 3].map(i => (
           <div key={i} className="skeleton h-14" />
         ))}
@@ -1470,128 +1710,138 @@ function StepParties({
   }
 
   const active = members.filter(m => m.isActive);
+  const summary = validation?.summary;
 
   return (
     <div>
-      <h3 className="section-title">People &amp; roles</h3>
+      <h2 className="section-title">People and roles</h2>
       <p className="field-hint">
-        Confirm the directors, shareholders, UBOs and signatories linked to your company.
+        Confirm the directors, shareholders, beneficial owners and signatories linked to your
+        company.
       </p>
 
-      {/* Validation Banner */}
+      {/* Validation Banner — also carries the "you can still proceed" note so the
+          same information is not restated twice on the step. */}
       {validation && (
         <div
           className={`alert mt-4 items-start ${validation.isComplete ? 'alert-success' : 'alert-warning'}`}
         >
-          <span className="text-lg leading-none">{validation.isComplete ? '✓' : '⚠'}</span>
+          <span className="text-lg leading-none" aria-hidden="true">
+            {validation.isComplete ? '✓' : '⚠'}
+          </span>
           <div className="flex-1">
-            <h4 className="text-sm font-semibold">
+            <h3 className="text-base font-semibold">
               {validation.isComplete ? 'All party requirements met' : 'Requirements not yet met'}
-            </h4>
+            </h3>
             {!validation.isComplete && validation.issues.length > 0 && (
-              <ul className="mt-1 list-inside list-disc text-sm">
+              <ul className="mt-1.5 list-inside list-disc text-sm">
                 {validation.issues.map((issue, i) => (
                   <li key={i}>{issue}</li>
                 ))}
               </ul>
             )}
-            <div className="mt-2 flex flex-wrap gap-4 text-xs opacity-80">
-              <span>
-                {validation.summary.directors} Director
-                {validation.summary.directors !== 1 ? 's' : ''}
-              </span>
-              <span>
-                {validation.summary.shareholders} Shareholder
-                {validation.summary.shareholders !== 1 ? 's' : ''}
-              </span>
-              <span>
-                {validation.summary.ubos} UBO{validation.summary.ubos !== 1 ? 's' : ''} (
-                {validation.summary.totalUboOwnership}%)
-              </span>
-              <span>
-                {validation.summary.signatories} Signator
-                {validation.summary.signatories !== 1 ? 'ies' : 'y'}
-              </span>
-            </div>
+            {!validation.isComplete && (
+              <p className="mt-2 text-sm">
+                You can still continue, but your application may need additional review.
+              </p>
+            )}
+            {summary && (
+              <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums opacity-90">
+                <li>
+                  {summary.directors} {summary.directors === 1 ? 'director' : 'directors'}
+                </li>
+                <li>
+                  {summary.shareholders} {summary.shareholders === 1 ? 'shareholder' : 'shareholders'}
+                </li>
+                <li>
+                  {summary.ubos} beneficial {summary.ubos === 1 ? 'owner' : 'owners'} (
+                  {summary.totalUboOwnership}% ownership)
+                </li>
+                <li>
+                  {summary.signatories} {summary.signatories === 1 ? 'signatory' : 'signatories'}
+                </li>
+              </ul>
+            )}
           </div>
         </div>
       )}
 
       {/* Members list */}
       {active.length > 0 ? (
-        <div className="mt-4 space-y-2">
+        <ul className="mt-4 space-y-3">
           {active.map(m => (
-            <div
+            <li
               key={m.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4"
               style={{
                 backgroundColor: 'var(--surface-input)',
                 borderColor: 'var(--surface-border)',
               }}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold"
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                   style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+                  aria-hidden="true"
                 >
                   {(m.customerName || '?')[0]}
-                </div>
-                <div>
-                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {m.customerName || 'Unknown'}
-                  </div>
-                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {m.customerEmail || ''}
-                  </div>
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {m.customerName || 'Name not provided'}
+                  </p>
+                  {m.customerEmail && (
+                    <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                      {m.customerEmail}
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="badge badge-neutral">{PARTY_ROLE_LABELS[m.role] || m.role}</span>
                 {m.ownershipPercentage != null && (
-                  <span style={{ color: 'var(--text-muted)' }}>{m.ownershipPercentage}%</span>
-                )}
-                {m.isAuthorizedSignatory && (
-                  <span className="text-emerald-500" title="Authorized signatory">
-                    ✍
+                  <span className="badge badge-neutral tabular-nums">
+                    {m.ownershipPercentage}% owned
                   </span>
                 )}
-                {m.isBeneficialOwner && (
-                  <span className="text-blue-500" title="UBO">
-                    ◆
-                  </span>
-                )}
+                {m.isAuthorizedSignatory && <span className="badge badge-info">Signatory</span>}
+                {m.isBeneficialOwner && <span className="badge badge-info">Beneficial owner</span>}
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : (
         <div className="empty-state mt-4">
-          <div className="empty-state-icon text-2xl">👥</div>
-          <p className="empty-state-text">No party members found for your company.</p>
+          <div className="empty-state-icon">
+            <svg aria-hidden="true" className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+              />
+            </svg>
+          </div>
+          <h3 className="empty-state-title">No people linked to your company</h3>
+          <p className="empty-state-text">
+            Add your directors, shareholders and signatories before submitting this application.
+          </p>
         </div>
       )}
 
       {/* Actions */}
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-5 flex flex-wrap items-center gap-4">
         <a
           href="/portal/company/parties"
           target="_blank"
           rel="noopener noreferrer"
           className="link-arrow"
         >
-          Manage people &amp; roles <span data-arrow aria-hidden="true">→</span>
+          Manage people and roles <span data-arrow aria-hidden="true">→</span>
         </a>
-        <button onClick={onRefresh} className="btn btn-ghost btn-sm">
-          ↻ Refresh
+        <button onClick={onRefresh} className="btn btn-ghost btn-sm" type="button">
+          <span aria-hidden="true">↻</span> Refresh
         </button>
       </div>
-
-      {validation && !validation.isComplete && (
-        <div className="alert alert-warning mt-4">
-          You can still proceed, but your application may require additional review if party
-          requirements are incomplete.
-        </div>
-      )}
     </div>
   );
 }
@@ -1625,7 +1875,7 @@ function StepReview({
       ],
     },
     {
-      title: isBusiness ? 'Facility Details' : 'Loan Details',
+      title: isBusiness ? 'Facility details' : 'Loan details',
       items: [
         {
           label: 'Amount',
@@ -1636,10 +1886,10 @@ function StepReview({
           value: form.requestedTermMonths ? `${form.requestedTermMonths} months` : '—',
         },
         {
-          label: 'Interest Rate',
+          label: 'Interest rate',
           value: form.requestedInterestRate
             ? `${form.requestedInterestRate}% p.a.`
-            : 'Bank default',
+            : 'Set by the bank',
         },
         {
           label: 'Purpose',
@@ -1649,7 +1899,7 @@ function StepReview({
         ...(isBusiness && form.facilityType
           ? [
               {
-                label: 'Facility Type',
+                label: 'Facility type',
                 value: FACILITY_TYPE_LABELS[form.facilityType] || form.facilityType,
               },
             ]
@@ -1660,22 +1910,22 @@ function StepReview({
     ...(isHomePurpose
       ? [
           {
-            title: 'Property Details',
+            title: 'Property details',
             items: [
               { label: 'Address', value: form.propertyAddress || '—' },
               { label: 'City', value: form.propertyCity || '—' },
-              { label: 'State', value: form.propertyState || '—' },
-              { label: 'Postal Code', value: form.propertyPostalCode || '—' },
+              { label: 'County / state', value: form.propertyState || '—' },
+              { label: 'Postal code', value: form.propertyPostalCode || '—' },
               {
                 label: 'Type',
                 value: PROPERTY_TYPES.find(t => t.value === form.propertyType)?.label || '—',
               },
               {
-                label: 'Value',
+                label: 'Estimated value',
                 value: form.propertyValue ? formatCurrency(parseFloat(form.propertyValue)) : '—',
               },
               {
-                label: 'Down Payment',
+                label: 'Deposit',
                 value: form.downPaymentAmount
                   ? formatCurrency(parseFloat(form.downPaymentAmount))
                   : '—',
@@ -1688,7 +1938,7 @@ function StepReview({
     ...(isVehiclePurpose
       ? [
           {
-            title: 'Vehicle Details',
+            title: 'Vehicle details',
             items: [
               { label: 'Make', value: form.vehicleMake || '—' },
               { label: 'Model', value: form.vehicleModel || '—' },
@@ -1699,7 +1949,7 @@ function StepReview({
                   VEHICLE_CONDITIONS.find(c => c.value === form.vehicleCondition)?.label || '—',
               },
               {
-                label: 'Value',
+                label: 'Estimated value',
                 value: form.vehicleValue ? formatCurrency(parseFloat(form.vehicleValue)) : '—',
               },
             ],
@@ -1710,40 +1960,40 @@ function StepReview({
     ...(isBusiness
       ? [
           {
-            title: 'Business Financials',
+            title: 'Business financials',
             items: [
               {
-                label: 'Annual Revenue',
+                label: 'Annual revenue',
                 value: form.businessAnnualRevenue
                   ? formatCurrency(parseFloat(form.businessAnnualRevenue))
                   : '—',
               },
               {
-                label: 'Business Vintage',
+                label: 'Business vintage',
                 value: form.businessVintageYears ? `${form.businessVintageYears} years` : '—',
               },
-              { label: 'Facility Purpose', value: form.facilityPurposeDescription || '—' },
+              { label: 'Facility purpose', value: form.facilityPurposeDescription || '—' },
             ],
           },
         ]
       : []),
     {
-      title: 'Financial Info',
+      title: 'Financial information',
       items: [
         {
-          label: 'Annual Income',
+          label: 'Annual income',
           value: form.statedAnnualIncome
             ? formatCurrency(parseFloat(form.statedAnnualIncome))
             : '—',
         },
         {
-          label: 'Monthly Income',
+          label: 'Monthly income',
           value: form.statedMonthlyIncome
             ? formatCurrency(parseFloat(form.statedMonthlyIncome))
             : '—',
         },
         {
-          label: 'Monthly Expenses',
+          label: 'Monthly expenses',
           value: form.statedMonthlyExpenses
             ? formatCurrency(parseFloat(form.statedMonthlyExpenses))
             : '—',
@@ -1758,34 +2008,34 @@ function StepReview({
           value: EMPLOYMENT_STATUSES.find(s => s.value === form.employmentStatus)?.label || '—',
         },
         { label: 'Employer', value: form.employerName || '—' },
-        { label: 'Title', value: form.jobTitle || '—' },
-        { label: 'Years', value: form.yearsWithEmployer ? `${form.yearsWithEmployer} years` : '—' },
+        { label: 'Job title', value: form.jobTitle || '—' },
+        { label: 'Years with employer', value: form.yearsWithEmployer ? `${form.yearsWithEmployer} years` : '—' },
       ],
     },
   ];
 
   return (
     <div>
-      <h3 className="section-title">Review your application</h3>
-      <p className="field-hint">Please review the details below before submitting.</p>
+      <h2 className="section-title">Review your application</h2>
+      <p className="field-hint">Check everything below, then accept the declarations to submit.</p>
 
       <div className="mt-6 space-y-6">
         {sections.map(section => (
-          <div key={section.title}>
-            <h4
-              className="mb-3 border-b pb-2 text-sm font-semibold"
+          <section key={section.title} aria-label={section.title}>
+            <h3
+              className="mb-3 border-b pb-2 text-base font-semibold"
               style={{ color: 'var(--text-secondary)', borderColor: 'var(--surface-border)' }}
             >
               {section.title}
-            </h4>
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+            </h3>
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               {section.items.map(item => (
                 <div key={item.label} className="flex justify-between gap-4 sm:block">
-                  <dt className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <dt className="text-sm" style={{ color: 'var(--text-muted)' }}>
                     {item.label}
                   </dt>
                   <dd
-                    className="text-sm font-medium"
+                    className="text-base font-medium tabular-nums sm:mt-0.5"
                     style={{ color: 'var(--text-primary)' }}
                   >
                     {item.value}
@@ -1793,27 +2043,34 @@ function StepReview({
                 </div>
               ))}
             </dl>
-          </div>
+          </section>
         ))}
       </div>
 
       {/* ─── Declarations & Consent ─────────────────────── */}
       <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
-        <h4 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-          Declarations &amp; consent
-        </h4>
-        <div className="space-y-3">
+        <h3 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-secondary)' }}>
+          Declarations and consent
+        </h3>
+        <p className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+          All three declarations are required before you can submit.
+        </p>
+        <div className="space-y-4">
           <label className="flex cursor-pointer items-start gap-3">
             <input
               type="checkbox"
               checked={declarations.informationAccurate}
               onChange={e => onDeclarationChange('informationAccurate', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded text-primary-600 focus:ring-primary-500"
+              className="mt-0.5 h-4 w-4 rounded"
               style={{ borderColor: 'var(--surface-border-strong)' }}
+              required
+              aria-required="true"
             />
             <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               I declare that all information provided in this application is true, accurate, and
-              complete to the best of my knowledge. <span className="text-red-500">*</span>
+              complete to the best of my knowledge.{' '}
+              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </span>
           </label>
 
@@ -1822,13 +2079,16 @@ function StepReview({
               type="checkbox"
               checked={declarations.consentCreditCheck}
               onChange={e => onDeclarationChange('consentCreditCheck', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded text-primary-600 focus:ring-primary-500"
+              className="mt-0.5 h-4 w-4 rounded"
               style={{ borderColor: 'var(--surface-border-strong)' }}
+              required
+              aria-required="true"
             />
             <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               I consent to the bank performing credit checks, verifying my identity, and sharing my
               information with credit bureaus and regulatory authorities as required.{' '}
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </span>
           </label>
 
@@ -1837,12 +2097,16 @@ function StepReview({
               type="checkbox"
               checked={declarations.termsAccepted}
               onChange={e => onDeclarationChange('termsAccepted', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded text-primary-600 focus:ring-primary-500"
+              className="mt-0.5 h-4 w-4 rounded"
               style={{ borderColor: 'var(--surface-border-strong)' }}
+              required
+              aria-required="true"
             />
             <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
               I have read and agree to the terms and conditions, privacy policy, and the
-              product-specific disclosures. <span className="text-red-500">*</span>
+              product-specific disclosures.{' '}
+              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </span>
           </label>
         </div>
@@ -1850,8 +2114,12 @@ function StepReview({
         {(!declarations.informationAccurate ||
           !declarations.consentCreditCheck ||
           !declarations.termsAccepted) && (
-          <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
-            All declarations must be accepted before you can submit.
+          <p
+            id="declarations-hint"
+            className="mt-4 text-sm text-amber-600 dark:text-amber-400"
+            role="status"
+          >
+            Accept all three declarations to enable “Submit application”.
           </p>
         )}
       </div>

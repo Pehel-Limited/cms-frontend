@@ -40,6 +40,16 @@ export default function TeamPage() {
     loadTeam();
   }, []);
 
+  /* Escape closes the invite dialog, matching the portal's other overlays */
+  useEffect(() => {
+    if (!showInvite) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShowInvite(false);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showInvite]);
+
   async function loadTeam() {
     try {
       setLoading(true);
@@ -110,13 +120,19 @@ export default function TeamPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div
-          className="spinner h-10 w-10"
-          style={{ color: 'var(--brand)' }}
-          role="status"
-          aria-label="Loading team"
-        />
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div className="skeleton h-9 w-72" />
+        <div className="skeleton h-5 w-40" />
+        <div className="card p-0">
+          <div className="space-y-3 p-5">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="skeleton h-12 w-full" />
+            ))}
+          </div>
+        </div>
+        <p className="sr-only" role="status">
+          Loading team
+        </p>
       </div>
     );
   }
@@ -124,16 +140,22 @@ export default function TeamPage() {
   if (error && !data) {
     return (
       <div className="mx-auto max-w-4xl py-10">
+        <h1 className="sr-only">Team</h1>
         <div className="alert alert-error" role="alert">
           <div className="flex-1">
-            <p className="font-semibold">Unable to load team</p>
-            <p className="mt-1">{error}</p>
-            <p className="mt-2 opacity-80">
+            <p className="text-base font-semibold">Unable to load team</p>
+            <p className="mt-1 text-sm">{error}</p>
+            <p className="mt-2 text-sm opacity-80">
               This feature is only available for business customers.
             </p>
-            <Link href="/portal/company" className="btn btn-secondary btn-sm mt-4">
-              ← Back to company
-            </Link>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button onClick={loadTeam} className="btn btn-primary btn-sm">
+                Try again
+              </button>
+              <Link href="/portal/company" className="btn btn-secondary btn-sm">
+                Back to company
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -149,29 +171,29 @@ export default function TeamPage() {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div
-            className="mb-1 flex items-center gap-2 text-sm"
-            style={{ color: 'var(--text-muted)' }}
-          >
+          <nav aria-label="Breadcrumb" className="mb-1 flex items-center gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
             <Link href="/portal/company" className="transition-colors hover:underline">
               Company
             </Link>
             <span aria-hidden="true">/</span>
-            <span style={{ color: 'var(--text-primary)' }}>Team management</span>
-          </div>
+            <span style={{ color: 'var(--text-primary)' }} aria-current="page">
+              Team
+            </span>
+          </nav>
           <h1
-            className="text-xl font-bold tracking-tight sm:text-2xl"
+            className="text-2xl font-bold tracking-tight sm:text-3xl"
             style={{ color: 'var(--text-primary)' }}
           >
-            {data.entityName || 'Company'} — Team
+            {data.entityName || 'Company'} team
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            {data.totalMembers} member{data.totalMembers !== 1 ? 's' : ''}
+            {data.totalMembers} member{data.totalMembers !== 1 ? 's' : ''} · your role is{' '}
+            {ROLE_LABELS[data.currentUserRole] || data.currentUserRole}
           </p>
         </div>
         {canManage && (
           <button onClick={() => setShowInvite(true)} className="btn btn-primary">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -187,7 +209,7 @@ export default function TeamPage() {
       {/* Success banner */}
       {inviteSuccess && (
         <div className="alert alert-success mb-4" role="status">
-          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -195,7 +217,7 @@ export default function TeamPage() {
               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          {inviteSuccess}
+          <span className="flex-1">{inviteSuccess}</span>
         </div>
       )}
 
@@ -203,18 +225,18 @@ export default function TeamPage() {
       {error && (
         <div className="alert alert-error mb-4" role="alert">
           <span className="flex-1">{error}</span>
-          <button onClick={() => setError(null)} className="underline">
+          <button onClick={() => setError(null)} className="btn btn-sm btn-outline shrink-0">
             Dismiss
           </button>
         </div>
       )}
 
       {/* Role legend */}
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {(Object.keys(ROLE_LABELS) as PortalRole[]).map(role => (
-          <div key={role} className="card p-3">
+          <div key={role} className="card p-4">
             <span className={`badge ${ROLE_COLORS[role]}`}>{ROLE_LABELS[role]}</span>
-            <p className="mt-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <p className="mt-2 text-sm leading-6" style={{ color: 'var(--text-muted)' }}>
               {ROLE_DESCRIPTIONS[role]}
             </p>
           </div>
@@ -223,15 +245,20 @@ export default function TeamPage() {
 
       {/* Team members table */}
       <div className="card overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="data-table w-full">
+        <div
+          className="overflow-x-auto"
+          role="region"
+          aria-label="Team members, scrollable"
+          tabIndex={0}
+        >
+          <table className="data-table w-full" aria-label="Team members and portal roles">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Entity role</th>
-                <th>Portal role</th>
-                <th>Attributes</th>
-                {canManage && <th className="text-right">Actions</th>}
+                <th scope="col">Name</th>
+                <th scope="col">Entity role</th>
+                <th scope="col">Portal role</th>
+                <th scope="col">Attributes</th>
+                {canManage && <th scope="col" className="text-right">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -256,20 +283,20 @@ export default function TeamPage() {
                       </div>
                       <div>
                         <p
-                          className="text-sm font-medium"
+                          className="text-base font-medium"
                           style={{ color: 'var(--text-primary)' }}
                         >
                           {member.name || '—'}
                           {member.isCurrentUser && (
                             <span
-                              className="ml-2 text-xs font-normal"
+                              className="ml-2 text-sm font-normal"
                               style={{ color: 'var(--brand-on-soft)' }}
                             >
                               (You)
                             </span>
                           )}
                         </p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                           {member.email || '—'}
                         </p>
                       </div>
@@ -286,8 +313,8 @@ export default function TeamPage() {
                         <select
                           value={editRole}
                           onChange={e => setEditRole(e.target.value as PortalRole)}
-                          className="select w-auto py-1.5 text-xs"
-                          aria-label="Portal role"
+                          className="select w-auto py-1.5 text-sm"
+                          aria-label={`Portal role for ${member.name || member.email}`}
                         >
                           {(Object.keys(ROLE_LABELS) as PortalRole[]).map(r => (
                             <option key={r} value={r}>
@@ -298,13 +325,13 @@ export default function TeamPage() {
                         <button
                           onClick={() => handleUpdateRole(member.id)}
                           disabled={updatingRole}
-                          className="text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                          className="text-sm font-medium text-emerald-600 hover:underline dark:text-emerald-400"
                         >
-                          Save
+                          Save<span className="sr-only"> role for {member.name || member.email}</span>
                         </button>
                         <button
                           onClick={() => setEditingMemberId(null)}
-                          className="text-xs hover:underline"
+                          className="text-sm hover:underline"
                           style={{ color: 'var(--text-muted)' }}
                         >
                           Cancel
@@ -319,7 +346,7 @@ export default function TeamPage() {
 
                   {/* Attributes */}
                   <td>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {member.isAuthorizedSignatory && (
                         <span className="badge badge-warning">Signatory</span>
                       )}
@@ -327,10 +354,15 @@ export default function TeamPage() {
                         <span className="badge badge-info">Beneficial owner</span>
                       )}
                       {member.ownershipPercentage != null && member.ownershipPercentage > 0 && (
-                        <span className="badge badge-neutral">
+                        <span className="badge badge-neutral tabular-nums">
                           {member.ownershipPercentage}% ownership
                         </span>
                       )}
+                      {!member.isAuthorizedSignatory &&
+                        !member.isBeneficialOwner &&
+                        !(member.ownershipPercentage != null && member.ownershipPercentage > 0) && (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
                     </div>
                   </td>
 
@@ -338,25 +370,27 @@ export default function TeamPage() {
                   {canManage && (
                     <td className="text-right">
                       {member.isCurrentUser ? (
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          —
+                        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                          You cannot change your own role
                         </span>
                       ) : confirmRemoveId === member.id ? (
                         <div className="flex items-center justify-end gap-2">
-                          <span className="text-xs text-red-500">Remove?</span>
+                          <span className="text-sm text-red-500">
+                            Remove {member.name || member.email}?
+                          </span>
                           <button
                             onClick={() => handleRemove(member.id)}
                             disabled={removing}
-                            className="text-xs font-medium text-red-500 hover:underline"
+                            className="text-sm font-medium text-red-500 hover:underline"
                           >
-                            Yes
+                            Yes<span className="sr-only">, remove {member.name || member.email}</span>
                           </button>
                           <button
                             onClick={() => setConfirmRemoveId(null)}
-                            className="text-xs hover:underline"
+                            className="text-sm hover:underline"
                             style={{ color: 'var(--text-muted)' }}
                           >
-                            No
+                            No<span className="sr-only">, keep {member.name || member.email}</span>
                           </button>
                         </div>
                       ) : (
@@ -366,16 +400,16 @@ export default function TeamPage() {
                               setEditingMemberId(member.id);
                               setEditRole(member.portalRole);
                             }}
-                            className="text-xs font-medium hover:underline"
+                            className="text-sm font-medium hover:underline"
                             style={{ color: 'var(--brand-on-soft)' }}
                           >
-                            Change role
+                            Change role<span className="sr-only"> for {member.name || member.email}</span>
                           </button>
                           <button
                             onClick={() => setConfirmRemoveId(member.id)}
-                            className="text-xs font-medium text-red-500 hover:underline"
+                            className="text-sm font-medium text-red-500 hover:underline"
                           >
-                            Remove
+                            Remove<span className="sr-only"> {member.name || member.email}</span>
                           </button>
                         </div>
                       )}
@@ -386,12 +420,17 @@ export default function TeamPage() {
 
               {data.members.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={canManage ? 5 : 4}
-                    className="py-8 text-center text-sm"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    No team members found. Add members via the Company &gt; Parties page first.
+                  <td colSpan={canManage ? 5 : 4} className="px-5 py-8 text-center">
+                    <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                      No team members yet
+                    </p>
+                    <p className="mx-auto mt-1 max-w-sm text-sm" style={{ color: 'var(--text-muted)' }}>
+                      People added on the people and roles page appear here, where you can give them
+                      portal access.
+                    </p>
+                    <Link href="/portal/company/parties" className="btn btn-primary btn-sm mt-4">
+                      Go to people and roles
+                    </Link>
                   </td>
                 </tr>
               )}
@@ -400,21 +439,13 @@ export default function TeamPage() {
         </div>
       </div>
 
-      {/* Your role badge */}
-      <div className="mt-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-        Your portal role:{' '}
-        <span className={`badge ${ROLE_COLORS[data.currentUserRole]}`}>
-          {ROLE_LABELS[data.currentUserRole]}
-        </span>
-      </div>
-
       {/* ─── Invite Modal ──────────────────────────────────────── */}
       {showInvite && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Invite team member"
+          aria-labelledby="invite-dialog-title"
         >
           <div
             className="w-full max-w-md overflow-hidden rounded-2xl border"
@@ -428,15 +459,19 @@ export default function TeamPage() {
               className="flex items-center justify-between px-6 py-4"
               style={{ borderBottom: '1px solid var(--surface-border)' }}
             >
-              <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+              <h2
+                id="invite-dialog-title"
+                className="text-lg font-semibold"
+                style={{ color: 'var(--text-primary)' }}
+              >
                 Invite team member
-              </h3>
+              </h2>
               <button
                 onClick={() => setShowInvite(false)}
                 className="icon-btn"
-                aria-label="Close"
+                aria-label="Close invite dialog"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -449,7 +484,8 @@ export default function TeamPage() {
             <div className="space-y-4 px-6 py-5">
               <div>
                 <label className="field-label" htmlFor="invite-email">
-                  Email address <span className="text-red-500">*</span>
+                  Email address <span className="sr-only">(required)</span>
+                  <span className="text-red-500" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="invite-email"
@@ -458,6 +494,8 @@ export default function TeamPage() {
                   onChange={e => setInviteEmail(e.target.value)}
                   placeholder="colleague@company.com"
                   className="input"
+                  required
+                  autoComplete="email"
                 />
               </div>
               <div>
@@ -471,17 +509,20 @@ export default function TeamPage() {
                   onChange={e => setInviteName(e.target.value)}
                   placeholder="John Smith"
                   className="input"
+                  autoComplete="name"
                 />
               </div>
               <div>
                 <label className="field-label" htmlFor="invite-role">
-                  Portal role <span className="text-red-500">*</span>
+                  Portal role <span className="sr-only">(required)</span>
+                  <span className="text-red-500" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="invite-role"
                   value={inviteRole}
                   onChange={e => setInviteRole(e.target.value as PortalRole)}
                   className="select"
+                  required
                 >
                   {(Object.keys(ROLE_LABELS) as PortalRole[]).map(r => (
                     <option key={r} value={r}>

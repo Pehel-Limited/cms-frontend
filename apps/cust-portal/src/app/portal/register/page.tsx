@@ -18,8 +18,11 @@ export default function PortalRegisterPage() {
     phoneNumber: '',
   });
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [passwordMismatch, setPasswordMismatch] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -28,6 +31,7 @@ export default function PortalRegisterPage() {
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
+    setPasswordMismatch(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,6 +39,7 @@ export default function PortalRegisterPage() {
     setErrorMsg(null);
 
     if (formData.password !== confirmPassword) {
+      setPasswordMismatch(true);
       setErrorMsg('Passwords do not match');
       return;
     }
@@ -72,9 +77,12 @@ export default function PortalRegisterPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center">
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-md"
+              aria-hidden="true"
+            >
               <svg
-                className="w-5 h-5 text-white"
+                className="h-5 w-5 text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -91,28 +99,31 @@ export default function PortalRegisterPage() {
           </div>
 
           <div className="space-y-6">
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
-              Start Your{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-300 to-purple-200">
-                Banking Journey.
+            <h1 className="text-4xl font-bold leading-tight text-white xl:text-5xl">
+              Start your{' '}
+              <span className="bg-gradient-to-r from-pink-300 to-purple-200 bg-clip-text text-transparent">
+                banking journey.
               </span>
             </h1>
-            <p className="text-purple-200/80 text-lg leading-relaxed max-w-md">
-              Create an account in seconds. No branch visits, no paperwork. Pure digital banking.
+            <p className="max-w-md text-lg leading-relaxed text-purple-200/80">
+              Create an account in minutes. No branch visits, no paperwork.
             </p>
 
             {/* Benefits */}
             <div className="space-y-3 pt-2">
               {[
-                'Apply for personal & business loans',
-                'Track applications in real-time',
-                'Securely upload documents',
+                'Apply for personal and business loans',
+                'Track applications in real time',
+                'Upload documents securely',
                 'E-sign from any device',
               ].map(b => (
                 <div key={b} className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
+                  <div
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/20"
+                    aria-hidden="true"
+                  >
                     <svg
-                      className="w-3.5 h-3.5 text-emerald-400"
+                      className="h-3.5 w-3.5 text-emerald-400"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -132,8 +143,8 @@ export default function PortalRegisterPage() {
           </div>
 
           <div className="border-t border-white/10 pt-6">
-            <p className="text-purple-200/60 text-sm">
-              Join thousands of customers already banking with Rayva.
+            <p className="text-sm text-purple-200/60">
+              Applications, documents and messages in one secure place.
             </p>
           </div>
         </div>
@@ -144,9 +155,12 @@ export default function PortalRegisterPage() {
         <div className="w-full max-w-[440px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-8 justify-center">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4a1747] to-[#7f2b7b] flex items-center justify-center">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#4a1747] to-[#7f2b7b]"
+              aria-hidden="true"
+            >
               <svg
-                className="w-4.5 h-4.5 text-white"
+                className="h-5 w-5 text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -159,21 +173,27 @@ export default function PortalRegisterPage() {
                 />
               </svg>
             </div>
-            <span className="text-xl font-bold text-slate-900 tracking-tight">Rayva</span>
+            <span className="text-xl font-bold tracking-tight text-slate-900">Rayva</span>
           </div>
 
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-slate-900">Create an account</h2>
-            <p className="text-sm text-slate-500 mt-1">Start your banking journey with Rayva</p>
+            <p className="mt-1 text-sm text-slate-500">Start your banking journey with Rayva</p>
           </div>
 
           {errorMsg && (
-            <div className="mb-5 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+            <div
+              id="register-error"
+              role="alert"
+              aria-live="assertive"
+              className="mb-5 flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            >
               <svg
-                className="w-4 h-4 shrink-0"
+                className="h-4 w-4 shrink-0"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -182,7 +202,7 @@ export default function PortalRegisterPage() {
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-              {errorMsg}
+              <span className="flex-1">{errorMsg}</span>
             </div>
           )}
 
@@ -193,7 +213,7 @@ export default function PortalRegisterPage() {
                   htmlFor="firstName"
                   className="block text-sm font-medium text-slate-700 mb-1.5"
                 >
-                  First Name
+                  First name
                 </label>
                 <input
                   id="firstName"
@@ -211,7 +231,7 @@ export default function PortalRegisterPage() {
                   htmlFor="lastName"
                   className="block text-sm font-medium text-slate-700 mb-1.5"
                 >
-                  Last Name
+                  Last name
                 </label>
                 <input
                   id="lastName"
@@ -232,10 +252,11 @@ export default function PortalRegisterPage() {
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -265,10 +286,11 @@ export default function PortalRegisterPage() {
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -295,7 +317,7 @@ export default function PortalRegisterPage() {
                 htmlFor="phoneNumber"
                 className="block text-sm font-medium text-slate-700 mb-1.5"
               >
-                Phone Number <span className="text-slate-400">(optional)</span>
+                Phone number <span className="text-slate-400">(optional)</span>
               </label>
               <input
                 id="phoneNumber"
@@ -308,65 +330,105 @@ export default function PortalRegisterPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
                 >
                   Password
                 </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-11 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    aria-describedby="password-hint"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    aria-pressed={showPassword}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <EyeIcon revealed={showPassword} />
+                  </button>
+                </div>
               </div>
               <div>
                 <label
                   htmlFor="confirmPassword"
-                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
                 >
-                  Confirm
+                  Confirm password
                 </label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={handleChange}
+                    className={`w-full rounded-xl border bg-white py-2.5 pl-4 pr-11 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500 ${
+                      passwordMismatch ? 'border-red-300' : 'border-slate-200'
+                    }`}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    required
+                    aria-describedby={
+                      passwordMismatch ? 'confirm-password-error' : undefined
+                    }
+                    aria-invalid={passwordMismatch ? true : undefined}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(v => !v)}
+                    aria-pressed={showConfirmPassword}
+                    aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <EyeIcon revealed={showConfirmPassword} />
+                  </button>
+                </div>
+                {passwordMismatch && (
+                  <p id="confirm-password-error" className="mt-1.5 text-sm text-red-600">
+                    The two passwords do not match.
+                  </p>
+                )}
               </div>
             </div>
-            <p className="text-xs text-slate-500 -mt-2">
-              Min 8 chars, with uppercase, lowercase, digit, and special character
+            <p id="password-hint" className="-mt-1 text-sm text-slate-500">
+              At least 8 characters, including an uppercase letter, a lowercase letter, a number and
+              a special character.
             </p>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#4a1747] to-[#7f2b7b] text-white rounded-xl font-semibold text-sm hover:from-[#3d1040] hover:to-[#6b2568] transition-all shadow-lg shadow-purple-700/20 disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+              aria-busy={isLoading}
+              aria-describedby={errorMsg ? 'register-error' : undefined}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#4a1747] to-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-purple-700/20 transition-all hover:from-[#3d1040] hover:to-[#6b2568] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isLoading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating account...
+                  <div
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                    aria-hidden="true"
+                  />
+                  Creating account…
                 </>
               ) : (
                 <>
-                  Create Account
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  Create account
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -379,17 +441,58 @@ export default function PortalRegisterPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-slate-500 mt-6">
+          <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{' '}
             <Link
               href="/portal/login"
-              className="font-semibold text-primary-700 hover:text-primary-800 transition-colors"
+              className="font-semibold text-primary-700 transition-colors hover:text-primary-800"
             >
-              Sign In
+              Sign in
             </Link>
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+/* Show/hide password glyph — decorative, the button carries the label. */
+function EyeIcon({ revealed }: { revealed: boolean }) {
+  return revealed ? (
+    <svg
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88"
+      />
+    </svg>
+  ) : (
+    <svg
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
   );
 }

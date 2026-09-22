@@ -154,6 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         href={item.path}
         onClick={() => setMobileSidebarOpen(false)}
         title={sidebarCollapsed ? item.name : undefined}
+        aria-current={active ? 'page' : undefined}
         className={[
           'group relative flex items-center rounded-xl text-sm font-medium transition-all duration-200',
           sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-3 py-2.5',
@@ -173,6 +174,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: 'var(--rm-bg)' }}>
+      <a
+        href="#rm-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:px-4 focus:py-2 focus:text-sm focus:font-semibold"
+        style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }}
+      >
+        Skip to main content
+      </a>
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 bg-black/60 z-40 md:hidden" onClick={() => setMobileSidebarOpen(false)} />
@@ -205,7 +213,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+        <nav aria-label="Main" className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
           {navItems.map(item => <NavLink key={item.path} item={item} />)}
         </nav>
 
@@ -256,7 +264,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-30 h-16 flex items-center px-4 md:px-6 gap-3 border-b transition-colors duration-200"
           style={{ backgroundColor: 'var(--rm-topbar-bg)', backdropFilter: 'blur(12px)', borderColor: 'var(--rm-topbar-border)' }}>
           {/* Mobile hamburger */}
-          <button className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5" onClick={() => setMobileSidebarOpen(true)}>
+          <button className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5" onClick={() => setMobileSidebarOpen(true)} aria-label="Open navigation menu" aria-expanded={mobileSidebarOpen}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
@@ -267,7 +275,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
+            <label htmlFor="rm-search" className="sr-only">
+              Search customers, applications, accounts
+            </label>
             <input
+              id="rm-search"
               type="text"
               placeholder="Search customers, applications, accounts..."
               className="w-full pl-9 pr-14 py-2 rounded-xl text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
@@ -287,7 +299,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           {/* 3-dots menu */}
-          <button className="p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }}>
+          <button className="p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }} aria-label="More options">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
             </svg>
@@ -315,13 +327,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           {/* Notifications */}
-          <button className="relative p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }}>
+          <button className="relative p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }} aria-label="Notifications">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
                 d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center ring-2 ring-[#060d1a]">8</span>
-          </button>
+                      </button>
 
           {/* User menu */}
           <div className="relative" ref={menuRef}>
@@ -384,20 +395,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto p-4 sm:p-6">
+        <main id="rm-main" className="flex-1 overflow-auto p-4 sm:p-6">
           {children}
         </main>
 
         {/* Footer */}
         <footer className="px-6 py-3 border-t flex items-center justify-center gap-4 text-[11px] shrink-0 transition-colors"
           style={{ borderColor: 'var(--rm-border)', color: 'var(--rm-text-muted)' }}>
-          <span>© 2025 NorthBank. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} NorthBank. All rights reserved.</span>
           <span className="text-slate-700">·</span>
-          <a href="#" className="hover:text-slate-400 transition-colors">Privacy Policy</a>
+          <Link href="/dashboard/diagnostic" className="hover:text-slate-400 transition-colors">
+            System status
+          </Link>
           <span className="text-slate-700">·</span>
-          <a href="#" className="hover:text-slate-400 transition-colors">Terms of Use</a>
-          <span className="text-slate-700">·</span>
-          <a href="#" className="hover:text-slate-400 transition-colors">Help &amp; Support</a>
+          <Link href="/dashboard/admin" className="hover:text-slate-400 transition-colors">
+            Administration
+          </Link>
         </footer>
       </div>
     </div>

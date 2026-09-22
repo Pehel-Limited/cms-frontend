@@ -1,7 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { toast } from 'react-toastify';
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useAppSelector } from '@/store';
 import config from '@/config';
 import {
@@ -11,46 +23,65 @@ import {
   type Citation,
 } from '@/services/api/aiKnowledgeService';
 
-const SOURCE_TYPES = ['POLICY', 'PROCEDURE', 'PRODUCT_GUIDE', 'REGULATION', 'FAQ', 'OTHER'];
+/* ── Single source of truth for labels + colours used by this page ── */
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  DRAFT: { label: 'Draft', color: '#94a3b8' },
-  ACTIVE: { label: 'Active', color: '#10b981' },
-  ARCHIVED: { label: 'Archived', color: '#64748b' },
-  FAILED: { label: 'Failed', color: '#ef4444' },
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  POLICY: 'Policy',
+  PROCEDURE: 'Procedure',
+  PRODUCT_GUIDE: 'Product guide',
+  REGULATION: 'Regulation',
+  FAQ: 'FAQ',
+  OTHER: 'Other',
 };
 
-function statusMeta(status: string) {
-  return STATUS_META[status] || { label: status || 'Unknown', color: '#94a3b8' };
+const SOURCE_TYPES = Object.keys(SOURCE_TYPE_LABELS);
+
+/* Shared by knowledge sources and ingestion jobs. */
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  DRAFT: { label: 'Draft', color: '#64748b' },
+  ACTIVE: { label: 'Active', color: '#10b981' },
+  ARCHIVED: { label: 'Archived', color: '#94a3b8' },
+  FAILED: { label: 'Failed', color: '#ef4444' },
+  PENDING: { label: 'Pending', color: '#f59e0b' },
+  RUNNING: { label: 'Running', color: '#0ea5e9' },
+  PROCESSING: { label: 'Processing', color: '#0ea5e9' },
+  PARTIAL: { label: 'Partially completed', color: '#f59e0b' },
+  COMPLETED: { label: 'Completed', color: '#10b981' },
+};
+
+const ANSWER_STATUS_LABELS: Record<string, string> = {
+  FOUND: 'Citations found',
+  NO_ANSWER: 'No answer available',
+  NO_RESULTS: 'No citations found',
+};
+
+function humanise(value?: string): string {
+  if (!value) return 'Unknown';
+  return value
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/^\w/, c => c.toUpperCase());
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const meta = statusMeta(status);
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
-      style={{ backgroundColor: `${meta.color}22`, color: meta.color }}
-    >
-      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: meta.color }} />
-      {meta.label}
-    </span>
-  );
+function statusMeta(status?: string): { label: string; color: string } {
+  if (!status) return { label: 'Unknown', color: '#94a3b8' };
+  return STATUS_META[status] || { label: humanise(status), color: '#94a3b8' };
 }
 
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={`rounded-2xl ${className}`}
-      style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
-    >
-      {children}
-    </div>
-  );
+function sourceTypeLabel(type?: string): string {
+  if (!type) return '—';
+  return SOURCE_TYPE_LABELS[type] || humanise(type);
+}
+
+function answerStatusLabel(status: string): string {
+  return ANSWER_STATUS_LABELS[status] || humanise(status);
 }
 
 function formatDate(dateString?: string): string {
   if (!dateString) return '—';
-  return new Date(dateString).toLocaleString(undefined, {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -59,12 +90,204 @@ function formatDate(dateString?: string): string {
   });
 }
 
+function StatusPill({ status }: { status?: string }) {
+  const meta = statusMeta(status);
+  return (
+    <span
+      className="inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium"
+      style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: meta.color }} />
+      {meta.label}
+    </span>
+  );
+}
+
+/* ── Accessible modal: labelled, escape-to-close, focus contained + restored ── */
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function Modal({
+  titleId,
+  title,
+  description,
+  onClose,
+  initialFocusRef,
+  children,
+}: {
+  titleId: string;
+  title: string;
+  description?: string;
+  onClose: () => void;
+  initialFocusRef?: RefObject<HTMLElement>;
+  children: ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    restoreRef.current = document.activeElement as HTMLElement | null;
+    const target =
+      initialFocusRef?.current ?? panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+    target?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      restoreRef.current?.focus?.();
+    };
+  }, [onClose, initialFocusRef]);
+
+  const handleTab = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab' || !panelRef.current) return;
+    const nodes = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+    if (nodes.length === 0) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={description ? `${titleId}-description` : undefined}
+        onKeyDown={handleTab}
+        onClick={event => event.stopPropagation()}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl p-6 sm:p-7"
+        style={{ backgroundColor: 'var(--rm-card)' }}
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2
+              id={titleId}
+              className="text-xl font-semibold tracking-tight"
+              style={{ color: 'var(--rm-text)' }}
+            >
+              {title}
+            </h2>
+            {description && (
+              <p
+                id={`${titleId}-description`}
+                className="mt-1.5 text-sm"
+                style={{ color: 'var(--rm-text-muted)' }}
+              >
+                {description}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="shrink-0 rounded-full p-2 transition-opacity hover:opacity-70"
+            style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  id,
+  label,
+  hint,
+  error,
+  required,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  error?: string | null;
+  required?: boolean;
+  children: ReactNode;
+}) {
+  const describedBy =
+    [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(' ') || undefined;
+
+  /* Wire the hint/error into the control so screen readers announce them with the field. */
+  const control = isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        'aria-describedby': describedBy,
+        'aria-invalid': error ? true : undefined,
+      })
+    : children;
+
+  return (
+    <div>
+      <label
+        htmlFor={id}
+        className="mb-1.5 block text-sm font-medium"
+        style={{ color: 'var(--rm-text-secondary)' }}
+      >
+        {label}
+        {required && (
+          <>
+            <span aria-hidden="true" style={{ color: '#dc2626' }}>
+              {' '}
+              *
+            </span>
+            <span className="sr-only"> (required)</span>
+          </>
+        )}
+      </label>
+      {hint && (
+        <p id={`${id}-hint`} className="mb-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      )}
+      {control}
+      {error && (
+        <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm" style={{ color: '#dc2626' }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const inputClass = 'w-full rounded-xl px-4 py-2.5 text-base transition-opacity';
+const inputStyle: CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  border: '1px solid var(--rm-border)',
+  color: 'var(--rm-text)',
+};
+
 export default function AiKnowledgePage() {
   const { user } = useAppSelector(state => state.auth);
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<string | null>(null);
 
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registerForm, setRegisterForm] = useState({
@@ -76,16 +299,22 @@ export default function AiKnowledgePage() {
     version: '',
   });
   const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
 
-  const [ingestSourceId, setIngestSourceId] = useState<string | null>(null);
+  const [ingestSource, setIngestSource] = useState<KnowledgeSource | null>(null);
   const [ingestFile, setIngestFile] = useState<File | null>(null);
   const [ingesting, setIngesting] = useState(false);
+  const [ingestError, setIngestError] = useState<string | null>(null);
   const [lastJob, setLastJob] = useState<IngestionJob | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Citation[] | null>(null);
   const [answerStatus, setAnswerStatus] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const getBankId = useCallback((): string => {
     if (user?.bankId) return user.bankId;
@@ -104,14 +333,14 @@ export default function AiKnowledgePage() {
   }, [user?.bankId]);
 
   const loadSources = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const data = await aiKnowledgeService.listSources(getBankId());
-      setSources(data);
+      setSources(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load knowledge sources:', err);
-      setError('Failed to load knowledge sources. Please try again later.');
+      setError('Knowledge sources could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -124,423 +353,815 @@ export default function AiKnowledgePage() {
   const activeCount = useMemo(() => sources.filter(s => s.status === 'ACTIVE').length, [sources]);
   const draftCount = useMemo(() => sources.filter(s => s.status === 'DRAFT').length, [sources]);
 
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const closeRegisterModal = useCallback(() => {
+    setShowRegisterModal(false);
+    setRegisterError(null);
+    setTitleError(null);
+  }, []);
+
+  const closeIngestModal = useCallback(() => {
+    setIngestSource(null);
+    setIngestFile(null);
+    setIngestError(null);
+    setLastJob(null);
+    if (fileRef.current) fileRef.current.value = '';
+  }, []);
+
+  const handleRegisterSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setRegisterError(null);
     if (!registerForm.title.trim()) {
-      toast.error('Title is required');
+      setTitleError('Enter a title so this source can be identified in search results.');
+      titleRef.current?.focus();
       return;
     }
+    setTitleError(null);
     try {
       setRegistering(true);
-      await aiKnowledgeService.registerSource({
+      const created = await aiKnowledgeService.registerSource({
         bankId: getBankId(),
         sourceType: registerForm.sourceType,
-        title: registerForm.title,
+        title: registerForm.title.trim(),
         description: registerForm.description || undefined,
         jurisdiction: registerForm.jurisdiction || undefined,
         classification: registerForm.classification || undefined,
         version: registerForm.version || undefined,
       });
-      toast.success('Knowledge source registered');
-      setShowRegisterModal(false);
-      setRegisterForm({ sourceType: 'POLICY', title: '', description: '', jurisdiction: '', classification: '', version: '' });
+      setNotice(`“${created?.title ?? registerForm.title.trim()}” registered as a draft source.`);
+      setRegisterForm({
+        sourceType: 'POLICY',
+        title: '',
+        description: '',
+        jurisdiction: '',
+        classification: '',
+        version: '',
+      });
+      closeRegisterModal();
       await loadSources();
     } catch (err) {
       console.error('Failed to register source:', err);
-      toast.error('Failed to register knowledge source');
+      /* Scoped to the dialog — typed values are kept so nothing is lost. */
+      setRegisterError('The source could not be registered. Check the details and try again.');
     } finally {
       setRegistering(false);
     }
   };
 
-  const handleIngestSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ingestSourceId || !ingestFile) {
-      toast.error('Select a file to ingest');
+  const handleIngestSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIngestError(null);
+    if (!ingestSource) return;
+    if (!ingestFile) {
+      setIngestError('Choose a .txt, .md or .pdf file to ingest.');
+      fileRef.current?.focus();
       return;
     }
     try {
       setIngesting(true);
-      const job = await aiKnowledgeService.ingest(ingestSourceId, getBankId(), ingestFile);
+      const job = await aiKnowledgeService.ingest(ingestSource.id, getBankId(), ingestFile);
       setLastJob(job);
       if (job.status === 'FAILED') {
-        toast.error(`Ingestion failed: ${job.errorSummary || 'Unknown error'}`);
+        setIngestError(`Ingestion failed: ${job.errorSummary || 'no details returned'}.`);
       } else {
-        toast.success(`Ingestion ${job.status.toLowerCase()} — ${job.chunksCreated} chunk(s), ${job.embeddingsCreated} embedding(s)`);
+        setNotice(
+          `Ingestion ${statusMeta(job.status).label.toLowerCase()} for “${ingestSource.title}”: ${job.chunksCreated} chunks, ${job.embeddingsCreated} embeddings.`
+        );
+        setIngestFile(null);
+        if (fileRef.current) fileRef.current.value = '';
+        await loadSources();
       }
-      setIngestSourceId(null);
-      setIngestFile(null);
-      await loadSources();
     } catch (err) {
       console.error('Failed to ingest document:', err);
-      toast.error('Failed to ingest document');
+      setIngestError('The document could not be ingested. Try again or choose another file.');
     } finally {
       setIngesting(false);
     }
   };
 
   const handleActivate = async (source: KnowledgeSource) => {
+    setActionLoading(source.id);
+    setActionError(null);
+    setNotice(null);
     try {
-      setActionLoading(source.id);
       await aiKnowledgeService.activate(source.id, getBankId());
-      toast.success(`"${source.title}" activated`);
+      setNotice(`“${source.title}” is now active and used for cited search.`);
       await loadSources();
     } catch (err) {
       console.error('Failed to activate source:', err);
-      toast.error('Failed to activate source');
+      setActionError({ id: source.id, message: 'Activation failed. The source was left unchanged.' });
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleArchive = async (source: KnowledgeSource) => {
-    if (!confirm(`Archive "${source.title}"? It will no longer be used for search.`)) return;
+    setActionLoading(source.id);
+    setActionError(null);
+    setNotice(null);
     try {
-      setActionLoading(source.id);
       await aiKnowledgeService.archive(source.id, getBankId());
-      toast.success(`"${source.title}" archived`);
+      setConfirmArchive(null);
+      setNotice(`“${source.title}” was archived and is no longer used for search.`);
       await loadSources();
     } catch (err) {
       console.error('Failed to archive source:', err);
-      toast.error('Failed to archive source');
+      setActionError({ id: source.id, message: 'Archiving failed. The source was left unchanged.' });
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const runSearch = async () => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchError('Enter a question to search the active knowledge sources.');
+      return;
+    }
+    setSearchError(null);
+    setSearching(true);
+    setSearchResults(null);
+    setAnswerStatus(null);
     try {
-      setSearching(true);
-      setSearchResults(null);
-      setAnswerStatus(null);
-      const response = await aiKnowledgeService.search(getBankId(), searchQuery);
+      const response = await aiKnowledgeService.search(getBankId(), query);
       setAnswerStatus(response.answerStatus);
-      setSearchResults(response.results || []);
+      setSearchResults(Array.isArray(response.results) ? response.results : []);
     } catch (err) {
       console.error('Search failed:', err);
-      toast.error('Search failed');
+      setSearchError('Search failed. Your question was kept so you can try again.');
     } finally {
       setSearching(false);
     }
   };
 
-  if (loading && sources.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500" />
-      </div>
-    );
-  }
+  const handleSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    runSearch();
+  };
+
+  const tiles = [
+    { label: 'Sources registered', value: String(sources.length) },
+    { label: 'Active in search', value: String(activeCount) },
+    { label: 'Drafts', value: String(draftCount) },
+  ];
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>AI Knowledge Base</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rm-text-secondary)' }}>
-            Manage policy documents used for cited RAG search and RM copilot answers.
+    <div className="space-y-8" style={{ color: 'var(--rm-text)' }}>
+      {/* ══ Header ══ */}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">AI knowledge base</h1>
+          <p className="mt-1.5 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
+            Register policy documents, ingest their content and test the cited search used by RM
+            copilot answers.
           </p>
         </div>
         <button
-          onClick={() => setShowRegisterModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          style={{ backgroundColor: '#0ea5e9' }}
+          type="button"
+          onClick={() => {
+            setNotice(null);
+            setShowRegisterModal(true);
+          }}
+          className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          style={{ backgroundColor: 'var(--rm-accent)' }}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          Register Source
+          Register source
         </button>
-      </div>
+      </header>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card className="p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>Total Sources</p>
-          <p className="text-2xl font-bold mt-0.5" style={{ color: 'var(--rm-text)' }}>{sources.length}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>Active</p>
-          <p className="text-2xl font-bold mt-0.5 text-emerald-400">{activeCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>Draft</p>
-          <p className="text-2xl font-bold mt-0.5" style={{ color: 'var(--rm-text)' }}>{draftCount}</p>
-        </Card>
-      </div>
+      {/* ══ Counts ══ */}
+      <section aria-label="Knowledge base counts" className="grid gap-4 md:grid-cols-3">
+        {tiles.map(tile => (
+          <div key={tile.label} className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              {tile.label}
+            </p>
+            <p className="mt-3 text-2xl font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+              {loading && sources.length === 0 ? '—' : tile.value}
+            </p>
+          </div>
+        ))}
+      </section>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">
-          {error}
-        </div>
+      {notice && (
+        <p
+          role="status"
+          className="rounded-2xl px-5 py-4 text-sm"
+          style={{ backgroundColor: 'rgba(16,185,129,0.12)', color: '#059669' }}
+        >
+          {notice}
+        </p>
       )}
 
-      {/* Sources table */}
-      <Card>
-        <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--rm-border)' }}>
-          <h2 className="text-sm font-bold" style={{ color: 'var(--rm-text)' }}>Knowledge Sources</h2>
+      {/* ══ Sources ══ */}
+      <section className="space-y-5" aria-labelledby="knowledge-sources-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2
+            id="knowledge-sources-heading"
+            className="text-xl font-semibold tracking-tight"
+            style={{ color: 'var(--rm-text)' }}
+          >
+            Knowledge sources
+          </h2>
+          <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+            {loading ? 'Loading sources…' : `${sources.length} registered`}
+          </p>
         </div>
-        {sources.length === 0 ? (
-          <div className="text-center py-12 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-            No knowledge sources yet. Register one to get started.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
-                  {['Title', 'Type', 'Version', 'Status', 'Updated', 'Actions'].map(h => (
-                    <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sources.map(s => (
-                  <tr key={s.id} style={{ borderBottom: '1px solid var(--rm-border)' }}>
-                    <td className="px-5 py-3">
-                      <p className="font-medium" style={{ color: 'var(--rm-text)' }}>{s.title}</p>
-                      {s.description && (
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--rm-text-muted)' }}>{s.description}</p>
-                      )}
-                    </td>
-                    <td className="px-5 py-3" style={{ color: 'var(--rm-text-secondary)' }}>{s.sourceType}</td>
-                    <td className="px-5 py-3" style={{ color: 'var(--rm-text-secondary)' }}>{s.version || '—'}</td>
-                    <td className="px-5 py-3"><StatusBadge status={s.status} /></td>
-                    <td className="px-5 py-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>{formatDate(s.updatedAt)}</td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                          onClick={() => { setIngestSourceId(s.id); setLastJob(null); }}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                          style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
-                        >
-                          Ingest
-                        </button>
-                        {s.status !== 'ACTIVE' && (
-                          <button
-                            disabled={actionLoading === s.id}
-                            onClick={() => handleActivate(s)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-400 disabled:opacity-50"
-                            style={{ backgroundColor: 'rgba(16,185,129,0.12)' }}
-                          >
-                            {actionLoading === s.id ? '...' : 'Activate'}
-                          </button>
-                        )}
-                        {s.status !== 'ARCHIVED' && (
-                          <button
-                            disabled={actionLoading === s.id}
-                            onClick={() => handleArchive(s)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 disabled:opacity-50"
-                            style={{ backgroundColor: 'rgba(148,163,184,0.12)' }}
-                          >
-                            {actionLoading === s.id ? '...' : 'Archive'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
 
-      {/* Test search panel */}
-      <Card className="p-5">
-        <h2 className="text-sm font-bold mb-3" style={{ color: 'var(--rm-text)' }}>Test Hybrid Search</h2>
-        <form onSubmit={handleSearch} className="flex gap-2 flex-wrap">
-          <input
-            type="text"
-            placeholder="Ask a question about your active policy documents..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="flex-1 min-w-[280px] px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2"
-            style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text)' }}
-          />
+        <div className="overflow-hidden rounded-3xl" style={{ backgroundColor: 'var(--rm-card)' }}>
+          {error ? (
+            <div className="px-6 py-12 text-center sm:px-7">
+              <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                Sources could not be loaded
+              </p>
+              <p role="alert" className="mx-auto mt-1.5 max-w-md text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={loadSources}
+                className="mt-5 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                Try again
+              </button>
+            </div>
+          ) : loading && sources.length === 0 ? (
+            <div className="px-5 py-5" aria-hidden="true">
+              <div className="space-y-4">
+                {[0, 1, 2].map(row => (
+                  <div key={row} className="flex items-center gap-4">
+                    <div className="flex-1 space-y-2">
+                      <div
+                        className="h-3.5 w-52 rounded-full animate-pulse"
+                        style={{ backgroundColor: 'var(--rm-input)' }}
+                      />
+                      <div
+                        className="h-3 w-72 max-w-full rounded-full animate-pulse"
+                        style={{ backgroundColor: 'var(--rm-input)' }}
+                      />
+                    </div>
+                    <div
+                      className="h-7 w-20 rounded-full animate-pulse"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : sources.length === 0 ? (
+            <div className="px-6 py-16 text-center sm:px-7">
+              <div
+                className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+                style={{ backgroundColor: 'var(--rm-accent-muted)' }}
+              >
+                <svg className="h-7 w-7" style={{ color: 'var(--rm-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                No knowledge sources yet
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                Register a policy, procedure or product guide, then ingest its document so it can be
+                cited in answers.
+              </p>
+            </div>
+          ) : (
+            <div
+              className="overflow-x-auto"
+              role="region"
+              aria-label="Knowledge sources, scrollable horizontally"
+              tabIndex={0}
+            >
+              <table className="w-full" aria-label="Registered knowledge sources">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                    <th scope="col" className="px-5 py-3.5 text-left text-sm font-medium" style={{ color: 'var(--rm-text-muted)' }}>
+                      Title
+                    </th>
+                    <th scope="col" className="px-5 py-3.5 text-left text-sm font-medium" style={{ color: 'var(--rm-text-muted)' }}>
+                      Type
+                    </th>
+                    <th scope="col" className="px-5 py-3.5 text-left text-sm font-medium" style={{ color: 'var(--rm-text-muted)' }}>
+                      Version
+                    </th>
+                    <th scope="col" className="px-5 py-3.5 text-left text-sm font-medium" style={{ color: 'var(--rm-text-muted)' }}>
+                      Status
+                    </th>
+                    <th scope="col" className="px-5 py-3.5 text-left text-sm font-medium" style={{ color: 'var(--rm-text-muted)' }}>
+                      Updated
+                    </th>
+                    <th scope="col" className="px-5 py-3.5 text-right text-sm font-medium" style={{ color: 'var(--rm-text-muted)' }}>
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map(source => {
+                    const busy = actionLoading === source.id;
+                    const rowError = actionError?.id === source.id ? actionError.message : null;
+                    return (
+                      <tr
+                        key={source.id}
+                        className="align-top hover:bg-slate-50"
+                        style={{ borderBottom: '1px solid var(--rm-border)' }}
+                      >
+                        <td className="px-5 py-4">
+                          <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                            {source.title}
+                          </p>
+                          {source.description && (
+                            <p className="mt-1 max-w-md text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                              {source.description}
+                            </p>
+                          )}
+                          {source.jurisdiction && (
+                            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                              {source.jurisdiction}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                            {sourceTypeLabel(source.sourceType)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm tabular-nums" style={{ color: 'var(--rm-text-secondary)' }}>
+                            {source.version || '—'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <StatusPill status={source.status} />
+                        </td>
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <span className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                            {formatDate(source.updatedAt)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          {confirmArchive === source.id ? (
+                            <div
+                              className="flex flex-wrap items-center justify-end gap-2"
+                              role="group"
+                              aria-label={`Confirm archiving ${source.title}`}
+                            >
+                              <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                                Archive “{source.title}”? It will stop being used for search.
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleArchive(source)}
+                                disabled={busy}
+                                className="rounded-full px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{ backgroundColor: '#ef4444' }}
+                              >
+                                {busy ? 'Archiving…' : 'Confirm archive'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmArchive(null)}
+                                disabled={busy}
+                                className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{
+                                  backgroundColor: 'var(--rm-input)',
+                                  color: 'var(--rm-text-secondary)',
+                                  border: '1px solid var(--rm-border)',
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNotice(null);
+                                  closeIngestModal();
+                                  setIngestSource(source);
+                                }}
+                                disabled={busy}
+                                aria-label={`Ingest a document for ${source.title}`}
+                                className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{
+                                  backgroundColor: 'var(--rm-input)',
+                                  color: 'var(--rm-text)',
+                                  border: '1px solid var(--rm-border)',
+                                }}
+                              >
+                                Ingest document
+                              </button>
+                              {source.status !== 'ACTIVE' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleActivate(source)}
+                                  disabled={busy}
+                                  aria-label={`Activate ${source.title}`}
+                                  className="rounded-full px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                  style={{ backgroundColor: 'rgba(16,185,129,0.14)', color: '#059669' }}
+                                >
+                                  {busy ? 'Working…' : 'Activate'}
+                                </button>
+                              )}
+                              {source.status !== 'ARCHIVED' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActionError(null);
+                                    setConfirmArchive(source.id);
+                                  }}
+                                  disabled={busy}
+                                  aria-label={`Archive ${source.title}`}
+                                  className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                                  style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: '#dc2626' }}
+                                >
+                                  Archive
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          {rowError && (
+                            <p role="alert" className="mt-2 text-right text-sm" style={{ color: '#dc2626' }}>
+                              {rowError}
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ══ Test search ══ */}
+      <section
+        className="rounded-3xl p-6 sm:p-7"
+        style={{ backgroundColor: 'var(--rm-card)' }}
+        aria-labelledby="knowledge-search-heading"
+      >
+        <h2
+          id="knowledge-search-heading"
+          className="text-xl font-semibold tracking-tight"
+          style={{ color: 'var(--rm-text)' }}
+        >
+          Test hybrid search
+        </h2>
+        <p className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          Runs the same retrieval used for cited answers. Only active sources are searched.
+        </p>
+
+        <form onSubmit={handleSearchSubmit} className="mt-5 flex flex-wrap items-end gap-3" noValidate>
+          <div className="min-w-[260px] flex-1">
+            <label
+              htmlFor="knowledge-search"
+              className="mb-1.5 block text-sm font-medium"
+              style={{ color: 'var(--rm-text-secondary)' }}
+            >
+              Question
+            </label>
+            <input
+              id="knowledge-search"
+              type="search"
+              value={searchQuery}
+              onChange={event => {
+                setSearchQuery(event.target.value);
+                if (searchError) setSearchError(null);
+              }}
+              aria-describedby="knowledge-search-hint"
+              aria-invalid={searchError ? true : undefined}
+              placeholder="What are the collateral rules for SME term loans?"
+              className={inputClass}
+              style={inputStyle}
+            />
+            <p id="knowledge-search-hint" className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Citations are returned with the source, heading and relevance score.
+            </p>
+          </div>
           <button
             type="submit"
             disabled={searching}
-            className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: '#0ea5e9' }}
+            className="rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{
+              backgroundColor: 'var(--rm-input)',
+              color: 'var(--rm-text)',
+              border: '1px solid var(--rm-border)',
+            }}
           >
             {searching ? 'Searching…' : 'Search'}
           </button>
         </form>
 
-        {answerStatus && (
-          <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--rm-text-muted)' }}>
-              Status: <span style={{ color: answerStatus === 'FOUND' ? '#10b981' : '#f59e0b' }}>{answerStatus}</span>
+        {searchError && (
+          <div
+            role="alert"
+            className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl px-5 py-4"
+            style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
+          >
+            <p className="text-sm" style={{ color: '#dc2626' }}>
+              {searchError}
             </p>
-            {searchResults && searchResults.length > 0 ? (
-              <div className="space-y-3">
-                {searchResults.map(r => (
-                  <div key={r.chunkId} className="rounded-xl p-4" style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)' }}>
-                    <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-                      <p className="text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>
-                        {r.sourceTitle} {r.sourceVersion ? `(v${r.sourceVersion})` : ''}
-                      </p>
-                      <span className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
-                        score {r.combinedScore.toFixed(3)}
-                      </span>
-                    </div>
-                    {r.headingPath && (
-                      <p className="text-xs mb-2" style={{ color: 'var(--rm-text-muted)' }}>{r.headingPath}</p>
-                    )}
-                    <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--rm-text-secondary)' }}>
-                      {r.snippet.length > 400 ? `${r.snippet.slice(0, 400)}…` : r.snippet}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>No matching citations found.</p>
-            )}
+            <button
+              type="button"
+              onClick={runSearch}
+              className="ml-auto rounded-full px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-80"
+              style={{ backgroundColor: 'rgba(239,68,68,0.14)', color: '#dc2626' }}
+            >
+              Try again
+            </button>
           </div>
         )}
-      </Card>
 
-      {/* Register modal */}
-      {showRegisterModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowRegisterModal(false)}>
-          <div
-            onClick={e => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl p-6"
-            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
-          >
-            <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--rm-text)' }}>Register Knowledge Source</h2>
-            <form onSubmit={handleRegisterSubmit} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold" style={{ color: 'var(--rm-text-muted)' }}>Source Type</label>
-                <select
-                  value={registerForm.sourceType}
-                  onChange={e => setRegisterForm({ ...registerForm, sourceType: e.target.value })}
-                  className="w-full mt-1 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2"
-                  style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text)' }}
-                >
-                  {SOURCE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold" style={{ color: 'var(--rm-text-muted)' }}>Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={registerForm.title}
-                  onChange={e => setRegisterForm({ ...registerForm, title: e.target.value })}
-                  className="w-full mt-1 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2"
-                  style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text)' }}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold" style={{ color: 'var(--rm-text-muted)' }}>Description</label>
-                <textarea
-                  value={registerForm.description}
-                  onChange={e => setRegisterForm({ ...registerForm, description: e.target.value })}
-                  rows={2}
-                  className="w-full mt-1 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2"
-                  style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text)' }}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold" style={{ color: 'var(--rm-text-muted)' }}>Jurisdiction</label>
-                  <input
-                    type="text"
-                    value={registerForm.jurisdiction}
-                    onChange={e => setRegisterForm({ ...registerForm, jurisdiction: e.target.value })}
-                    className="w-full mt-1 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2"
-                    style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text)' }}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold" style={{ color: 'var(--rm-text-muted)' }}>Version</label>
-                  <input
-                    type="text"
-                    value={registerForm.version}
-                    onChange={e => setRegisterForm({ ...registerForm, version: e.target.value })}
-                    className="w-full mt-1 px-3.5 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2"
-                    style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text)' }}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowRegisterModal(false)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                  style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={registering}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ backgroundColor: '#0ea5e9' }}
-                >
-                  {registering ? 'Registering…' : 'Register'}
-                </button>
-              </div>
-            </form>
-          </div>
+        <div aria-live="polite" aria-busy={searching}>
+          {searching && (
+            <p className="mt-5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Searching active sources…
+            </p>
+          )}
+
+          {!searching && answerStatus && (
+            <div className="mt-6 space-y-4">
+              <p className="text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>
+                {answerStatusLabel(answerStatus)}
+                {searchResults && (
+                  <span className="tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                    {' '}
+                    · {searchResults.length} {searchResults.length === 1 ? 'citation' : 'citations'}
+                  </span>
+                )}
+              </p>
+
+              {searchResults && searchResults.length > 0 ? (
+                <ul className="space-y-3">
+                  {searchResults.map(result => (
+                    <li
+                      key={result.chunkId}
+                      className="rounded-2xl p-5"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                          {result.sourceTitle}
+                          {result.sourceVersion ? ` (v${result.sourceVersion})` : ''}
+                        </p>
+                        <span className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                          Relevance {result.combinedScore.toFixed(3)}
+                        </span>
+                      </div>
+                      {result.headingPath && (
+                        <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          {result.headingPath}
+                        </p>
+                      )}
+                      <p className="mt-3 whitespace-pre-wrap text-base" style={{ color: 'var(--rm-text-secondary)' }}>
+                        {result.snippet.length > 400 ? `${result.snippet.slice(0, 400)}…` : result.snippet}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  No matching citations were returned for this question.
+                </p>
+              )}
+            </div>
+          )}
         </div>
+      </section>
+
+      {/* ══ Register dialog ══ */}
+      {showRegisterModal && (
+        <Modal
+          titleId="register-source-title"
+          title="Register a knowledge source"
+          description="Creates the source record. Ingest a document afterwards to make it searchable."
+          onClose={closeRegisterModal}
+          initialFocusRef={titleRef}
+        >
+          <form onSubmit={handleRegisterSubmit} className="space-y-4" noValidate>
+            {registerError && (
+              <p
+                role="alert"
+                className="rounded-2xl px-4 py-3 text-sm"
+                style={{ backgroundColor: 'rgba(239,68,68,0.10)', color: '#dc2626' }}
+              >
+                {registerError}
+              </p>
+            )}
+
+            <Field id="register-title" label="Title" required error={titleError}>
+              <input
+                id="register-title"
+                ref={titleRef}
+                type="text"
+                required
+                aria-required="true"
+                value={registerForm.title}
+                onChange={event => {
+                  setRegisterForm({ ...registerForm, title: event.target.value });
+                  if (titleError) setTitleError(null);
+                }}
+                className={inputClass}
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field id="register-source-type" label="Source type" required>
+              <select
+                id="register-source-type"
+                aria-required="true"
+                value={registerForm.sourceType}
+                onChange={event => setRegisterForm({ ...registerForm, sourceType: event.target.value })}
+                className={inputClass}
+                style={inputStyle}
+              >
+                {SOURCE_TYPES.map(type => (
+                  <option key={type} value={type}>
+                    {SOURCE_TYPE_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field id="register-description" label="Description">
+              <textarea
+                id="register-description"
+                rows={3}
+                value={registerForm.description}
+                onChange={event => setRegisterForm({ ...registerForm, description: event.target.value })}
+                className={`${inputClass} resize-y`}
+                style={inputStyle}
+              />
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="register-jurisdiction" label="Jurisdiction">
+                <input
+                  id="register-jurisdiction"
+                  type="text"
+                  value={registerForm.jurisdiction}
+                  onChange={event => setRegisterForm({ ...registerForm, jurisdiction: event.target.value })}
+                  className={inputClass}
+                  style={inputStyle}
+                />
+              </Field>
+              <Field id="register-version" label="Version">
+                <input
+                  id="register-version"
+                  type="text"
+                  value={registerForm.version}
+                  onChange={event => setRegisterForm({ ...registerForm, version: event.target.value })}
+                  className={inputClass}
+                  style={inputStyle}
+                />
+              </Field>
+            </div>
+
+            <Field
+              id="register-classification"
+              label="Classification"
+              hint="For example Internal, Confidential or Public."
+            >
+              <input
+                id="register-classification"
+                type="text"
+                value={registerForm.classification}
+                onChange={event => setRegisterForm({ ...registerForm, classification: event.target.value })}
+                className={inputClass}
+                style={inputStyle}
+              />
+            </Field>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeRegisterModal}
+                className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+                style={{
+                  backgroundColor: 'var(--rm-input)',
+                  color: 'var(--rm-text-secondary)',
+                  border: '1px solid var(--rm-border)',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={registering}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                {registering ? 'Registering…' : 'Register source'}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
-      {/* Ingest modal */}
-      {ingestSourceId && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setIngestSourceId(null)}>
-          <div
-            onClick={e => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl p-6"
-            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
-          >
-            <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--rm-text)' }}>Ingest Document</h2>
-            <p className="text-xs mb-4" style={{ color: 'var(--rm-text-muted)' }}>
-              Supported formats: .txt, .md, .pdf. Re-ingesting deactivates previous chunks for this source.
-            </p>
-            <form onSubmit={handleIngestSubmit} className="space-y-3">
+      {/* ══ Ingest dialog ══ */}
+      {ingestSource && (
+        <Modal
+          titleId="ingest-document-title"
+          title={`Ingest a document for “${ingestSource.title}”`}
+          description="Supported formats: .txt, .md and .pdf. Re-ingesting deactivates the previous chunks for this source."
+          onClose={closeIngestModal}
+          initialFocusRef={fileRef}
+        >
+          <form onSubmit={handleIngestSubmit} className="space-y-4" noValidate>
+            <Field
+              id="ingest-file"
+              label="Document"
+              required
+              error={ingestError}
+              hint={ingestFile ? `Selected: ${ingestFile.name}` : undefined}
+            >
               <input
+                id="ingest-file"
+                ref={fileRef}
                 type="file"
                 accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
-                onChange={e => setIngestFile(e.target.files?.[0] || null)}
-                className="w-full text-sm"
-                style={{ color: 'var(--rm-text)' }}
+                required
+                aria-required="true"
+                onChange={event => {
+                  setIngestFile(event.target.files?.[0] || null);
+                  if (ingestError) setIngestError(null);
+                }}
+                className="w-full rounded-xl px-4 py-2.5 text-sm"
+                style={inputStyle}
               />
-              {lastJob && (
-                <div className="rounded-xl p-3 text-xs" style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text-secondary)' }}>
-                  <p>Job status: <StatusBadge status={lastJob.status} /></p>
-                  <p className="mt-1">Pages: {lastJob.pagesProcessed} · Chunks: {lastJob.chunksCreated} · Embeddings: {lastJob.embeddingsCreated}</p>
-                  {lastJob.errorSummary && <p className="mt-1 text-red-400">{lastJob.errorSummary}</p>}
+            </Field>
+
+            {lastJob && (
+              <dl
+                role="status"
+                className="space-y-2 rounded-2xl px-5 py-4 text-sm"
+                style={{ backgroundColor: 'var(--rm-input)' }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <dt style={{ color: 'var(--rm-text-muted)' }}>Job status</dt>
+                  <dd>
+                    <StatusPill status={lastJob.status} />
+                  </dd>
                 </div>
-              )}
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIngestSourceId(null)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                  style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
-                >
-                  Close
-                </button>
-                <button
-                  type="submit"
-                  disabled={ingesting || !ingestFile}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ backgroundColor: '#0ea5e9' }}
-                >
-                  {ingesting ? 'Ingesting…' : 'Ingest'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt style={{ color: 'var(--rm-text-muted)' }}>Pages processed</dt>
+                  <dd className="tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {lastJob.pagesProcessed}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt style={{ color: 'var(--rm-text-muted)' }}>Chunks created</dt>
+                  <dd className="tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {lastJob.chunksCreated}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt style={{ color: 'var(--rm-text-muted)' }}>Embeddings created</dt>
+                  <dd className="tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {lastJob.embeddingsCreated}
+                  </dd>
+                </div>
+                {lastJob.errorSummary && (
+                  <div className="pt-1">
+                    <dt className="sr-only">Error summary</dt>
+                    <dd role="alert" style={{ color: '#dc2626' }}>
+                      {lastJob.errorSummary}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeIngestModal}
+                className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+                style={{
+                  backgroundColor: 'var(--rm-input)',
+                  color: 'var(--rm-text-secondary)',
+                  border: '1px solid var(--rm-border)',
+                }}
+              >
+                Close
+              </button>
+              <button
+                type="submit"
+                disabled={ingesting}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                {ingesting ? 'Ingesting…' : 'Ingest document'}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

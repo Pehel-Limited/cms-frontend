@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
@@ -15,15 +15,230 @@ import { ApplicationWorkflowPanel } from '@/components/workflow';
 import { SolicitorTab } from '@/components/solicitor/SolicitorTab';
 import { ApplicationAiSummaryTab } from '@/components/ai/ApplicationAiSummaryTab';
 import { CreditMemoTab } from '@/components/ai/CreditMemoTab';
+import { STATUS_CONFIG, type LomsApplicationStatus } from '@/types/loms';
 import { formatCurrency } from '@/lib/format';
+
+/* ── Shared status wording ──────────────────────────────────────────────
+   Labels come from the shared LOMS status configuration so this page words
+   a status exactly like the rest of the portal. Only the translucent tint is
+   resolved locally (the shared config carries light-mode utility classes). */
+const statusLabel = (status?: string): string => {
+  if (!status) return 'Unknown';
+  return STATUS_CONFIG[status as LomsApplicationStatus]?.label ?? status.replace(/_/g, ' ');
+};
+
+type Tone = { bg: string; fg: string; dot: string };
+const TONES: Record<
+  'neutral' | 'info' | 'warning' | 'success' | 'danger' | 'offer' | 'booking',
+  Tone
+> = {
+  neutral: { bg: 'rgba(127,127,127,0.14)', fg: 'var(--rm-text-secondary)', dot: '#94a3b8' },
+  info: { bg: 'rgba(14,165,233,0.14)', fg: '#0284c7', dot: '#0ea5e9' },
+  warning: { bg: 'rgba(245,158,11,0.15)', fg: '#b45309', dot: '#f59e0b' },
+  success: { bg: 'rgba(16,185,129,0.14)', fg: '#047857', dot: '#10b981' },
+  danger: { bg: 'rgba(239,68,68,0.13)', fg: '#b91c1c', dot: '#ef4444' },
+  offer: { bg: 'rgba(139,92,246,0.15)', fg: '#6d28d9', dot: '#8b5cf6' },
+  booking: { bg: 'rgba(99,102,241,0.15)', fg: '#4338ca', dot: '#6366f1' },
+};
+
+function statusTone(status?: string): Tone {
+  const s = (status || '').toUpperCase();
+  if (/DECLIN|REJECT|CANCEL|WITHDRAWN|EXPIRED|RETURNED/.test(s)) return TONES.danger;
+  if (/BOOK|DISBURS/.test(s)) return TONES.booking;
+  if (/OFFER|ESIGN/.test(s)) return TONES.offer;
+  if (/APPROV|COMPLETED|RECEIVED|CONDITIONS_MET|^ACTIVE$|^CLOSED$/.test(s)) return TONES.success;
+  if (/SUBMITTED/.test(s)) return TONES.info;
+  if (/PENDING|UNDERWRIT|REFERRED|CREDIT_CHECK/.test(s)) return TONES.warning;
+  return TONES.neutral;
+}
+
+const formatRoleName = (role: string): string =>
+  role
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase());
+
+const formatDateTime = (value?: string): string =>
+  value ? new Date(value).toLocaleString() : '—';
+
+/* ── Form field styling ─────────────────────────────────────────────── */
+const fieldCls = 'w-full rounded-xl px-4 py-2.5 text-base transition-colors';
+const fieldStyle: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  color: 'var(--rm-text)',
+  border: '1px solid var(--rm-border)',
+};
+const fieldErrorStyle: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  color: 'var(--rm-text)',
+  border: '1px solid rgba(239,68,68,0.55)',
+};
+
+function RequiredMark() {
+  return (
+    <>
+      <span aria-hidden="true" style={{ color: '#dc2626' }}>
+        {' '}
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
+}
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+      {message}
+    </p>
+  );
+}
+
+function FieldLabel({
+  htmlFor,
+  children,
+  required,
+}: {
+  htmlFor: string;
+  children: React.ReactNode;
+  required?: boolean;
+}) {
+  return (
+    <label htmlFor={htmlFor} className="mb-1.5 block text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+      {children}
+      {required && <RequiredMark />}
+    </label>
+  );
+}
+
+interface BaseFieldProps {
+  id: string;
+  label: string;
+  required?: boolean;
+  error?: string;
+  hint?: string;
+}
+
+function TextField({
+  id,
+  label,
+  required,
+  error,
+  hint,
+  ...rest
+}: BaseFieldProps & React.InputHTMLAttributes<HTMLInputElement>) {
+  const describedBy =
+    [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined;
+  return (
+    <div>
+      <FieldLabel htmlFor={id} required={required}>
+        {label}
+      </FieldLabel>
+      <input
+        id={id}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={fieldCls}
+        style={error ? fieldErrorStyle : fieldStyle}
+        {...rest}
+      />
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      )}
+      <FieldError id={`${id}-error`} message={error} />
+    </div>
+  );
+}
+
+function TextAreaField({
+  id,
+  label,
+  required,
+  error,
+  hint,
+  ...rest
+}: BaseFieldProps & React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const describedBy =
+    [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined;
+  return (
+    <div>
+      <FieldLabel htmlFor={id} required={required}>
+        {label}
+      </FieldLabel>
+      <textarea
+        id={id}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={`${fieldCls} resize-y`}
+        style={error ? fieldErrorStyle : fieldStyle}
+        {...rest}
+      />
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      )}
+      <FieldError id={`${id}-error`} message={error} />
+    </div>
+  );
+}
+
+function SelectField({
+  id,
+  label,
+  required,
+  error,
+  hint,
+  children,
+  ...rest
+}: BaseFieldProps & React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const describedBy =
+    [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined;
+  return (
+    <div>
+      <FieldLabel htmlFor={id} required={required}>
+        {label}
+      </FieldLabel>
+      <select
+        id={id}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        className={fieldCls}
+        style={error ? fieldErrorStyle : fieldStyle}
+        {...rest}
+      >
+        {children}
+      </select>
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      )}
+      <FieldError id={`${id}-error`} message={error} />
+    </div>
+  );
+}
+
+/* ── Action dialog ──────────────────────────────────────────────────── */
+type ModalType = 'approve' | 'reject' | 'assign' | 'return' | 'note' | 'cancel';
 
 interface ActionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (data: any) => void;
+  onConfirm: (data: Record<string, unknown>) => void;
   title: string;
-  type: 'approve' | 'reject' | 'assign' | 'return' | 'note' | 'cancel';
+  type: ModalType;
   loading: boolean;
+  submitError: string | null;
   application?: ApplicationResponse | null;
 }
 
@@ -34,59 +249,78 @@ function ActionModal({
   title,
   type,
   loading,
+  submitError,
   application,
 }: ActionModalProps) {
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [underwriters, setUnderwriters] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [activeOption, setActiveOption] = useState(-1);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = `action-modal-title-${type}`;
+  const listboxId = 'assign-underwriter-options';
 
   // Initialize form data when modal opens
   useEffect(() => {
-    if (isOpen) {
-      if (type === 'approve' && application) {
-        // Pre-populate with application data
-        setFormData({
-          approvedAmount: application.requestedAmount || '',
-          approvedTermMonths: application.requestedTermMonths || '',
-          approvedInterestRate: application.requestedInterestRate || '',
-          notes: '',
-        });
-      } else if (type === 'assign') {
-        loadUnderwriters();
-        setSearchQuery('');
-        setFormData({});
-      } else {
-        setFormData({});
-      }
+    if (!isOpen) return;
+    setFieldErrors({});
+    if (type === 'approve' && application) {
+      setFormData({
+        approvedAmount: application.requestedAmount || '',
+        approvedTermMonths: application.requestedTermMonths || '',
+        approvedInterestRate: application.requestedInterestRate ?? '',
+        approvalNotes: '',
+      });
+    } else if (type === 'assign') {
+      loadUnderwriters();
+      setSearchQuery('');
+      setFormData({});
+    } else {
+      setFormData({});
     }
+    // Move focus into the dialog once it is on screen.
+    const t = window.setTimeout(() => {
+      const node = dialogRef.current;
+      if (!node) return;
+      const first = node.querySelector<HTMLElement>(
+        'input:not([type="hidden"]), select, textarea'
+      );
+      (first ?? node).focus();
+    }, 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, type, application]);
 
   // Debounced search effect
   useEffect(() => {
-    if (type !== 'assign') return;
-
+    if (type !== 'assign' || !isOpen) return;
     const timeoutId = setTimeout(() => {
       if (searchQuery || showDropdown) {
         loadUnderwriters(searchQuery);
       }
     }, 300);
-
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, type, showDropdown]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, type, showDropdown, isOpen]);
 
   const loadUnderwriters = async (search?: string) => {
     try {
       setSearchLoading(true);
+      setSearchError(null);
       const users = await userService.getUnderwriters(search);
       // Segregation of duties: exclude the application creator from the underwriter list
       const creatorId = application?.createdByUserId;
-      const filtered = creatorId ? users.filter(u => u.userId !== creatorId) : users;
-      setUnderwriters(filtered);
+      setUnderwriters(creatorId ? users.filter(u => u.userId !== creatorId) : users);
     } catch (error) {
       console.error('Failed to load underwriters:', error);
       setUnderwriters([]);
+      // Scoped: the dialog stays usable and the reviewer can retry the lookup.
+      setSearchError('We could not load the underwriter list.');
     } finally {
       setSearchLoading(false);
     }
@@ -95,324 +329,498 @@ function ActionModal({
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     setShowDropdown(true);
-    // Clear selection if user is typing
+    setActiveOption(-1);
     if (formData.assignToUserId) {
-      setFormData({ ...formData, assignToUserId: undefined });
+      setFormData(prev => ({ ...prev, assignToUserId: undefined }));
+      setFieldErrors(prev => ({ ...prev, assignToUserId: 'Select an underwriter from the list.' }));
     }
   };
 
-  const handleSelectUnderwriter = (user: User) => {
-    setFormData({ ...formData, assignToUserId: user.userId });
-    setSearchQuery(user.fullName || '');
+  const handleSelectUnderwriter = (selected: User) => {
+    setFormData(prev => ({ ...prev, assignToUserId: selected.userId }));
+    setSearchQuery(
+      selected.fullName || `${selected.firstName || ''} ${selected.lastName || ''}`.trim() || selected.username
+    );
     setShowDropdown(false);
+    setActiveOption(-1);
+    setFieldErrors(prev => ({ ...prev, assignToUserId: '' }));
+  };
+
+  const handleComboboxKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setShowDropdown(true);
+      setActiveOption(i => Math.min(i + 1, Math.max(underwriters.length - 1, 0)));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveOption(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      const option = underwriters[activeOption];
+      if (showDropdown && option) {
+        e.preventDefault();
+        handleSelectUnderwriter(option);
+      }
+    } else if (e.key === 'Escape') {
+      if (showDropdown) {
+        // Close the list, not the dialog.
+        e.stopPropagation();
+        setShowDropdown(false);
+        setActiveOption(-1);
+      }
+    }
   };
 
   if (!isOpen) return null;
 
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (type === 'approve') {
+      const amount = Number(formData.approvedAmount);
+      const term = Number(formData.approvedTermMonths);
+      const rate = Number(formData.approvedInterestRate);
+      if (!formData.approvedAmount || Number.isNaN(amount) || amount <= 0)
+        errors.approvedAmount = 'Enter an approved amount greater than zero.';
+      if (!formData.approvedTermMonths || Number.isNaN(term) || term <= 0)
+        errors.approvedTermMonths = 'Enter the approved term in months.';
+      if (formData.approvedInterestRate === '' || Number.isNaN(rate) || rate < 0)
+        errors.approvedInterestRate = 'Enter the interest rate as a percentage.';
+    }
+    if (type === 'reject') {
+      if (!formData.rejectionReason) errors.rejectionReason = 'Choose a rejection reason.';
+      if (!String(formData.rejectionDetails || '').trim())
+        errors.rejectionDetails = 'Explain the decision for the audit trail.';
+    }
+    if (type === 'assign' && !formData.assignToUserId) {
+      errors.assignToUserId = 'Select an underwriter from the list.';
+    }
+    if (type === 'return' && !String(formData.reason || '').trim()) {
+      errors.reason = 'Describe what needs to be corrected.';
+    }
+    if (type === 'note' && !String(formData.noteContent || '').trim()) {
+      errors.noteContent = 'Write the note before saving.';
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validate()) return;
     onConfirm(formData);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
-        <h3 className="text-xl font-semibold text-slate-900 mb-4">{title}</h3>
+  const set = (key: string, value: unknown) => {
+    setFormData(prev => ({ ...prev, [key]: value }));
+    setFieldErrors(prev => (prev[key] ? { ...prev, [key]: '' } : prev));
+  };
 
-        <form onSubmit={handleSubmit}>
+  const destructive = type === 'reject' || type === 'return' || type === 'cancel';
+  const confirmLabel: Record<ModalType, string> = {
+    approve: 'Approve application',
+    reject: 'Reject application',
+    assign: 'Assign application',
+    return: 'Return for corrections',
+    note: 'Save note',
+    cancel: 'Cancel application',
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(2,6,23,0.55)' }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={e => {
+          if (e.key === 'Escape' && !loading) {
+            e.preventDefault();
+            onClose();
+            return;
+          }
+          // Keep keyboard focus inside the dialog while it is open.
+          if (e.key === 'Tab' && dialogRef.current) {
+            const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            );
+            if (focusables.length === 0) return;
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+              e.preventDefault();
+              last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+              e.preventDefault();
+              first.focus();
+            }
+          }
+        }}
+        className="w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-xl"
+        style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }}
+      >
+        <h2 id={titleId} className="text-xl font-semibold tracking-tight">
+          {title}
+        </h2>
+
+        {submitError && (
+          <p
+            role="alert"
+            className="mt-4 rounded-2xl px-4 py-3 text-sm"
+            style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: '#b91c1c' }}
+          >
+            {submitError} Your entries were kept — correct anything needed and try again.
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
           {type === 'approve' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Approved Amount *
-                </label>
-                <input
-                  type="number"
-                  value={formData.approvedAmount || ''}
-                  onChange={e =>
-                    setFormData({ ...formData, approvedAmount: parseFloat(e.target.value) })
-                  }
-                  required
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Approved Term (Months) *
-                </label>
-                <input
-                  type="number"
-                  value={formData.approvedTermMonths || ''}
-                  onChange={e =>
-                    setFormData({ ...formData, approvedTermMonths: parseInt(e.target.value) })
-                  }
-                  required
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Interest Rate (%) *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.approvedInterestRate || ''}
-                  onChange={e =>
-                    setFormData({ ...formData, approvedInterestRate: parseFloat(e.target.value) })
-                  }
-                  required
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Approval Notes
-                </label>
-                <textarea
-                  value={formData.approvalNotes || ''}
-                  onChange={e => setFormData({ ...formData, approvalNotes: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-            </div>
+            <>
+              <TextField
+                id="approve-amount"
+                label="Approved amount"
+                required
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={String(formData.approvedAmount ?? '')}
+                onChange={e => set('approvedAmount', e.target.value)}
+                error={fieldErrors.approvedAmount}
+              />
+              <TextField
+                id="approve-term"
+                label="Approved term (months)"
+                required
+                type="number"
+                min={1}
+                step="1"
+                inputMode="numeric"
+                value={String(formData.approvedTermMonths ?? '')}
+                onChange={e => set('approvedTermMonths', e.target.value)}
+                error={fieldErrors.approvedTermMonths}
+              />
+              <TextField
+                id="approve-rate"
+                label="Interest rate (%)"
+                required
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={String(formData.approvedInterestRate ?? '')}
+                onChange={e => set('approvedInterestRate', e.target.value)}
+                error={fieldErrors.approvedInterestRate}
+              />
+              <TextAreaField
+                id="approve-notes"
+                label="Approval notes"
+                rows={3}
+                value={String(formData.approvalNotes ?? '')}
+                onChange={e => set('approvalNotes', e.target.value)}
+                hint="Optional. Stored with the decision on the audit trail."
+              />
+            </>
           )}
 
           {type === 'reject' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Rejection Reason *
-                </label>
-                <select
-                  value={formData.rejectionReason || ''}
-                  onChange={e => setFormData({ ...formData, rejectionReason: e.target.value })}
-                  required
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                >
-                  <option value="">Select reason...</option>
-                  <option value="INSUFFICIENT_INCOME">Insufficient Income</option>
-                  <option value="POOR_CREDIT_HISTORY">Poor Credit History</option>
-                  <option value="INCOMPLETE_DOCUMENTATION">Incomplete Documentation</option>
-                  <option value="PROPERTY_VALUATION_ISSUE">Property Valuation Issue</option>
-                  <option value="POLICY_VIOLATION">Policy Violation</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Rejection Details *
-                </label>
-                <textarea
-                  value={formData.rejectionDetails || ''}
-                  onChange={e => setFormData({ ...formData, rejectionDetails: e.target.value })}
-                  rows={4}
-                  required
-                  placeholder="Provide detailed explanation for the rejection..."
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-            </div>
+            <>
+              <SelectField
+                id="reject-reason"
+                label="Rejection reason"
+                required
+                value={String(formData.rejectionReason ?? '')}
+                onChange={e => set('rejectionReason', e.target.value)}
+                error={fieldErrors.rejectionReason}
+              >
+                <option value="">Select a reason</option>
+                <option value="INSUFFICIENT_INCOME">Insufficient income</option>
+                <option value="POOR_CREDIT_HISTORY">Poor credit history</option>
+                <option value="INCOMPLETE_DOCUMENTATION">Incomplete documentation</option>
+                <option value="PROPERTY_VALUATION_ISSUE">Property valuation issue</option>
+                <option value="POLICY_VIOLATION">Policy violation</option>
+                <option value="OTHER">Other</option>
+              </SelectField>
+              <TextAreaField
+                id="reject-details"
+                label="Rejection details"
+                required
+                rows={4}
+                value={String(formData.rejectionDetails ?? '')}
+                onChange={e => set('rejectionDetails', e.target.value)}
+                error={fieldErrors.rejectionDetails}
+                placeholder="Provide a detailed explanation for the rejection"
+              />
+            </>
           )}
 
           {type === 'assign' && (
-            <div className="space-y-4">
-              <div className="relative">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Assign To Underwriter *
-                </label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => handleSearchChange(e.target.value)}
-                  onFocus={() => setShowDropdown(true)}
-                  required
-                  placeholder="Search underwriter by name..."
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                  autoComplete="off"
-                />
-
-                {showDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {searchLoading ? (
-                      <div className="px-4 py-3 text-sm text-slate-500 text-center">
-                        Loading underwriters...
-                      </div>
-                    ) : underwriters.length === 0 ? (
-                      <div className="px-4 py-3 text-sm text-slate-500 text-center">
-                        No underwriters found
-                      </div>
-                    ) : (
-                      underwriters.map(user => (
-                        <div
-                          key={user.userId}
-                          onClick={() => handleSelectUnderwriter(user)}
-                          className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="font-medium text-slate-900">
-                                {user.fullName ||
-                                  `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
-                                  user.username}
-                              </div>
-                              <div className="text-sm text-slate-500">
-                                {user.email} • {user.userType || 'Underwriter'}
-                              </div>
-                            </div>
-                            <div className="text-xs text-slate-400">{user.status || 'Active'}</div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {formData.assignToUserId && !showDropdown && (
-                  <p className="text-sm text-green-600 mt-1">✓ Underwriter selected</p>
-                )}
-              </div>
+            <>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Assignment Notes
-                </label>
-                <textarea
-                  value={formData.notes || ''}
-                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                  placeholder="Add any notes about this assignment..."
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
+                <FieldLabel htmlFor="assign-underwriter" required>
+                  Assign to underwriter
+                </FieldLabel>
+                <div className="relative">
+                  <input
+                    id="assign-underwriter"
+                    type="text"
+                    role="combobox"
+                    aria-expanded={showDropdown}
+                    aria-controls={listboxId}
+                    aria-autocomplete="list"
+                    aria-activedescendant={
+                      activeOption >= 0 && underwriters[activeOption]
+                        ? `${listboxId}-${activeOption}`
+                        : undefined
+                    }
+                    aria-required="true"
+                    aria-invalid={fieldErrors.assignToUserId ? true : undefined}
+                    aria-describedby={
+                      [
+                        fieldErrors.assignToUserId ? 'assign-underwriter-error' : '',
+                        'assign-underwriter-hint',
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                    autoComplete="off"
+                    placeholder="Search underwriters by name"
+                    value={searchQuery}
+                    onChange={e => handleSearchChange(e.target.value)}
+                    onFocus={() => setShowDropdown(true)}
+                    onBlur={() => setShowDropdown(false)}
+                    onKeyDown={handleComboboxKeyDown}
+                    className={fieldCls}
+                    style={fieldErrors.assignToUserId ? fieldErrorStyle : fieldStyle}
+                  />
+
+                  {showDropdown && (searchLoading || searchError || underwriters.length === 0) && (
+                    <div
+                      className="absolute z-10 mt-1 w-full rounded-2xl px-4 py-3 shadow-lg"
+                      style={{
+                        backgroundColor: 'var(--rm-card)',
+                        border: '1px solid var(--rm-border)',
+                      }}
+                    >
+                      {searchLoading ? (
+                        <p className="text-sm" role="status" style={{ color: 'var(--rm-text-muted)' }}>
+                          Loading underwriters…
+                        </p>
+                      ) : searchError ? (
+                        <div>
+                          <p role="alert" className="text-sm" style={{ color: '#b91c1c' }}>
+                            {searchError}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => loadUnderwriters(searchQuery)}
+                            className="mt-2 text-sm font-medium hover:underline"
+                            style={{ color: 'var(--rm-accent)' }}
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          No underwriters found
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {showDropdown && !searchLoading && !searchError && underwriters.length > 0 && (
+                    <ul
+                      id={listboxId}
+                      role="listbox"
+                      aria-label="Available underwriters"
+                      className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-2xl py-1 shadow-lg"
+                      style={{
+                        backgroundColor: 'var(--rm-card)',
+                        border: '1px solid var(--rm-border)',
+                      }}
+                    >
+                      {underwriters.map((u, i) => {
+                        const name =
+                          u.fullName ||
+                          `${u.firstName || ''} ${u.lastName || ''}`.trim() ||
+                          u.username;
+                        const selected = formData.assignToUserId === u.userId;
+                        return (
+                          <li
+                            key={u.userId}
+                            id={`${listboxId}-${i}`}
+                            role="option"
+                            aria-selected={selected}
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              handleSelectUnderwriter(u);
+                            }}
+                            onMouseEnter={() => setActiveOption(i)}
+                            className="cursor-pointer px-4 py-3"
+                            style={{
+                              backgroundColor:
+                                activeOption === i ? 'var(--rm-input)' : 'transparent',
+                            }}
+                          >
+                            <span className="flex items-start justify-between gap-3">
+                              <span className="min-w-0">
+                                <span
+                                  className="block truncate text-base font-medium"
+                                  style={{ color: 'var(--rm-text)' }}
+                                >
+                                  {name}
+                                </span>
+                                <span className="block truncate text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                                  {u.email}
+                                  {u.userType ? ` · ${u.userType}` : ''}
+                                </span>
+                              </span>
+                              {selected && (
+                                <span
+                                  className="shrink-0 text-sm font-medium"
+                                  style={{ color: 'var(--rm-accent)' }}
+                                >
+                                  Selected
+                                </span>
+                              )}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                <p id="assign-underwriter-hint" className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  {formData.assignToUserId
+                    ? 'Underwriter selected.'
+                    : 'Type to search, then use the arrow keys and Enter to choose.'}
+                </p>
+                <FieldError id="assign-underwriter-error" message={fieldErrors.assignToUserId} />
               </div>
-            </div>
+
+              <TextAreaField
+                id="assign-notes"
+                label="Assignment notes"
+                rows={3}
+                value={String(formData.notes ?? '')}
+                onChange={e => set('notes', e.target.value)}
+                placeholder="Add any context about this assignment"
+              />
+            </>
           )}
 
           {type === 'return' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Return Reason *
-                </label>
-                <textarea
-                  value={formData.reason || ''}
-                  onChange={e => setFormData({ ...formData, reason: e.target.value })}
-                  rows={4}
-                  required
-                  placeholder="Explain what needs to be corrected..."
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-            </div>
+            <TextAreaField
+              id="return-reason"
+              label="Return reason"
+              required
+              rows={4}
+              value={String(formData.reason ?? '')}
+              onChange={e => set('reason', e.target.value)}
+              error={fieldErrors.reason}
+              placeholder="Explain what needs to be corrected"
+            />
           )}
 
           {type === 'note' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Note Type</label>
-                <select
-                  value={formData.noteType || 'ADDITIONAL_INFO'}
-                  onChange={e => setFormData({ ...formData, noteType: e.target.value })}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                >
-                  <option value="ADDITIONAL_INFO">Additional Information</option>
-                  <option value="CORRECTION">Correction/Update</option>
-                  <option value="DOCUMENT_UPDATE">Document Update</option>
-                  <option value="CUSTOMER_UPDATE">Customer Update</option>
-                  <option value="URGENT">Urgent Note</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Note/Message *
-                </label>
-                <textarea
-                  value={formData.noteContent || ''}
-                  onChange={e => setFormData({ ...formData, noteContent: e.target.value })}
-                  rows={5}
-                  required
-                  placeholder="Enter additional information or corrections for the reviewer..."
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-              <p className="text-sm text-slate-500">
-                This note will be visible to the reviewer and added to the application history.
-              </p>
-            </div>
+            <>
+              <SelectField
+                id="note-type"
+                label="Note type"
+                value={String(formData.noteType ?? 'ADDITIONAL_INFO')}
+                onChange={e => set('noteType', e.target.value)}
+              >
+                <option value="ADDITIONAL_INFO">Additional information</option>
+                <option value="CORRECTION">Correction or update</option>
+                <option value="DOCUMENT_UPDATE">Document update</option>
+                <option value="CUSTOMER_UPDATE">Customer update</option>
+                <option value="URGENT">Urgent note</option>
+              </SelectField>
+              <TextAreaField
+                id="note-content"
+                label="Note"
+                required
+                rows={5}
+                value={String(formData.noteContent ?? '')}
+                onChange={e => set('noteContent', e.target.value)}
+                error={fieldErrors.noteContent}
+                hint="Visible to the reviewer and stored in the application history."
+                placeholder="Enter additional information or corrections for the reviewer"
+              />
+            </>
           )}
 
           {type === 'cancel' && (
-            <div className="space-y-4">
-              <p className="text-slate-600">
-                Are you sure you want to cancel this draft application? This action cannot be
-                undone.
+            <>
+              <p className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                Cancelling closes this draft application permanently. This cannot be undone.
               </p>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Reason for Cancellation (optional)
-                </label>
-                <textarea
-                  value={formData.reason || ''}
-                  onChange={e => setFormData({ ...formData, reason: e.target.value })}
-                  rows={3}
-                  placeholder="Provide a reason for cancellation..."
-                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#7f2b7b] focus:border-[#7f2b7b]"
-                />
-              </div>
-            </div>
+              <TextAreaField
+                id="cancel-reason"
+                label="Reason for cancellation"
+                rows={3}
+                value={String(formData.reason ?? '')}
+                onChange={e => set('reason', e.target.value)}
+                hint="Optional, but it is recorded on the audit trail."
+                placeholder="Provide a reason for cancellation"
+              />
+            </>
           )}
 
-          <div className="flex gap-3 mt-6">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="flex-1 rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{
+                backgroundColor: 'var(--rm-input)',
+                color: 'var(--rm-text-secondary)',
+              }}
             >
-              Cancel
+              Keep editing
             </button>
             <button
               type="submit"
               disabled={loading}
-              className={`flex-1 px-4 py-2 rounded-lg text-white disabled:opacity-50 flex items-center justify-center gap-2 ${
-                type === 'reject' || type === 'return' || type === 'cancel'
-                  ? 'bg-red-600 hover:bg-red-700'
-                  : type === 'note'
-                    ? 'bg-indigo-600 hover:bg-indigo-700'
-                    : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{
+                backgroundColor: destructive ? '#dc2626' : 'var(--rm-accent)',
+              }}
             >
               {loading && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                  aria-hidden="true"
+                />
               )}
-              {loading ? 'Processing...' : 'Confirm'}
+              {loading ? 'Working…' : confirmLabel[type]}
             </button>
           </div>
+          {loading && (
+            <p className="sr-only" role="status">
+              Saving, please wait
+            </p>
+          )}
         </form>
       </div>
     </div>
   );
 }
 
-// Helper to format role name for display
-const formatRoleName = (role: string): string => {
-  return role
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, c => c.toUpperCase());
-};
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+const TABS = [
+  { id: 'workflow', label: 'Loan workflow' },
+  { id: 'solicitor', label: 'Solicitor and legal' },
+  { id: 'ai-summary', label: 'AI summary' },
+  { id: 'credit-memo', label: 'Credit memo' },
+] as const;
 
-// Helper to get effective status - status and lomsStatus are now unified
-const getEffectiveStatus = (app: ApplicationResponse | null): string => {
-  if (!app) return '';
-  return app.status || 'DRAFT';
-};
+type MainTab = (typeof TABS)[number]['id'];
 
-// Helper to format status for display
-const formatStatus = (status: string): string => {
-  return status.replace(/_/g, ' ');
-};
-
+/* ── Page ───────────────────────────────────────────────────────────── */
 export default function ApplicationDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -421,23 +829,24 @@ export default function ApplicationDetailPage() {
 
   const [application, setApplication] = useState<ApplicationResponse | null>(null);
   const [notes, setNotes] = useState<ApplicationNote[]>([]);
+  const [notesUnavailable, setNotesUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [mainTab, setMainTab] = useState<'workflow' | 'solicitor' | 'ai-summary' | 'credit-memo'>('workflow');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [mainTab, setMainTab] = useState<MainTab>('workflow');
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
-    type: 'approve' | 'reject' | 'assign' | 'return' | 'note' | 'cancel' | null;
+    type: ModalType | null;
     title: string;
-  }>({
-    isOpen: false,
-    type: null,
-    title: '',
-  });
+  }>({ isOpen: false, type: null, title: '' });
 
   useEffect(() => {
     fetchApplication();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
   const fetchApplication = async () => {
@@ -447,16 +856,18 @@ export default function ApplicationDetailPage() {
       const data = await applicationService.getApplication(applicationId);
       setApplication(data);
 
-      // Fetch notes for this application
+      // Notes are secondary — a failure must not blank the page.
       try {
         const notesData = await applicationService.getNotes(applicationId);
         setNotes(notesData);
+        setNotesUnavailable(false);
       } catch (noteErr) {
         console.error('Failed to fetch notes:', noteErr);
         setNotes([]);
+        setNotesUnavailable(true);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load application');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load application');
       console.error('Error fetching application:', err);
     } finally {
       setLoading(false);
@@ -465,140 +876,101 @@ export default function ApplicationDetailPage() {
 
   const handleSubmit = async () => {
     if (!application) return;
-
     try {
       setActionLoading(true);
+      setActionError(null);
       await applicationService.submitApplication(applicationId);
       await fetchApplication();
-      toast.success('Application submitted successfully!');
-    } catch (err: any) {
-      toast.error(`Error: ${err.message}`);
+      toast.success('Application submitted');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to submit application';
+      setActionError(message);
     } finally {
       setActionLoading(false);
     }
   };
 
-  const openModal = (
-    type: 'approve' | 'reject' | 'assign' | 'return' | 'note' | 'cancel',
-    title: string
-  ) => {
+  const openModal = (type: ModalType, title: string) => {
+    setModalError(null);
     setModalState({ isOpen: true, type, title });
   };
 
   const closeModal = () => {
+    setModalError(null);
     setModalState({ isOpen: false, type: null, title: '' });
   };
 
-  const handleModalConfirm = async (data: any) => {
+  const handleModalConfirm = async (data: Record<string, unknown>) => {
     if (!application || !modalState.type) return;
 
     try {
       setActionLoading(true);
+      setModalError(null);
 
       switch (modalState.type) {
         case 'approve':
-          await applicationService.approveApplication(applicationId, data);
-          toast.success('Application approved successfully!');
+          await applicationService.approveApplication(applicationId, {
+            approvedAmount: Number(data.approvedAmount),
+            approvedTermMonths: Number(data.approvedTermMonths),
+            approvedInterestRate: Number(data.approvedInterestRate),
+            notes: data.approvalNotes ? String(data.approvalNotes) : undefined,
+          });
+          toast.success('Application approved');
           break;
         case 'reject':
-          await applicationService.rejectApplication(applicationId, data);
-          toast.info('Application rejected.');
+          await applicationService.rejectApplication(applicationId, {
+            rejectionReason: String(data.rejectionReason),
+            notes: String(data.rejectionDetails || ''),
+          });
+          toast.info('Application rejected');
           break;
         case 'assign':
           await applicationService.assignApplication(applicationId, {
-            assignToUserId: data.assignToUserId,
+            assignToUserId: String(data.assignToUserId),
           });
-          // If notes were provided with the assignment, add them as a note
-          if (data.notes && data.notes.trim()) {
+          if (data.notes && String(data.notes).trim()) {
             await applicationService.addNote(applicationId, {
               noteType: 'ASSIGNMENT_NOTE',
-              content: data.notes,
+              content: String(data.notes),
             });
           }
-          toast.success('Application assigned successfully!');
+          toast.success('Application assigned');
           break;
         case 'return':
-          await applicationService.returnForCorrections(applicationId, data.reason);
-          toast.warning('Application returned for corrections.');
+          await applicationService.returnForCorrections(applicationId, String(data.reason));
+          toast.warning('Application returned for corrections');
           break;
         case 'note':
           await applicationService.addNote(applicationId, {
-            noteType: data.noteType || 'ADDITIONAL_INFO',
-            content: data.noteContent,
+            noteType: String(data.noteType || 'ADDITIONAL_INFO'),
+            content: String(data.noteContent),
           });
-          toast.success('Note added successfully!');
+          toast.success('Note added');
           break;
         case 'cancel':
           await applicationService.cancelApplication(
             applicationId,
-            data.reason || 'Cancelled by user'
+            data.reason ? String(data.reason) : 'Cancelled by user'
           );
-          toast.info('Application cancelled successfully.');
+          toast.info('Application cancelled');
           break;
       }
 
       closeModal();
       await fetchApplication();
-    } catch (err: any) {
-      toast.error(`Error: ${err.message}`);
+    } catch (err: unknown) {
+      // Scoped to the dialog: typed input is preserved and the page stays put.
+      setModalError(err instanceof Error ? err.message : 'That action could not be completed');
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const getStatusColor = (status: string) => {
-    const colors: { [key: string]: string } = {
-      DRAFT: 'bg-gray-100 text-slate-800',
-      SUBMITTED: 'bg-blue-100 text-blue-800',
-      PENDING_KYC: 'bg-orange-100 text-orange-800',
-      KYC_APPROVED: 'bg-teal-100 text-teal-800',
-      KYC_REJECTED: 'bg-red-100 text-red-800',
-      PENDING_DOCUMENTS: 'bg-orange-100 text-orange-800',
-      DOCUMENTS_RECEIVED: 'bg-teal-100 text-teal-800',
-      PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-800',
-      CREDIT_APPROVED: 'bg-emerald-100 text-emerald-800',
-      CREDIT_DECLINED: 'bg-red-100 text-red-800',
-      PENDING_UNDERWRITING: 'bg-indigo-100 text-indigo-800',
-      IN_UNDERWRITING: 'bg-indigo-100 text-indigo-800',
-      UNDERWRITING_APPROVED: 'bg-emerald-100 text-emerald-800',
-      UNDERWRITING_DECLINED: 'bg-red-100 text-red-800',
-      REFERRED_TO_SENIOR: 'bg-yellow-100 text-yellow-800',
-      REFERRED_TO_UNDERWRITER: 'bg-amber-100 text-amber-800',
-      PENDING_DECISION: 'bg-purple-100 text-purple-800',
-      APPROVED: 'bg-green-100 text-green-800',
-      DECLINED: 'bg-red-100 text-red-800',
-      OFFER_GENERATED: 'bg-indigo-100 text-indigo-800',
-      OFFER_SENT: 'bg-indigo-100 text-indigo-800',
-      OFFER_ACCEPTED: 'bg-green-100 text-green-800',
-      OFFER_REJECTED: 'bg-red-100 text-red-800',
-      OFFER_EXPIRED: 'bg-gray-100 text-slate-800',
-      OFFER_COUNTERED: 'bg-amber-100 text-amber-800',
-      PENDING_CONDITIONS: 'bg-amber-100 text-amber-800',
-      CONDITIONS_MET: 'bg-teal-100 text-teal-800',
-      PENDING_ESIGN: 'bg-cyan-100 text-cyan-800',
-      ESIGN_IN_PROGRESS: 'bg-cyan-100 text-cyan-800',
-      ESIGN_COMPLETED: 'bg-teal-100 text-teal-800',
-      PENDING_BOOKING: 'bg-amber-100 text-amber-800',
-      BOOKING_IN_PROGRESS: 'bg-amber-100 text-amber-800',
-      BOOKED: 'bg-emerald-100 text-emerald-800',
-      PENDING_DISBURSEMENT: 'bg-lime-100 text-lime-800',
-      DISBURSEMENT_IN_PROGRESS: 'bg-lime-100 text-lime-800',
-      DISBURSED: 'bg-emerald-100 text-emerald-800',
-      RETURNED: 'bg-orange-100 text-orange-800',
-      CANCELLED: 'bg-gray-100 text-slate-800',
-      WITHDRAWN: 'bg-gray-100 text-slate-800',
-      EXPIRED: 'bg-gray-100 text-slate-800',
-      ACTIVE: 'bg-green-100 text-green-800',
-      CLOSED: 'bg-gray-100 text-slate-800',
-    };
-    return colors[status] || 'bg-gray-100 text-slate-800';
   };
 
   // Check if current user is the creator of the application
   const isApplicationCreator = currentUser?.userId === application?.createdByUserId;
 
   // Get the effective status (lomsStatus takes precedence)
-  const effectiveStatus = getEffectiveStatus(application);
+  const effectiveStatus = application?.status || 'DRAFT';
 
   // Can submit: DRAFT status only (initial submission)
   const canSubmit = effectiveStatus === 'DRAFT' && isApplicationCreator;
@@ -607,15 +979,13 @@ export default function ApplicationDetailPage() {
   const canAssign =
     (effectiveStatus === 'SUBMITTED' || effectiveStatus === 'RETURNED') && isApplicationCreator;
 
-  // Check if current user is the assigned reviewer
   // Segregation of duties: even if assigned, the creator cannot review their own application
-  const isAssignedReviewer =
+  const isAssignedReviewer = !!(
     application?.assignedToUserId &&
     currentUser?.userId === application.assignedToUserId &&
-    !isApplicationCreator;
+    !isApplicationCreator
+  );
 
-  // Only the assigned reviewer can approve/reject/return when under review
-  // Include both legacy and LOMS statuses for review states
   const isUnderReviewStatus = [
     'PENDING_KYC',
     'PENDING_CREDIT_CHECK',
@@ -626,13 +996,9 @@ export default function ApplicationDetailPage() {
     'PENDING_DECISION',
   ].includes(effectiveStatus);
 
-  // Only assigned reviewer can approve
   const canApprove = isUnderReviewStatus && isAssignedReviewer;
-
-  // Application creator (RM) can cancel DRAFT applications
   const canCancel = effectiveStatus === 'DRAFT' && isApplicationCreator;
 
-  // Application creator (RM) can withdraw non-draft applications before final decision
   const isNotFinalStatus = ![
     'APPROVED',
     'DECLINED',
@@ -650,7 +1016,6 @@ export default function ApplicationDetailPage() {
   ].includes(effectiveStatus);
   const canWithdraw = isNotFinalStatus && isApplicationCreator && effectiveStatus !== 'DRAFT';
 
-  // Reviewer's reject (from review perspective)
   const canReviewerReject = isUnderReviewStatus && isAssignedReviewer;
 
   const canReturn =
@@ -663,10 +1028,8 @@ export default function ApplicationDetailPage() {
       'PENDING_DECISION',
     ].includes(effectiveStatus) && isAssignedReviewer;
 
-  // Application creator can add notes while under review (to send info to reviewer)
   const canAddNote = isUnderReviewStatus && isApplicationCreator;
 
-  // Application creator can edit the application when in DRAFT, RETURNED, or even UNDER_REVIEW
   const canEdit =
     [
       'DRAFT',
@@ -677,187 +1040,245 @@ export default function ApplicationDetailPage() {
       'IN_UNDERWRITING',
     ].includes(effectiveStatus) && isApplicationCreator;
 
+  /* One primary action per page — the first constructive action wins;
+     destructive actions are always rendered as secondary. */
+  const availableActions: {
+    key: string;
+    label: string;
+    destructive?: boolean;
+    run: () => void;
+  }[] = [
+    { key: 'approve', label: 'Approve', run: () => openModal('approve', 'Approve application') },
+    { key: 'submit', label: 'Submit application', run: handleSubmit },
+    { key: 'assign', label: 'Assign to underwriter', run: () => openModal('assign', 'Assign application') },
+    { key: 'return', label: 'Return for corrections', run: () => openModal('return', 'Return for corrections') },
+    { key: 'edit', label: 'Edit application', run: () => router.push(`/dashboard/applications/${applicationId}/edit`) },
+    { key: 'note', label: 'Add note', run: () => openModal('note', 'Add note for reviewer') },
+    {
+      key: 'reject',
+      label: 'Reject',
+      destructive: true,
+      run: () => openModal('reject', 'Reject application'),
+    },
+    {
+      key: 'withdraw',
+      label: 'Withdraw',
+      destructive: true,
+      run: () => openModal('reject', 'Withdraw application'),
+    },
+    {
+      key: 'cancel',
+      label: 'Cancel application',
+      destructive: true,
+      run: () => openModal('cancel', 'Cancel application'),
+    },
+  ];
+  const permitted: Record<string, boolean> = {
+    approve: !!canApprove,
+    submit: !!canSubmit,
+    assign: !!canAssign,
+    return: !!canReturn,
+    edit: !!canEdit,
+    note: !!canAddNote,
+    reject: !!canReviewerReject,
+    withdraw: !!canWithdraw,
+    cancel: !!canCancel,
+  };
+  const visibleActions = availableActions.filter(a => permitted[a.key]);
+  const primaryAction = visibleActions.find(a => !a.destructive);
+  const secondaryActions = visibleActions.filter(a => a !== primaryAction);
+
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const move = (next: number) => {
+      e.preventDefault();
+      const target = (next + TABS.length) % TABS.length;
+      setMainTab(TABS[target].id);
+      tabRefs.current[target]?.focus();
+    };
+    if (e.key === 'ArrowRight') move(index + 1);
+    else if (e.key === 'ArrowLeft') move(index - 1);
+    else if (e.key === 'Home') move(0);
+    else if (e.key === 'End') move(TABS.length - 1);
+  };
+
+  const customerName = application
+    ? application.customer?.businessName ||
+      `${application.customer?.firstName || ''} ${application.customer?.lastName || ''}`.trim() ||
+      'Customer record unavailable'
+    : '';
+
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="rounded-2xl bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-8 animate-pulse">
-          <div className="h-5 bg-white/20 rounded-xl w-32 mb-3" />
-          <div className="h-7 bg-white/20 rounded-xl w-64" />
-          <div className="h-4 bg-white/10 rounded-xl w-48 mt-2" />
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <div className="h-4 w-40 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+          <div className="mt-4 h-8 w-72 max-w-full rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+          <div className="mt-3 h-4 w-56 max-w-full rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-5">
-            {[1, 2, 3].map(i => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-3 animate-pulse"
-              >
-                <div className="h-5 bg-slate-200/70 rounded-xl w-40" />
-                <div className="h-4 bg-slate-100 rounded-xl" />
-                <div className="h-4 bg-slate-100 rounded-xl w-3/4" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-6">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+                <div className="h-6 w-44 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+                <div className="mt-5 space-y-3">
+                  <div className="h-4 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+                  <div className="h-4 w-3/4 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+                </div>
               </div>
             ))}
           </div>
-          <div className="space-y-5">
-            {[1, 2].map(i => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-3 animate-pulse"
-              >
-                <div className="h-5 bg-slate-200/70 rounded-xl w-32" />
-                <div className="h-4 bg-slate-100 rounded-xl" />
+          <div className="space-y-6">
+            {[0, 1].map(i => (
+              <div key={i} className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+                <div className="h-6 w-32 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+                <div className="mt-5 h-4 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
               </div>
             ))}
           </div>
         </div>
+        <p className="sr-only" role="status">
+          Loading application
+        </p>
       </div>
     );
   }
 
   if (error || !application) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200/60 rounded-2xl p-6 text-center">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center mb-3">
-            <svg
-              className="w-6 h-6 text-red-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+      <div className="mx-auto max-w-3xl space-y-6">
+        <div
+          role="alert"
+          className="rounded-3xl p-6 sm:p-7 text-center"
+          style={{ backgroundColor: 'var(--rm-card)' }}
+        >
+          <div
+            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+            style={{ backgroundColor: 'rgba(239,68,68,0.13)' }}
+          >
+            <svg className="w-7 h-7" style={{ color: '#dc2626' }} aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
               />
             </svg>
           </div>
-          <p className="text-red-700 font-medium">{error || 'Application not found'}</p>
+          <h1 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            We could not open this application
+          </h1>
+          <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            {error || 'Application not found'}
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={fetchApplication}
+              className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: 'var(--rm-accent)' }}
+            >
+              Try again
+            </button>
+            <Link
+              href="/dashboard/applications"
+              className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+            >
+              Back to applications
+            </Link>
+          </div>
         </div>
-        <button
-          onClick={() => router.push('/dashboard/applications')}
-          className="mt-4 text-[#7f2b7b] hover:text-[#6b2568] font-medium text-sm"
-        >
-          ← Back to Applications
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Hero Header */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-6 sm:p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-white/5 translate-y-1/2" />
-        <div className="relative">
-          <button
-            onClick={() => router.push('/dashboard/applications')}
-            className="text-white/70 hover:text-white text-sm mb-3 inline-flex items-center gap-1 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Back to Applications
-          </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">
-                Application {application.applicationNumber}
-              </h1>
-              <p className="text-white/60 mt-1">
-                Created on {new Date(application.createdAt).toLocaleDateString()}
-              </p>
-            </div>
-            <StatusBadge status={effectiveStatus} />
+    <div className="mx-auto max-w-7xl space-y-6">
+      {/* ── Header ── */}
+      <header className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <Link
+          href="/dashboard/applications"
+          className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+          style={{ color: 'var(--rm-text-muted)' }}
+        >
+          <svg className="w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to applications
+        </Link>
+
+        <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Application {application.applicationNumber}
+            </h1>
+            <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              {customerName}
+              {application.product?.productName ? ` · ${application.product.productName}` : ''} ·
+              Created {new Date(application.createdAt).toLocaleDateString()}
+            </p>
           </div>
+          <StatusBadge status={effectiveStatus} />
         </div>
-      </div>
+      </header>
 
       {/* Info banner for RM when application is under review by someone else */}
       {isUnderReviewStatus && !isAssignedReviewer && application.assignedToUser && (
-        <div className="bg-blue-50 border border-blue-200/60 rounded-2xl p-4">
-          <div className="flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-blue-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
+        <div className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-accent-muted)' }}>
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--rm-accent)' }} aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-blue-800">
-              This application is currently being reviewed by{' '}
-              <span className="font-semibold">
+            <p className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+              This application is being reviewed by{' '}
+              <span className="font-semibold" style={{ color: 'var(--rm-text)' }}>
                 {application.assignedToUser.firstName} {application.assignedToUser.lastName}
               </span>
               {application.assignedToUser.roles && application.assignedToUser.roles.length > 0 && (
                 <span> ({formatRoleName(application.assignedToUser.roles[0])})</span>
               )}
-              . Approval is pending review completion, but you can still withdraw if needed.
+              . Approval waits on that review, and you can still withdraw if you need to.
             </p>
           </div>
         </div>
       )}
 
-      {/* Main panel tabs: Workflow | Solicitor / Legal */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-        <button
-          onClick={() => setMainTab('workflow')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-            mainTab === 'workflow'
-              ? 'bg-white text-[#7f2b7b] shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Loan Workflow
-        </button>
-        <button
-          onClick={() => setMainTab('solicitor')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-            mainTab === 'solicitor'
-              ? 'bg-white text-[#7f2b7b] shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Solicitor / Legal
-        </button>
-        <button
-          onClick={() => setMainTab('ai-summary')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-            mainTab === 'ai-summary'
-              ? 'bg-white text-[#7f2b7b] shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          AI Summary
-        </button>
-        <button
-          onClick={() => setMainTab('credit-memo')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-            mainTab === 'credit-memo'
-              ? 'bg-white text-[#7f2b7b] shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          Credit Memo
-        </button>
+      {/* ── Section tabs ── */}
+      <div
+        role="tablist"
+        aria-label="Application sections"
+        className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-full p-1"
+        style={{ backgroundColor: 'var(--rm-input)' }}
+      >
+        {TABS.map((tab, i) => {
+          const selected = mainTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              ref={el => {
+                tabRefs.current[i] = el;
+              }}
+              type="button"
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-selected={selected}
+              aria-controls={`panel-${tab.id}`}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setMainTab(tab.id)}
+              onKeyDown={e => onTabKeyDown(e, i)}
+              className="whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: selected ? 'var(--rm-card)' : 'transparent',
+                color: selected ? 'var(--rm-text)' : 'var(--rm-text-muted)',
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* LOMS Workflow Panel - Loan Origination Workflow */}
       {mainTab === 'workflow' && (
-        <div>
+        <div role="tabpanel" id="panel-workflow" aria-labelledby="tab-workflow">
           <ApplicationWorkflowPanel
             applicationId={applicationId as string}
             applicationStatus={effectiveStatus}
@@ -873,454 +1294,502 @@ export default function ApplicationDetailPage() {
         </div>
       )}
 
-      {/* Solicitor / Legal Tab */}
       {mainTab === 'solicitor' && (
-        <SolicitorTab applicationId={applicationId} applicationStatus={effectiveStatus} />
-      )}
-
-      {/* AI Summary Tab */}
-      {mainTab === 'ai-summary' && (
-        <ApplicationAiSummaryTab applicationId={applicationId} bankId={application.bankId} />
-      )}
-
-      {/* Credit Memo Tab */}
-      {mainTab === 'credit-memo' && (
-        <CreditMemoTab applicationId={applicationId} bankId={application.bankId} />
-      )}
-
-      {/* Legacy Actions */}
-      {(canSubmit ||
-        canAssign ||
-        canApprove ||
-        canReviewerReject ||
-        canWithdraw ||
-        canCancel ||
-        canReturn ||
-        canAddNote ||
-        canEdit) && (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5">
-          <h2 className="text-lg font-semibold text-slate-900 mb-3">Actions</h2>
-          <div className="flex gap-3 flex-wrap">
-            {canEdit && (
-              <button
-                onClick={() => router.push(`/dashboard/applications/${applicationId}/edit`)}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-[#7f2b7b] text-white rounded-xl hover:bg-[#6b2568] disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Edit Application
-              </button>
-            )}
-
-            {canSubmit && (
-              <button
-                onClick={handleSubmit}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-[#7f2b7b] text-white rounded-xl hover:bg-[#6b2568] disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Submit Application
-              </button>
-            )}
-
-            {canAssign && (
-              <button
-                onClick={() => openModal('assign', 'Assign Application')}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-violet-600 text-white rounded-xl hover:bg-violet-700 disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Assign to Underwriter
-              </button>
-            )}
-
-            {canApprove && (
-              <button
-                onClick={() => openModal('approve', 'Approve Application')}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Approve
-              </button>
-            )}
-
-            {canReviewerReject && (
-              <button
-                onClick={() => openModal('reject', 'Reject Application')}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Reject
-              </button>
-            )}
-
-            {canWithdraw && (
-              <button
-                onClick={() => openModal('reject', 'Withdraw Application')}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-slate-600 text-white rounded-xl hover:bg-slate-700 disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Withdraw
-              </button>
-            )}
-
-            {canCancel && (
-              <button
-                onClick={() => openModal('cancel', 'Cancel Application')}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Cancel Application
-              </button>
-            )}
-
-            {canReturn && (
-              <button
-                onClick={() => openModal('return', 'Return for Corrections')}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Return for Corrections
-              </button>
-            )}
-
-            {canAddNote && (
-              <button
-                onClick={() => openModal('note', 'Add Note for Reviewer')}
-                disabled={actionLoading}
-                className="px-4 py-2 bg-[#7f2b7b] text-white rounded-xl hover:bg-[#6b2568] disabled:opacity-50 text-sm font-medium transition-colors"
-              >
-                Add Note
-              </button>
-            )}
-          </div>
+        <div role="tabpanel" id="panel-solicitor" aria-labelledby="tab-solicitor">
+          <SolicitorTab applicationId={applicationId} applicationStatus={effectiveStatus} />
         </div>
       )}
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
+      {mainTab === 'ai-summary' && (
+        <div role="tabpanel" id="panel-ai-summary" aria-labelledby="tab-ai-summary">
+          <ApplicationAiSummaryTab applicationId={applicationId} bankId={application.bankId} />
+        </div>
+      )}
+
+      {mainTab === 'credit-memo' && (
+        <div role="tabpanel" id="panel-credit-memo" aria-labelledby="tab-credit-memo">
+          <CreditMemoTab applicationId={applicationId} bankId={application.bankId} />
+        </div>
+      )}
+
+      {/* ── Actions ── */}
+      {visibleActions.length > 0 && (
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Actions
+          </h2>
+          {actionError && (
+            <p
+              role="alert"
+              className="mt-4 rounded-2xl px-4 py-3 text-sm"
+              style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: '#b91c1c' }}
+            >
+              {actionError}
+            </p>
+          )}
+          <div className="mt-5 flex flex-wrap gap-3">
+            {primaryAction && (
+              <button
+                type="button"
+                onClick={primaryAction.run}
+                disabled={actionLoading}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                {primaryAction.label}
+              </button>
+            )}
+            {secondaryActions.map(a => (
+              <button
+                key={a.key}
+                type="button"
+                onClick={a.run}
+                disabled={actionLoading}
+                className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={
+                  a.destructive
+                    ? { backgroundColor: 'rgba(239,68,68,0.12)', color: '#b91c1c' }
+                    : { backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }
+                }
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          {actionLoading && (
+            <p className="sr-only" role="status">
+              Working, please wait
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* ── Content grid ── */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {/* Application Info */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Application Information</h2>
-            <div className="grid grid-cols-2 gap-4">
+          {/* Application information */}
+          <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: 'var(--rm-text)' }}>
+              Application information
+            </h2>
+            <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
-                <p className="text-sm text-slate-500">Application Number</p>
-                <p className="text-slate-900 font-medium">{application.applicationNumber}</p>
+                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Application number
+                </dt>
+                <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  {application.applicationNumber}
+                </dd>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Status</p>
-                <p className="text-slate-900 font-medium">{formatStatus(effectiveStatus)}</p>
+                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Status
+                </dt>
+                <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  {statusLabel(effectiveStatus)}
+                </dd>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Channel</p>
-                <p className="text-slate-900 font-medium">
-                  {application.channel.replace(/_/g, ' ')}
-                </p>
+                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Channel
+                </dt>
+                <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  {application.channel ? application.channel.replace(/_/g, ' ') : '—'}
+                </dd>
               </div>
               {application.currentStage && (
                 <div>
-                  <p className="text-sm text-slate-500">Current Stage</p>
-                  <p className="text-slate-900 font-medium">
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Current stage
+                  </dt>
+                  <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
                     {application.currentStage.replace(/_/g, ' ')}
-                  </p>
+                  </dd>
                 </div>
               )}
-            </div>
-          </div>
+            </dl>
+          </section>
 
-          {/* Customer & Financial Profile */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-slate-900">Customer & Financial Profile</h2>
-              <div className="flex items-center gap-3">
+          {/* Customer & financial profile */}
+          <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+              <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+                Customer and financial profile
+              </h2>
+              <div className="flex flex-wrap items-center gap-3">
                 <Link
                   href={`/dashboard/applications?customerId=${application.customerId}`}
-                  className="text-sm text-slate-500 hover:text-slate-700 font-medium"
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: 'var(--rm-text-muted)' }}
                 >
-                  All Applications →
+                  All applications
                 </Link>
                 <Link
                   href={`/dashboard/customers/${application.customerId}`}
-                  className="inline-flex items-center gap-1.5 text-sm text-[#7f2b7b] hover:text-[#6b2568] font-medium bg-purple-50 px-3 py-1.5 rounded-lg hover:bg-purple-100 transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+                  style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
+                  View full profile
+                  <svg className="w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
-                  View Full Profile →
                 </Link>
               </div>
             </div>
 
-            {/* Basic Details */}
-            <div className="grid grid-cols-2 gap-4 mb-5">
+            <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               {application.customer ? (
                 <>
                   <div>
-                    <p className="text-sm text-slate-500">Customer Name</p>
-                    <p className="text-slate-900 font-medium">
-                      {application.customer.firstName} {application.customer.lastName}
-                    </p>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Customer name
+                    </dt>
+                    <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {customerName}
+                    </dd>
                   </div>
                   {application.customer.businessName && (
                     <div>
-                      <p className="text-sm text-slate-500">Business Name</p>
-                      <p className="text-slate-900 font-medium">
+                      <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                        Business name
+                      </dt>
+                      <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
                         {application.customer.businessName}
-                      </p>
+                      </dd>
                     </div>
                   )}
                   <div>
-                    <p className="text-sm text-slate-500">Customer Number</p>
-                    <p className="text-slate-900 font-medium">
-                      {application.customer.customerNumber || '-'}
-                    </p>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Customer number
+                    </dt>
+                    <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {application.customer.customerNumber || '—'}
+                    </dd>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Email</p>
-                    <p className="text-slate-900 font-medium">
-                      {application.customer.email || '-'}
-                    </p>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Email
+                    </dt>
+                    <dd className="mt-1 text-base font-medium break-words" style={{ color: 'var(--rm-text)' }}>
+                      {application.customer.email || '—'}
+                    </dd>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Phone</p>
-                    <p className="text-slate-900 font-medium">
-                      {application.customer.phoneNumber || '-'}
-                    </p>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Phone
+                    </dt>
+                    <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {application.customer.phoneNumber || '—'}
+                    </dd>
                   </div>
                 </>
               ) : (
-                <div className="col-span-2">
-                  <p className="text-sm text-slate-500">Customer ID</p>
-                  <p className="text-slate-900 font-medium">{application.customerId}</p>
+                <div className="sm:col-span-2">
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Customer ID
+                  </dt>
+                  <dd className="mt-1 text-base font-medium break-all" style={{ color: 'var(--rm-text)' }}>
+                    {application.customerId}
+                  </dd>
                 </div>
               )}
-            </div>
+            </dl>
 
-            {/* Financial & Employment — combined sub-section */}
             {(application.statedAnnualIncome ||
               application.statedMonthlyIncome ||
               application.employmentStatus) && (
-              <div className="border-t border-slate-100 pt-5">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 rounded-xl p-4">
-                  {application.statedAnnualIncome && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 mb-0.5">Annual Income</p>
-                      <p className="text-slate-900 font-semibold">
-                        {formatCurrency(application.statedAnnualIncome)}
-                      </p>
-                    </div>
-                  )}
-                  {application.statedMonthlyIncome && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 mb-0.5">Monthly Income</p>
-                      <p className="text-slate-900 font-semibold">
-                        {formatCurrency(application.statedMonthlyIncome)}
-                      </p>
-                    </div>
-                  )}
-                  {application.statedMonthlyExpenses && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 mb-0.5">Monthly Expenses</p>
-                      <p className="text-slate-900 font-semibold">
-                        {formatCurrency(application.statedMonthlyExpenses)}
-                      </p>
-                    </div>
-                  )}
-                  {application.employmentStatus && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 mb-0.5">Employment</p>
-                      <p className="text-slate-900 font-semibold">
-                        {application.employmentStatus.replace(/_/g, ' ')}
-                      </p>
-                    </div>
-                  )}
-                  {application.employerName && (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500 mb-0.5">Employer</p>
-                      <p className="text-slate-900 font-semibold">{application.employerName}</p>
-                    </div>
-                  )}
-                  {application.yearsWithEmployer !== undefined &&
-                    application.yearsWithEmployer > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-slate-500 mb-0.5">Tenure</p>
-                        <p className="text-slate-900 font-semibold">
-                          {application.yearsWithEmployer} years
-                        </p>
-                      </div>
-                    )}
-                </div>
-              </div>
+              <dl
+                className="mt-6 grid grid-cols-2 gap-5 rounded-2xl p-5 md:grid-cols-4"
+                style={{ backgroundColor: 'var(--rm-input)' }}
+              >
+                {application.statedAnnualIncome ? (
+                  <div>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Annual income
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {formatCurrency(application.statedAnnualIncome)}
+                    </dd>
+                  </div>
+                ) : null}
+                {application.statedMonthlyIncome ? (
+                  <div>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Monthly income
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {formatCurrency(application.statedMonthlyIncome)}
+                    </dd>
+                  </div>
+                ) : null}
+                {application.statedMonthlyExpenses ? (
+                  <div>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Monthly expenses
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {formatCurrency(application.statedMonthlyExpenses)}
+                    </dd>
+                  </div>
+                ) : null}
+                {application.employmentStatus ? (
+                  <div>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Employment
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                      {application.employmentStatus.replace(/_/g, ' ')}
+                    </dd>
+                  </div>
+                ) : null}
+                {application.employerName ? (
+                  <div>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Employer
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                      {application.employerName}
+                    </dd>
+                  </div>
+                ) : null}
+                {application.yearsWithEmployer !== undefined && application.yearsWithEmployer > 0 && (
+                  <div>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Tenure
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {application.yearsWithEmployer} years
+                    </dd>
+                  </div>
+                )}
+              </dl>
             )}
-          </div>
+          </section>
 
-          {/* Loan Request */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Loan Request</h2>
-            <div className="grid grid-cols-2 gap-4">
+          {/* Loan request */}
+          <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: 'var(--rm-text)' }}>
+              Loan request
+            </h2>
+            <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
-                <p className="text-sm text-slate-500">Requested Amount</p>
-                <p className="text-slate-900 font-medium text-lg">
+                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Requested amount
+                </dt>
+                <dd className="mt-1 text-xl font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
                   {formatCurrency(application.requestedAmount)}
-                </p>
+                </dd>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Requested Term</p>
-                <p className="text-slate-900 font-medium">
+                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Requested term
+                </dt>
+                <dd className="mt-1 text-base font-medium tabular-nums" style={{ color: 'var(--rm-text)' }}>
                   {application.requestedTermMonths} months
-                </p>
+                </dd>
               </div>
-              {application.requestedInterestRate && (
+              {application.requestedInterestRate != null && (
                 <div>
-                  <p className="text-sm text-slate-500">Interest Rate</p>
-                  <p className="text-slate-900 font-medium">{application.requestedInterestRate}%</p>
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Interest rate
+                  </dt>
+                  <dd className="mt-1 text-base font-medium tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {application.requestedInterestRate}%
+                  </dd>
                 </div>
               )}
               <div>
-                <p className="text-sm text-slate-500">Loan Purpose</p>
-                <p className="text-slate-900 font-medium">
-                  {application.loanPurpose.replace(/_/g, ' ')}
-                </p>
+                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Loan purpose
+                </dt>
+                <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  {application.loanPurpose ? application.loanPurpose.replace(/_/g, ' ') : '—'}
+                </dd>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Product</p>
-                <p className="text-slate-900 font-medium">
-                  {application.product?.productName || 'Home Loan'}
-                </p>
+                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Product
+                </dt>
+                <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  {application.product?.productName || '—'}
+                </dd>
               </div>
-            </div>
+            </dl>
             {application.loanPurposeDescription && (
-              <div className="mt-4">
-                <p className="text-sm text-slate-500">Purpose Description</p>
-                <p className="text-slate-900">{application.loanPurposeDescription}</p>
+              <div className="mt-5">
+                <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Purpose description
+                </p>
+                <p className="mt-1 text-base" style={{ color: 'var(--rm-text)' }}>
+                  {application.loanPurposeDescription}
+                </p>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Approval Details (if approved) */}
-          {application.approvedAmount && (
-            <div className="bg-emerald-50 border border-emerald-200/60 rounded-2xl p-6">
-              <h2 className="text-lg font-semibold text-emerald-900 mb-4">Approval Details</h2>
-              <div className="grid grid-cols-2 gap-4">
+          {/* Approval details */}
+          {application.approvedAmount != null && (
+            <section
+              className="rounded-3xl p-6 sm:p-7"
+              style={{ backgroundColor: TONES.success.bg }}
+            >
+              <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: TONES.success.fg }}>
+                Approval details
+              </h2>
+              <dl className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                 <div>
-                  <p className="text-sm text-green-700">Approved Amount</p>
-                  <p className="text-green-900 font-medium text-lg">
+                  <dt className="text-sm" style={{ color: TONES.success.fg }}>
+                    Approved amount
+                  </dt>
+                  <dd className="mt-1 text-xl font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
                     {formatCurrency(application.approvedAmount)}
-                  </p>
+                  </dd>
                 </div>
                 <div>
-                  <p className="text-sm text-green-700">Approved Term</p>
-                  <p className="text-green-900 font-medium">
-                    {application.approvedTermMonths} months
-                  </p>
+                  <dt className="text-sm" style={{ color: TONES.success.fg }}>
+                    Approved term
+                  </dt>
+                  <dd className="mt-1 text-base font-medium tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {application.approvedTermMonths ?? '—'} months
+                  </dd>
                 </div>
                 <div>
-                  <p className="text-sm text-green-700">Interest Rate</p>
-                  <p className="text-green-900 font-medium">{application.approvedInterestRate}%</p>
+                  <dt className="text-sm" style={{ color: TONES.success.fg }}>
+                    Interest rate
+                  </dt>
+                  <dd className="mt-1 text-base font-medium tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                    {application.approvedInterestRate != null ? `${application.approvedInterestRate}%` : '—'}
+                  </dd>
                 </div>
-              </div>
+              </dl>
               {application.decisionNotes && (
-                <div className="mt-4">
-                  <p className="text-sm text-green-700">Decision Notes</p>
-                  <p className="text-green-900">{application.decisionNotes}</p>
+                <div className="mt-5">
+                  <p className="text-sm" style={{ color: TONES.success.fg }}>
+                    Decision notes
+                  </p>
+                  <p className="mt-1 text-base" style={{ color: 'var(--rm-text)' }}>
+                    {application.decisionNotes}
+                  </p>
                 </div>
               )}
-            </div>
+            </section>
           )}
 
-          {/* Rejection Details (if rejected) */}
+          {/* Rejection details */}
           {application.rejectionReason && (
-            <div className="bg-red-50 border border-red-200/60 rounded-2xl p-6">
-              <h2 className="text-lg font-semibold text-red-900 mb-4">Rejection Details</h2>
-              <div className="space-y-3">
+            <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: TONES.danger.bg }}>
+              <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: TONES.danger.fg }}>
+                Rejection details
+              </h2>
+              <dl className="space-y-4">
                 <div>
-                  <p className="text-sm text-red-700">Reason</p>
-                  <p className="text-red-900 font-medium">{application.rejectionReason}</p>
+                  <dt className="text-sm" style={{ color: TONES.danger.fg }}>
+                    Reason
+                  </dt>
+                  <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                    {application.rejectionReason.replace(/_/g, ' ')}
+                  </dd>
                 </div>
                 {application.decisionNotes && (
                   <div>
-                    <p className="text-sm text-red-700">Details</p>
-                    <p className="text-red-900">{application.decisionNotes}</p>
+                    <dt className="text-sm" style={{ color: TONES.danger.fg }}>
+                      Details
+                    </dt>
+                    <dd className="mt-1 text-base" style={{ color: 'var(--rm-text)' }}>
+                      {application.decisionNotes}
+                    </dd>
                   </div>
                 )}
                 {application.rejectionCategory && (
                   <div>
-                    <p className="text-sm text-red-700">Category</p>
-                    <p className="text-red-900 font-medium">{application.rejectionCategory}</p>
+                    <dt className="text-sm" style={{ color: TONES.danger.fg }}>
+                      Category
+                    </dt>
+                    <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {application.rejectionCategory.replace(/_/g, ' ')}
+                    </dd>
                   </div>
                 )}
-              </div>
-            </div>
+              </dl>
+            </section>
           )}
 
-          {/* Property Information */}
+          {/* Property information */}
           {application.propertyAddress && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Property Information</h2>
-              <div className="space-y-3">
+            <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+              <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: 'var(--rm-text)' }}>
+                Property information
+              </h2>
+              <dl className="space-y-4">
                 <div>
-                  <p className="text-sm text-slate-500">Address</p>
-                  <p className="text-slate-900">
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Address
+                  </dt>
+                  <dd className="mt-1 text-base" style={{ color: 'var(--rm-text)' }}>
                     {application.propertyAddress}
                     {application.propertyCity && `, ${application.propertyCity}`}
                     {application.propertyState && `, ${application.propertyState}`}
-                  </p>
+                  </dd>
                 </div>
-                {application.propertyValue && (
-                  <div className="grid grid-cols-2 gap-4 mt-3">
+                {application.propertyValue != null && (
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div>
-                      <p className="text-sm text-slate-500">Property Value</p>
-                      <p className="text-slate-900 font-medium">
+                      <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                        Property value
+                      </dt>
+                      <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
                         {formatCurrency(application.propertyValue)}
-                      </p>
+                      </dd>
                     </div>
-                    {application.downPaymentAmount && (
+                    {application.downPaymentAmount != null && (
                       <div>
-                        <p className="text-sm text-slate-500">Down Payment</p>
-                        <p className="text-slate-900 font-medium">
+                        <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          Down payment
+                        </dt>
+                        <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
                           {formatCurrency(application.downPaymentAmount)}
-                        </p>
+                        </dd>
                       </div>
                     )}
                   </div>
                 )}
-              </div>
-            </div>
+              </dl>
+            </section>
           )}
-
-          {/* Vehicle Information - Not in ApplicationResponse, would need to be added */}
         </div>
 
-        {/* Sidebar */}
+        {/* ── Sidebar ── */}
         <div className="space-y-6">
           {/* Timeline */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Timeline</h2>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-blue-600 mt-2"></div>
+          <section className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: 'var(--rm-text)' }}>
+              Timeline
+            </h2>
+            <ol className="space-y-4">
+              <li className="flex items-start gap-3">
+                <span className="mt-2 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TONES.info.dot }} aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900">Created</p>
-                  <p className="text-xs text-slate-500">
-                    {new Date(application.createdAt).toLocaleString()}
+                  <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                    Created
+                  </p>
+                  <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                    {formatDateTime(application.createdAt)}
                   </p>
                 </div>
-              </div>
+              </li>
 
               {application.submittedAt && (
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-blue-600 mt-2"></div>
+                <li className="flex items-start gap-3">
+                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TONES.info.dot }} aria-hidden="true" />
                   <div>
-                    <p className="text-sm font-medium text-slate-900">Submitted</p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(application.submittedAt).toLocaleString()}
+                    <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                      Submitted
+                    </p>
+                    <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                      {formatDateTime(application.submittedAt)}
                     </p>
                   </div>
-                </div>
+                </li>
               )}
 
               {application.decisionMadeAt &&
@@ -1335,166 +1804,213 @@ export default function ApplicationDetailPage() {
                   'BOOKING_IN_PROGRESS',
                   'BOOKED',
                 ].includes(effectiveStatus) && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full bg-green-600 mt-2"></div>
+                  <li className="flex items-start gap-3">
+                    <span className="mt-2 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TONES.success.dot }} aria-hidden="true" />
                     <div>
-                      <p className="text-sm font-medium text-slate-900">Approved</p>
-                      <p className="text-xs text-slate-500">
-                        {new Date(application.decisionMadeAt).toLocaleString()}
+                      <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                        Approved
+                      </p>
+                      <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                        {formatDateTime(application.decisionMadeAt)}
                       </p>
                     </div>
-                  </div>
+                  </li>
                 )}
 
               {application.decisionMadeAt &&
-                ['DECLINED', 'UNDERWRITING_DECLINED', 'CREDIT_DECLINED'].includes(
-                  effectiveStatus
-                ) && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full bg-red-600 mt-2"></div>
+                ['DECLINED', 'UNDERWRITING_DECLINED', 'CREDIT_DECLINED'].includes(effectiveStatus) && (
+                  <li className="flex items-start gap-3">
+                    <span className="mt-2 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TONES.danger.dot }} aria-hidden="true" />
                     <div>
-                      <p className="text-sm font-medium text-slate-900">Rejected</p>
-                      <p className="text-xs text-slate-500">
-                        {new Date(application.decisionMadeAt).toLocaleString()}
+                      <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                        Rejected
+                      </p>
+                      <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                        {formatDateTime(application.decisionMadeAt)}
                       </p>
                     </div>
-                  </div>
+                  </li>
                 )}
-            </div>
-          </div>
+            </ol>
+          </section>
 
-          {/* Assignment Info */}
+          {/* Assignment */}
           {application.assignedToUserId && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Assignment</h2>
-              <div className="space-y-3">
-                {/* If I'm the assigned reviewer, show who assigned me (Assigned By) */}
+            <section className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+              <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: 'var(--rm-text)' }}>
+                Assignment
+              </h2>
+              <dl className="space-y-4">
                 {isAssignedReviewer ? (
                   <div>
-                    <p className="text-sm text-slate-500">Assigned By</p>
-                    {application.createdByUser ? (
-                      <div>
-                        <p className="text-slate-900 font-medium">
-                          {application.createdByUser.firstName} {application.createdByUser.lastName}
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Assigned by
+                    </dt>
+                    <dd className="mt-1">
+                      {application.createdByUser ? (
+                        <>
+                          <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                            {application.createdByUser.firstName} {application.createdByUser.lastName}
+                          </p>
+                          <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                            {application.createdByUser.roles && application.createdByUser.roles.length > 0
+                              ? formatRoleName(application.createdByUser.roles[0])
+                              : application.createdByUser.userType?.replace(/_/g, ' ')}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                          User #{application.createdByUserId.slice(-8)}
                         </p>
-                        <p className="text-sm text-slate-500">
-                          {application.createdByUser.roles &&
-                          application.createdByUser.roles.length > 0
-                            ? formatRoleName(application.createdByUser.roles[0])
-                            : application.createdByUser.userType?.replace(/_/g, ' ')}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-slate-900 font-medium">
-                        User #{application.createdByUserId.slice(-8)}
-                      </p>
-                    )}
+                      )}
+                    </dd>
                   </div>
                 ) : (
-                  /* If I'm not the reviewer, show who it's assigned to */
                   <div>
-                    <p className="text-sm text-slate-500">Assigned To</p>
-                    {application.assignedToUser ? (
-                      <div>
-                        <p className="text-slate-900 font-medium">
-                          {application.assignedToUser.firstName}{' '}
-                          {application.assignedToUser.lastName}
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Assigned to
+                    </dt>
+                    <dd className="mt-1">
+                      {application.assignedToUser ? (
+                        <>
+                          <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                            {application.assignedToUser.firstName} {application.assignedToUser.lastName}
+                          </p>
+                          <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                            {application.assignedToUser.roles && application.assignedToUser.roles.length > 0
+                              ? formatRoleName(application.assignedToUser.roles[0])
+                              : application.assignedToUser.userType?.replace(/_/g, ' ')}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                          User #{application.assignedToUserId.slice(-8)}
                         </p>
-                        <p className="text-sm text-slate-500">
-                          {application.assignedToUser.roles &&
-                          application.assignedToUser.roles.length > 0
-                            ? formatRoleName(application.assignedToUser.roles[0])
-                            : application.assignedToUser.userType?.replace(/_/g, ' ')}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-slate-900 font-medium">
-                        User #{application.assignedToUserId.slice(-8)}
-                      </p>
-                    )}
+                      )}
+                    </dd>
                   </div>
                 )}
                 {application.assignedAt && (
                   <div>
-                    <p className="text-sm text-slate-500">Assigned At</p>
-                    <p className="text-slate-900">
-                      {new Date(application.assignedAt).toLocaleString()}
-                    </p>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Assigned at
+                    </dt>
+                    <dd className="mt-1 text-base tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {formatDateTime(application.assignedAt)}
+                    </dd>
                   </div>
                 )}
-              </div>
-            </div>
+              </dl>
+            </section>
           )}
 
-          {/* Notes from Application Creator */}
-          {notes.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Notes</h2>
-              <div className="space-y-4">
+          {/* Notes */}
+          <section className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: 'var(--rm-text)' }}>
+              Notes
+            </h2>
+            {notesUnavailable ? (
+              <div>
+                <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  Notes could not be loaded.
+                </p>
+                <button
+                  type="button"
+                  onClick={fetchApplication}
+                  className="mt-3 text-sm font-medium hover:underline"
+                  style={{ color: 'var(--rm-accent)' }}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : notes.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                No notes on this application yet.
+              </p>
+            ) : (
+              <ul className="space-y-4">
                 {notes.map(note => (
-                  <div key={note.noteId} className="border-l-4 border-[#7f2b7b]/40 pl-4 py-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium text-slate-900">
+                  <li
+                    key={note.noteId}
+                    className="py-1 pl-4"
+                    style={{ borderLeft: '3px solid var(--rm-accent)' }}
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
                         {note.createdByUserName || `User #${note.createdByUserId.slice(-8)}`}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        {new Date(note.createdAt).toLocaleString()}
+                      <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                        {formatDateTime(note.createdAt)}
                       </p>
                     </div>
-                    <p className="text-sm text-slate-600">{note.content}</p>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                      {note.content}
+                    </p>
+                    <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
                       {note.noteType.replace(/_/g, ' ')}
                     </p>
-                  </div>
+                  </li>
                 ))}
-              </div>
-            </div>
-          )}
+              </ul>
+            )}
+          </section>
 
-          {/* Risk & Compliance */}
+          {/* Risk & compliance */}
           {(application.riskScore !== undefined ||
             application.creditScoreAtApplication ||
             application.kycCompleted !== undefined) && (
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Risk & Compliance</h2>
-              <div className="space-y-3">
+            <section className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+              <h2 className="text-xl font-semibold tracking-tight mb-5" style={{ color: 'var(--rm-text)' }}>
+                Risk and compliance
+              </h2>
+              <dl className="space-y-4">
                 {application.riskScore !== undefined && (
                   <div>
-                    <p className="text-sm text-slate-500">Risk Score</p>
-                    <p className="text-slate-900 font-medium">{application.riskScore}</p>
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Risk score
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {application.riskScore}
+                    </dd>
                   </div>
                 )}
-                {application.creditScoreAtApplication && (
+                {application.creditScoreAtApplication != null && (
                   <div>
-                    <p className="text-sm text-slate-500">Credit Score</p>
-                    <p className="text-slate-900 font-medium">
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Credit score
+                    </dt>
+                    <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
                       {application.creditScoreAtApplication}
-                    </p>
+                    </dd>
                   </div>
                 )}
                 {application.kycCompleted !== undefined && (
                   <div>
-                    <p className="text-sm text-slate-500">KYC Status</p>
-                    <p className="text-slate-900 font-medium">
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      KYC status
+                    </dt>
+                    <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
                       {application.kycCompleted ? 'Completed' : 'Pending'}
-                    </p>
+                    </dd>
                   </div>
                 )}
                 {application.amlCheckCompleted !== undefined && (
                   <div>
-                    <p className="text-sm text-slate-500">AML Check</p>
-                    <p className="text-slate-900 font-medium">
+                    <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      AML check
+                    </dt>
+                    <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
                       {application.amlCheckCompleted ? 'Completed' : 'Pending'}
-                    </p>
+                    </dd>
                   </div>
                 )}
-              </div>
-            </div>
+              </dl>
+            </section>
           )}
         </div>
       </div>
 
-      {/* Action Modal */}
+      {/* Action dialog */}
       {modalState.type && (
         <ActionModal
           isOpen={modalState.isOpen}
@@ -1503,6 +2019,7 @@ export default function ApplicationDetailPage() {
           title={modalState.title}
           type={modalState.type}
           loading={actionLoading}
+          submitError={modalError}
           application={application}
         />
       )}
@@ -1511,72 +2028,15 @@ export default function ApplicationDetailPage() {
 }
 
 /* ── StatusBadge ──────────────────────────────────────────── */
-const STATUS_DOT: Record<string, string> = {
-  DRAFT: 'bg-slate-400',
-  SUBMITTED: 'bg-blue-500',
-  UNDER_REVIEW: 'bg-amber-500',
-  CREDIT_CHECK: 'bg-violet-500',
-  UNDERWRITING: 'bg-orange-500',
-  MANAGER_APPROVAL: 'bg-orange-500',
-  APPROVED: 'bg-emerald-500',
-  REJECTED: 'bg-red-500',
-  DECLINED: 'bg-red-500',
-  RETURNED_FOR_CORRECTIONS: 'bg-amber-500',
-  DISBURSED: 'bg-emerald-600',
-  PENDING_KYC: 'bg-orange-500',
-  PENDING_CREDIT_CHECK: 'bg-violet-500',
-  REFERRED_TO_SENIOR: 'bg-amber-500',
-  PENDING_UNDERWRITING: 'bg-orange-500',
-  REFERRED_TO_UNDERWRITER: 'bg-amber-500',
-  OFFER_GENERATED: 'bg-blue-500',
-  OFFER_SENT: 'bg-blue-500',
-  PENDING_ESIGN: 'bg-cyan-500',
-  ESIGN_IN_PROGRESS: 'bg-cyan-500',
-  ESIGN_COMPLETED: 'bg-teal-500',
-  PENDING_BOOKING: 'bg-amber-500',
-  BOOKING_IN_PROGRESS: 'bg-amber-500',
-  BOOKED: 'bg-emerald-600',
-  CANCELLED: 'bg-slate-400',
-  WITHDRAWN: 'bg-slate-400',
-  EXPIRED: 'bg-slate-400',
-};
-const STATUS_BG_MAP: Record<string, string> = {
-  DRAFT: 'bg-slate-50 text-slate-700',
-  SUBMITTED: 'bg-blue-50 text-blue-700',
-  UNDER_REVIEW: 'bg-amber-50 text-amber-700',
-  CREDIT_CHECK: 'bg-violet-50 text-violet-700',
-  UNDERWRITING: 'bg-orange-50 text-orange-700',
-  MANAGER_APPROVAL: 'bg-orange-50 text-orange-700',
-  APPROVED: 'bg-emerald-50 text-emerald-700',
-  REJECTED: 'bg-red-50 text-red-700',
-  DECLINED: 'bg-red-50 text-red-700',
-  RETURNED_FOR_CORRECTIONS: 'bg-amber-50 text-amber-700',
-  DISBURSED: 'bg-emerald-50 text-emerald-800',
-  PENDING_KYC: 'bg-orange-50 text-orange-700',
-  PENDING_CREDIT_CHECK: 'bg-violet-50 text-violet-700',
-  REFERRED_TO_SENIOR: 'bg-amber-50 text-amber-700',
-  PENDING_UNDERWRITING: 'bg-orange-50 text-orange-700',
-  REFERRED_TO_UNDERWRITER: 'bg-amber-50 text-amber-700',
-  OFFER_GENERATED: 'bg-blue-50 text-blue-700',
-  OFFER_SENT: 'bg-blue-50 text-blue-700',
-  PENDING_ESIGN: 'bg-cyan-50 text-cyan-700',
-  ESIGN_IN_PROGRESS: 'bg-cyan-50 text-cyan-700',
-  ESIGN_COMPLETED: 'bg-teal-50 text-teal-700',
-  PENDING_BOOKING: 'bg-amber-50 text-amber-700',
-  BOOKING_IN_PROGRESS: 'bg-amber-50 text-amber-700',
-  BOOKED: 'bg-emerald-50 text-emerald-800',
-  CANCELLED: 'bg-slate-50 text-slate-700',
-  WITHDRAWN: 'bg-slate-50 text-slate-700',
-  EXPIRED: 'bg-slate-50 text-slate-700',
-};
-
 function StatusBadge({ status }: { status: string }) {
+  const tone = statusTone(status);
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full ${STATUS_BG_MAP[status] || 'bg-slate-50 text-slate-700'}`}
+      className="inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium"
+      style={{ backgroundColor: tone.bg, color: tone.fg }}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status] || 'bg-slate-400'}`} />
-      {status.replace(/_/g, ' ')}
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tone.dot }} aria-hidden="true" />
+      {statusLabel(status)}
     </span>
   );
 }

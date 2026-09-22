@@ -1,363 +1,705 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useAppSelector } from '@/store';
+import config from '@/config';
+import apiClient from '@/lib/api-client';
+import { userService, type User } from '@/services/api/userService';
+import { aiKnowledgeService, type KnowledgeSource } from '@/services/api/aiKnowledgeService';
+import {
+  SortableHeader,
+  type SortConfig,
+  handleSortToggle,
+  sortData,
+} from '@/components/SortableHeader';
 
-/* ─── mock data ─── */
-const STATS = [
-  { label: 'Active Users', value: 248, delta: '+12 vs last month', positive: true, icon: '👥', link: 'View users' },
-  { label: 'Open Approval Rules', value: 32, delta: '+5 vs last month', positive: true, icon: '🔐', link: 'View rules' },
-  { label: 'SLA Configurations', value: 18, delta: 'No change', positive: null, icon: '⏱️', link: 'View SLA' },
-  { label: 'Integrations Healthy', value: '12 / 14', delta: '+1 vs last month', positive: true, icon: '🔗', link: 'View integrations' },
-  { label: 'Recent Audit Events', value: 128, delta: '−8 vs last month', positive: false, icon: '📋', link: 'View audit logs' },
-];
+/*
+ * Every figure rendered on this page is derived from a service response or from
+ * Redux auth state — there are no hardcoded counts, dates or names.
+ */
 
-const ADMIN_TABS = ['User & Role Management', 'Workflow / SLA Configuration', 'Product & Policy Rules', 'Integrations', 'Audit Logs'] as const;
-type AdminTab = (typeof ADMIN_TABS)[number];
+const PAGE_SIZE = 100;
 
-const USERS = [
-  { name: 'Sarah Mitchell', email: 'sarah.mitchell@northbank.com', role: 'Underwriter', team: 'Corporate Banking', lastActive: '30 Apr 2025, 09:21 AM', status: 'Compliant' },
-  { name: 'James Anderson', email: 'james.anderson@northbank.com', role: 'RM Manager', team: 'Corporate Banking', lastActive: '30 Apr 2025, 08:47 AM', status: 'Compliant' },
-  { name: 'Priya Nair', email: 'priya.nair@northbank.com', role: 'Credit Analyst', team: 'Credit Risk', lastActive: '30 Apr 2025, 07:56 AM', status: 'Compliant' },
-  { name: 'Michael Chen', email: 'michael.chen@northbank.com', role: 'Compliance Officer', team: 'Compliance', lastActive: '29 Apr 2025, 06:32 PM', status: 'Compliant' },
-  { name: 'Daniel Fernandez', email: 'daniel.fernandez@northbank.com', role: 'Operations Manager', team: 'Operations', lastActive: '29 Apr 2025, 05:11 PM', status: 'Review' },
-  { name: 'Neha Kapoor', email: 'neha.kapoor@northbank.com', role: 'Credit Analyst', team: 'Credit Risk', lastActive: '29 Apr 2025, 04:03 PM', status: 'Compliant' },
-  { name: 'Benjamin Lee', email: 'benjamin.lee@northbank.com', role: 'System Administrator', team: 'Technology', lastActive: '29 Apr 2025, 02:18 PM', status: 'Compliant' },
-  { name: 'Aisha Rahman', email: 'aisha.rahman@northbank.com', role: 'KYC Analyst', team: 'Compliance', lastActive: '29 Apr 2025, 11:41 AM', status: 'Review' },
-];
+const USER_STATUS_META: Record<string, { label: string; color: string }> = {
+  ACTIVE: { label: 'Active', color: '#10b981' },
+  PENDING_ACTIVATION: { label: 'Pending activation', color: '#f59e0b' },
+  INACTIVE: { label: 'Inactive', color: '#64748b' },
+  SUSPENDED: { label: 'Suspended', color: '#f43f5e' },
+  LOCKED: { label: 'Locked', color: '#ef4444' },
+};
 
-const WORKFLOW_STEPS = [
-  { step: 1, label: 'Credit Assessment', assignee: 'Credit Analyst', sla: '2h', color: '#0ea5e9' },
-  { step: 2, label: 'Risk Review', assignee: 'Risk Manager', sla: '6h', color: '#8b5cf6' },
-  { step: 3, label: 'Policy Check', assignee: 'Policy Engine', sla: '2h', color: '#10b981' },
-  { step: 4, label: 'Underwriter Decision', assignee: 'Underwriter', sla: '8h', color: '#f59e0b' },
-  { step: 5, label: 'Final Approval', assignee: 'RM Manager', sla: '2h', color: '#0ea5e9' },
-];
+const USER_TYPE_LABELS: Record<string, string> = {
+  BANK_USER: 'Bank staff',
+  CUSTOMER: 'Customer',
+};
 
-const SYSTEM_HEALTH = [
-  { name: 'Core Banking API', status: 'Healthy', uptime: '99.98%' },
-  { name: 'Identity Service (SSO)', status: 'Healthy', uptime: '99.95%' },
-  { name: 'Document Management', status: 'Healthy', uptime: '99.93%' },
-  { name: 'Notification Service', status: 'Healthy', uptime: '99.97%' },
-  { name: 'Policy Engine', status: 'Healthy', uptime: '99.92%' },
-  { name: 'Reporting Service', status: 'Healthy', uptime: '99.96%' },
-];
+function humanise(value: string): string {
+  return value
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/^\w/, c => c.toUpperCase());
+}
 
-const RECENT_ADMIN_ACTIONS = [
-  { action: 'Role updated: Credit Analyst', by: 'Sarah Mitchell', time: '30 Apr 2025, 09:15 AM', icon: '👤' },
-  { action: 'Workflow updated: Corporate Loan Approval', by: 'Benjamin Lee', time: '30 Apr 2025, 08:42 AM', icon: '🔄' },
-  { action: 'SLA policy updated: SME Loan', by: 'Sarah Mitchell', time: '29 Apr 2025, 07:28 AM', icon: '⏱️' },
-  { action: 'User deactivated: John Davis', by: 'Benjamin Lee', time: '29 Apr 2025, 06:05 AM', icon: '🚫' },
-];
+function statusMeta(status?: string): { label: string; color: string } {
+  if (!status) return { label: 'Unknown', color: '#94a3b8' };
+  return USER_STATUS_META[status] || { label: humanise(status), color: '#94a3b8' };
+}
 
-const SECURITY_ALERTS = [
-  { msg: 'Unusual login attempt detected', sub: 'admin@northbank.com', time: '30 Apr 2025, 09:12 AM', level: 'warn' },
-  { msg: 'Privilege escalation attempt blocked', sub: 'user: priya.nair@northbank.com', time: '30 Apr 2025, 08:33 AM', level: 'error' },
-];
+function userTypeLabel(userType?: string): string {
+  if (!userType) return '—';
+  return USER_TYPE_LABELS[userType] || humanise(userType);
+}
 
-function StatusBadge({ status }: { status: string }) {
-  const isCompliant = status === 'Compliant';
+function displayName(u: User): string {
+  const name = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+  return name || u.fullName || u.username || '—';
+}
+
+function initialsOf(u: User): string {
+  const parts = [u.firstName, u.lastName].filter(Boolean) as string[];
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return (u.username || u.email || '?').charAt(0).toUpperCase();
+}
+
+function formatDateTime(value?: string): string {
+  if (!value) return 'No sign-in recorded';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function StatusPill({ status }: { status?: string }) {
+  const meta = statusMeta(status);
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${isCompliant ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${isCompliant ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-      {status}
+    <span
+      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium whitespace-nowrap"
+      style={{ backgroundColor: `${meta.color}1f`, color: meta.color }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: meta.color }} />
+      {meta.label}
     </span>
   );
 }
 
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function Tile({
+  label,
+  value,
+  sub,
+  icon,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  icon: React.ReactNode;
+}) {
   return (
-    <div className={`rounded-2xl border ${className}`} style={{ backgroundColor: 'var(--rm-card)', borderColor: 'var(--rm-border)' }}>
-      {children}
+    <div className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+      <div className="flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl"
+          style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+        >
+          {icon}
+        </span>
+        <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {label}
+        </p>
+      </div>
+      <p
+        className="mt-4 text-2xl font-semibold tabular-nums"
+        style={{ color: 'var(--rm-text)' }}
+      >
+        {value}
+      </p>
+      <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {sub}
+      </p>
+    </div>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div className="px-5 py-4" aria-hidden="true">
+      <div className="space-y-4">
+        {[0, 1, 2, 3, 4].map(row => (
+          <div key={row} className="flex items-center gap-4">
+            <div
+              className="h-10 w-10 shrink-0 rounded-full animate-pulse"
+              style={{ backgroundColor: 'var(--rm-input)' }}
+            />
+            <div className="flex-1 space-y-2">
+              <div
+                className="h-3.5 w-40 rounded-full animate-pulse"
+                style={{ backgroundColor: 'var(--rm-input)' }}
+              />
+              <div
+                className="h-3 w-56 max-w-full rounded-full animate-pulse"
+                style={{ backgroundColor: 'var(--rm-input)' }}
+              />
+            </div>
+            <div
+              className="h-6 w-24 rounded-full animate-pulse"
+              style={{ backgroundColor: 'var(--rm-input)' }}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('User & Role Management');
-  const [userSearch, setUserSearch] = useState('');
-  const lastUpdated = '30 Apr 2025, 09:42 AM';
+  const { user } = useAppSelector(state => state.auth);
 
-  const filteredUsers = USERS.filter(u =>
-    userSearch === '' ||
-    u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-    u.role.toLowerCase().includes(userSearch.toLowerCase()) ||
-    u.team.toLowerCase().includes(userSearch.toLowerCase())
+  const [users, setUsers] = useState<User[]>([]);
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [sources, setSources] = useState<KnowledgeSource[] | null>(null);
+  const [secondaryLoaded, setSecondaryLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    field: 'createdAt',
+    direction: 'desc',
+  });
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const getBankId = useCallback((): string => {
+    if (user?.bankId) return user.bankId;
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(config.auth.userKey);
+      if (raw) {
+        try {
+          return JSON.parse(raw).bankId || config.bank.defaultBankId;
+        } catch {
+          return config.bank.defaultBankId;
+        }
+      }
+    }
+    return config.bank.defaultBankId;
+  }, [user?.bankId]);
+
+  const loadUsers = useCallback(async (term: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await userService.getUsers({
+        search: term.trim() || undefined,
+        page: 0,
+        size: PAGE_SIZE,
+        sort: 'createdAt,desc',
+      });
+      setUsers(Array.isArray(response?.content) ? response.content : []);
+      setTotalUsers(
+        typeof response?.totalElements === 'number' ? response.totalElements : null
+      );
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      const message = err instanceof Error ? err.message : 'Please try again.';
+      setError(`Could not load users. ${message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /* Secondary counts load independently so a failure never blanks the user list. */
+  const loadSecondary = useCallback(() => {
+    apiClient
+      .get<{ totalElements?: number }>('/api/v1/admin/users/pending', {
+        params: { page: 0, size: 1 },
+      })
+      .then(res =>
+        setPendingCount(
+          typeof res.data?.totalElements === 'number' ? res.data.totalElements : null
+        )
+      )
+      .catch(err => {
+        console.warn('Pending activation count unavailable:', err);
+        setPendingCount(null);
+      })
+      .finally(() => setSecondaryLoaded(true));
+
+    aiKnowledgeService
+      .listSources(getBankId())
+      .then(data => setSources(Array.isArray(data) ? data : []))
+      .catch(err => {
+        console.warn('Knowledge source count unavailable:', err);
+        setSources(null);
+      });
+  }, [getBankId]);
+
+  /* Debounced server-side search; also performs the initial load. */
+  useEffect(() => {
+    const timer = setTimeout(() => loadUsers(search), search ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [search, loadUsers]);
+
+  useEffect(() => {
+    loadSecondary();
+  }, [loadSecondary]);
+
+  const handleSort = (field: string) => setSortConfig(handleSortToggle(field, sortConfig));
+  const sortedUsers = useMemo(() => sortData(users, sortConfig), [users, sortConfig]);
+
+  const activeSources = useMemo(
+    () => (sources ? sources.filter(s => s.status === 'ACTIVE').length : null),
+    [sources]
+  );
+  const draftSources = useMemo(
+    () => (sources ? sources.filter(s => s.status === 'DRAFT').length : null),
+    [sources]
   );
 
+  const roleNames = useMemo(() => {
+    const roles = user?.roles ?? [];
+    return roles
+      .map(r => (typeof r === 'string' ? r : r?.roleName))
+      .filter((r): r is string => Boolean(r));
+  }, [user?.roles]);
+
+  const refresh = () => {
+    loadUsers(search);
+    loadSecondary();
+  };
+
+  const headerSortClass = '!px-5 !text-sm !normal-case !tracking-normal !font-medium';
+  const truncated = totalUsers !== null && users.length < totalUsers;
+
   return (
-    <div className="space-y-5">
-      {/* ── Page header ── */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Admin</h1>
-          <p className="text-sm mt-0.5 text-slate-400">Administrative control center for users, workflows, policies, integrations and system governance.</p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span>Last updated: {lastUpdated}</span>
-          <button className="p-1.5 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-slate-900">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* ── Stats ── */}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
-        {STATS.map(s => (
-          <Card key={s.label} className="p-4 hover:border-cyan-500/20 transition-colors">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xl">{s.icon}</span>
-              <p className="text-xs text-slate-400 truncate">{s.label}</p>
-            </div>
-            <p className="text-2xl font-bold text-slate-900">{s.value}</p>
-            <p className={`text-xs mt-1 font-medium ${s.positive === true ? 'text-emerald-400' : s.positive === false ? 'text-red-400' : 'text-slate-500'}`}>
-              {s.delta}
+    <div className="space-y-8" style={{ color: 'var(--rm-text)' }}>
+      {/* ══ Header ══ */}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">Administration</h1>
+          <p className="mt-1.5 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
+            Review the people who can access this portal and the knowledge base used for AI
+            answers.
+          </p>
+          {lastUpdated && (
+            <p className="mt-2 text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+              Updated{' '}
+              {lastUpdated.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
             </p>
-            <button className="mt-2 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition-colors">
-              {s.link} →
-            </button>
-          </Card>
-        ))}
-      </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text-secondary)' }}
+        >
+          <svg
+            className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={1.8}
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
+        </button>
+      </header>
 
-      {/* ── Tab bar ── */}
-      <Card>
-        <div className="flex overflow-x-auto no-scrollbar" style={{ borderBottom: '1px solid var(--rm-border)' }}>
-          {ADMIN_TABS.map(t => (
-            <button
-              key={t}
-              onClick={() => setActiveTab(t)}
-              className="shrink-0 flex items-center gap-2 px-5 py-3.5 text-sm font-medium whitespace-nowrap transition-colors relative"
-              style={{
-                color: activeTab === t ? '#0ea5e9' : '#64748b',
-                borderBottom: activeTab === t ? '2px solid #0ea5e9' : '2px solid transparent',
-              }}
+      {/* ══ Counts ══ */}
+      <section aria-label="Administration counts" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Tile
+          label="Users"
+          value={totalUsers === null ? '—' : totalUsers.toLocaleString()}
+          sub={
+            totalUsers === null
+              ? 'Unavailable right now'
+              : search.trim()
+                ? `Matching “${search.trim()}”`
+                : 'Registered for your bank'
+          }
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          }
+        />
+        <Tile
+          label="Pending activations"
+          value={pendingCount === null ? '—' : pendingCount.toLocaleString()}
+          sub={
+            pendingCount === null
+              ? secondaryLoaded
+                ? 'Unavailable right now'
+                : 'Loading…'
+              : pendingCount === 1
+                ? 'Account waiting for review'
+                : 'Accounts waiting for review'
+          }
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          }
+        />
+        <Tile
+          label="Knowledge sources"
+          value={sources === null ? '—' : sources.length.toLocaleString()}
+          sub={
+            sources === null
+              ? 'Unavailable right now'
+              : `${activeSources ?? 0} active · ${draftSources ?? 0} draft`
+          }
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+          }
+        />
+        <Tile
+          label="Your access"
+          value={userTypeLabel(user?.userType)}
+          sub={
+            roleNames.length > 0
+              ? `${roleNames.length} ${roleNames.length === 1 ? 'role' : 'roles'}: ${roleNames.join(', ')}`
+              : 'No roles returned for your account'
+          }
+          icon={
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          }
+        />
+      </section>
+
+      {/* ══ Users ══ */}
+      <section className="space-y-5" aria-labelledby="admin-users-heading">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h2
+              id="admin-users-heading"
+              className="text-xl font-semibold tracking-tight"
+              style={{ color: 'var(--rm-text)' }}
             >
-              {t}
-            </button>
-          ))}
+              Users
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              {loading
+                ? 'Loading users…'
+                : `${sortedUsers.length} shown${totalUsers !== null ? ` of ${totalUsers} registered` : ''} · select a column heading to sort`}
+            </p>
+          </div>
+          <div>
+            <label
+              htmlFor="admin-user-search"
+              className="mb-1.5 block text-sm"
+              style={{ color: 'var(--rm-text-secondary)' }}
+            >
+              Search by name, username or email
+            </label>
+            <input
+              id="admin-user-search"
+              type="search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search users"
+              autoComplete="off"
+              className="w-full rounded-xl px-4 py-2.5 text-base sm:w-80"
+              style={{
+                backgroundColor: 'var(--rm-input)',
+                border: '1px solid var(--rm-border)',
+                color: 'var(--rm-text)',
+              }}
+            />
+          </div>
         </div>
 
-        {/* ── Tab content ── */}
-        {activeTab === 'User & Role Management' && (
-          <div className="grid grid-cols-1 gap-5 p-5 xl:grid-cols-12">
-            {/* Users table — 7 cols */}
-            <div className="xl:col-span-7 space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900">Users</h2>
-                  <p className="text-xs text-slate-400">Manage users, roles, teams and access permissions.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      value={userSearch}
-                      onChange={e => setUserSearch(e.target.value)}
-                      placeholder="Search users..."
-                      className="pl-8 pr-3 py-1.5 rounded-lg text-xs text-slate-700 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
-                      style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)' }}
+        <div className="overflow-hidden rounded-3xl" style={{ backgroundColor: 'var(--rm-card)' }}>
+          {error ? (
+            <div className="px-6 py-10 text-center sm:px-7">
+              <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                Users could not be loaded
+              </p>
+              <p
+                className="mx-auto mt-1.5 max-w-md text-sm"
+                style={{ color: 'var(--rm-text-muted)' }}
+                role="alert"
+              >
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={() => loadUsers(search)}
+                className="mt-5 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                Try again
+              </button>
+            </div>
+          ) : loading && users.length === 0 ? (
+            <TableSkeleton />
+          ) : sortedUsers.length === 0 ? (
+            <div className="px-6 py-16 text-center sm:px-7">
+              <div
+                className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+                style={{ backgroundColor: 'var(--rm-accent-muted)' }}
+              >
+                <svg
+                  className="h-7 w-7"
+                  style={{ color: 'var(--rm-accent)' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.8}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                {search.trim() ? 'No users match your search' : 'No users found'}
+              </p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                {search.trim()
+                  ? 'Try a different name, username or email address.'
+                  : 'Users appear here once accounts have been created for your bank.'}
+              </p>
+              {search.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="mt-5 rounded-full px-5 py-2.5 text-sm font-semibold transition-opacity hover:opacity-80"
+                  style={{
+                    backgroundColor: 'var(--rm-input)',
+                    color: 'var(--rm-text)',
+                    border: '1px solid var(--rm-border)',
+                  }}
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          ) : (
+            <div
+              className="overflow-x-auto"
+              role="region"
+              aria-label="Users table, scrollable horizontally"
+              tabIndex={0}
+            >
+              <table className="w-full" aria-label="Users registered for your bank">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                    <SortableHeader
+                      label="User"
+                      field="firstName"
+                      currentSort={sortConfig}
+                      onSort={handleSort}
+                      className={headerSortClass}
                     />
-                  </div>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-white/5 transition-colors border border-white/10">
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                    </svg>
-                    Filters
-                  </button>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 transition-colors">
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    Add User
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid var(--rm-border)' }}>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                      {['User', 'Role', 'Team', 'Last Active', 'Permissions Status', ''].map(h => (
-                        <th key={h} className="text-left px-4 py-3 font-semibold text-slate-400 whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map((u, i) => (
-                      <tr key={i} className="transition-colors hover:bg-white/[0.03]" style={{ borderBottom: '1px solid var(--rm-border)' }}>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                              style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
-                              {u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-900 truncate">{u.name}</p>
-                              <p className="text-slate-500 truncate">{u.email}</p>
-                            </div>
+                    <SortableHeader
+                      label="Username"
+                      field="username"
+                      currentSort={sortConfig}
+                      onSort={handleSort}
+                      className={headerSortClass}
+                    />
+                    <SortableHeader
+                      label="Type"
+                      field="userType"
+                      currentSort={sortConfig}
+                      onSort={handleSort}
+                      className={headerSortClass}
+                    />
+                    <SortableHeader
+                      label="Status"
+                      field="status"
+                      currentSort={sortConfig}
+                      onSort={handleSort}
+                      className={headerSortClass}
+                    />
+                    <SortableHeader
+                      label="Last sign-in"
+                      field="lastLoginAt"
+                      currentSort={sortConfig}
+                      onSort={handleSort}
+                      className={headerSortClass}
+                    />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedUsers.map(u => (
+                    <tr
+                      key={u.userId}
+                      className="hover:bg-slate-50"
+                      style={{ borderBottom: '1px solid var(--rm-border)' }}
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                            style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}
+                            aria-hidden="true"
+                          >
+                            {initialsOf(u)}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">{u.role}</td>
-                        <td className="px-4 py-3 text-slate-700">{u.team}</td>
-                        <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{u.lastActive}</td>
-                        <td className="px-4 py-3"><StatusBadge status={u.status} /></td>
-                        <td className="px-4 py-3">
-                          <button className="p-1 rounded-lg hover:bg-white/5 transition-colors text-slate-500 hover:text-slate-900">
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid var(--rm-border)' }}>
-                  <span className="text-xs text-slate-500">Showing 1 to {filteredUsers.length} of 248 users</span>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, '...', 31].map((p, i) => (
-                      <button key={i} className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${p === 1 ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-900'}`}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                          <div className="min-w-0">
+                            <p
+                              className="truncate text-base font-medium"
+                              style={{ color: 'var(--rm-text)' }}
+                            >
+                              {displayName(u)}
+                            </p>
+                            <p
+                              className="truncate text-sm"
+                              style={{ color: 'var(--rm-text-muted)' }}
+                            >
+                              {u.email || 'No email on file'}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                          {u.username ? `@${u.username}` : '—'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                          {userTypeLabel(u.userType)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <StatusPill status={u.status} />
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                          {formatDateTime(u.lastLoginAt)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!error && sortedUsers.length > 0 && (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 text-sm"
+              style={{ borderTop: '1px solid var(--rm-border)', color: 'var(--rm-text-muted)' }}
+            >
+              <span className="tabular-nums">
+                Showing {sortedUsers.length}
+                {totalUsers !== null ? ` of ${totalUsers}` : ''} users
+              </span>
+              {truncated && (
+                <span>
+                  Only the first {users.length} are loaded — search to narrow the list.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ══ Admin areas ══ */}
+      <section className="space-y-5" aria-labelledby="admin-areas-heading">
+        <h2
+          id="admin-areas-heading"
+          className="text-xl font-semibold tracking-tight"
+          style={{ color: 'var(--rm-text)' }}
+        >
+          Admin areas
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Link
+            href="/dashboard/admin/pending-users"
+            className="group rounded-3xl bg-[color:var(--rm-card)] p-6 transition-colors hover:bg-[color:var(--rm-card-hover)]"
+          >
+            <div className="flex items-start gap-4">
+              <span
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706' }}
+                aria-hidden="true"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                  Review pending activations
+                </p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  {pendingCount === null
+                    ? 'Approve or reject accounts waiting for access.'
+                    : pendingCount === 0
+                      ? 'No accounts are waiting for review.'
+                      : `${pendingCount} ${pendingCount === 1 ? 'account' : 'accounts'} waiting for review.`}
+                </p>
+                <span
+                  className="mt-3 inline-flex items-center gap-1 text-sm font-medium group-hover:underline"
+                  style={{ color: 'var(--rm-accent)' }}
+                >
+                  Open pending activations
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
               </div>
             </div>
+          </Link>
 
-            {/* Workflow panel — 3 cols */}
-            <div className="xl:col-span-3 space-y-4">
-              <div className="rounded-xl p-4" style={{ border: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-sm font-semibold text-slate-900">Default Corporate Loan Approval</h3>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">Active</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mb-4">Multi-stage workflow for corporate loan applications</p>
-                <p className="text-xs font-semibold text-slate-400 mb-3">Approval Steps</p>
-                <div className="space-y-2.5">
-                  {WORKFLOW_STEPS.map(ws => (
-                    <div key={ws.step} className="flex items-center gap-3">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white text-[10px] font-bold"
-                        style={{ backgroundColor: ws.color + '25', color: ws.color, border: `1px solid ${ws.color}40` }}>
-                        {ws.step}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-900 truncate">{ws.label}</p>
-                        <p className="text-[10px] text-slate-500">{ws.assignee}</p>
-                      </div>
-                      <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">SLA: {ws.sla}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 pt-3" style={{ borderTop: '1px solid var(--rm-border)' }}>
-                  <p className="text-xs font-semibold text-slate-400 mb-2">SLA Summary</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: 'Total SLA', value: '20h' },
-                      { label: 'Elapsed (Avg)', value: '6h 24m' },
-                      { label: 'SLA Met (30d)', value: '92%' },
-                      { label: 'Breaches (30d)', value: '8', red: true },
-                    ].map(item => (
-                      <div key={item.label} className="rounded-lg p-2" style={{ backgroundColor: 'var(--rm-input)' }}>
-                        <p className="text-[10px] text-slate-500">{item.label}</p>
-                        <p className={`text-sm font-bold ${item.red ? 'text-red-400' : 'text-slate-900'}`}>{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <button className="mt-3 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors">
-                    View full workflow →
-                  </button>
-                </div>
+          <Link
+            href="/dashboard/admin/ai-knowledge"
+            className="group rounded-3xl bg-[color:var(--rm-card)] p-6 transition-colors hover:bg-[color:var(--rm-card-hover)]"
+          >
+            <div className="flex items-start gap-4">
+              <span
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+                aria-hidden="true"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                  Manage the AI knowledge base
+                </p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  {sources === null
+                    ? 'Register policy documents and test cited search.'
+                    : sources.length === 0
+                      ? 'No sources registered yet.'
+                      : `${sources.length} ${sources.length === 1 ? 'source' : 'sources'} registered · ${activeSources ?? 0} active.`}
+                </p>
+                <span
+                  className="mt-3 inline-flex items-center gap-1 text-sm font-medium group-hover:underline"
+                  style={{ color: 'var(--rm-accent)' }}
+                >
+                  Open AI knowledge base
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
               </div>
             </div>
-
-            {/* System health panel — 2 cols */}
-            <div className="xl:col-span-2 space-y-4">
-              {/* System health */}
-              <div className="rounded-xl p-4" style={{ border: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-slate-900">System Health</h3>
-                  <span className="text-[10px] text-emerald-400">All systems operational</span>
-                </div>
-                <div className="space-y-2">
-                  {SYSTEM_HEALTH.map(s => (
-                    <div key={s.name} className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                      <span className="text-[11px] text-slate-700 flex-1 truncate">{s.name}</span>
-                      <span className="text-[10px] font-semibold text-emerald-400 shrink-0">{s.uptime}</span>
-                    </div>
-                  ))}
-                </div>
-                <button className="mt-3 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 transition-colors">
-                  View all integrations →
-                </button>
-              </div>
-
-              {/* Recent admin actions */}
-              <div className="rounded-xl p-4" style={{ border: '1px solid var(--rm-border)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-slate-900">Recent Admin Actions</h3>
-                  <button className="text-[11px] text-cyan-400 hover:text-cyan-300">View all</button>
-                </div>
-                <div className="space-y-3">
-                  {RECENT_ADMIN_ACTIONS.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span className="text-base shrink-0 mt-0.5">{a.icon}</span>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-slate-900 truncate">{a.action}</p>
-                        <p className="text-[10px] text-slate-500">by {a.by}</p>
-                        <p className="text-[10px] text-slate-600">{a.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Security alerts */}
-              <div className="rounded-xl p-4" style={{ border: '1px solid rgba(239,68,68,0.2)', backgroundColor: 'rgba(239,68,68,0.05)' }}>
-                <div className="flex items-center gap-2 mb-3">
-                  <h3 className="text-xs font-bold text-slate-900">Security Alerts</h3>
-                  <span className="text-[10px] font-bold text-red-400 bg-red-500/15 border border-red-500/20 px-1.5 py-0.5 rounded-full">{SECURITY_ALERTS.length}</span>
-                </div>
-                <div className="space-y-2.5">
-                  {SECURITY_ALERTS.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <svg className="h-4 w-4 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                      </svg>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-red-300">{a.msg}</p>
-                        <p className="text-[10px] text-slate-500 truncate">{a.sub}</p>
-                        <p className="text-[10px] text-slate-600">{a.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button className="mt-2 text-[11px] font-semibold text-red-400 hover:text-red-300 transition-colors">
-                  View all alerts →
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab !== 'User & Role Management' && (
-          <div className="p-10 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl mx-auto mb-3" style={{ backgroundColor: 'var(--rm-input)' }}>
-              <svg className="h-6 w-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-              </svg>
-            </div>
-            <p className="text-sm font-semibold text-slate-900">{activeTab}</p>
-            <p className="text-xs mt-1 text-slate-500">Configuration panel coming soon</p>
-          </div>
-        )}
-      </Card>
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }

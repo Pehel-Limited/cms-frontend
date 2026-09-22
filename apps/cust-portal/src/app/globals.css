@@ -200,7 +200,7 @@
   }
   .panel-title {
     color: var(--text-primary);
-    @apply text-sm font-semibold;
+    @apply text-base font-semibold;
   }
   .panel-body {
     @apply p-5;
@@ -215,7 +215,7 @@
   }
   .stat-label {
     color: var(--text-muted);
-    @apply text-xs font-medium;
+    @apply text-sm font-medium;
   }
   .stat-value {
     color: var(--text-primary);
@@ -280,7 +280,7 @@
     background-color: var(--surface-input);
     border: 1px solid var(--surface-border);
     color: var(--text-secondary);
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-medium;
   }
 
   /* ─── Surface helpers (theme-aware) ─── */
@@ -313,7 +313,7 @@
   }
   .section-title {
     color: var(--text-primary);
-    @apply text-sm font-semibold;
+    @apply text-base font-semibold;
   }
   .muted {
     color: var(--text-muted);
@@ -345,7 +345,7 @@
 
   /* ─── Badge ─── */
   .badge {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-semibold;
   }
   .badge-primary {
     background-color: var(--brand-soft);
@@ -401,7 +401,7 @@
   }
   .empty-state-title {
     color: var(--text-primary);
-    @apply text-base font-semibold;
+    @apply text-lg font-semibold;
   }
   .empty-state-text {
     color: var(--text-muted);

@@ -74,12 +74,12 @@ export default function ProductsPage() {
   // ─── Loading ──────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-6">
         <div className="mesh-hero rounded-3xl p-6 sm:p-7">
-          <div className="h-7 w-48 animate-pulse rounded-xl bg-white/20" />
-          <div className="mt-2 h-4 w-72 animate-pulse rounded-xl bg-white/10" />
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Loan products</h1>
+          <div className="mt-3 h-4 w-72 animate-pulse rounded-xl bg-white/10" />
         </div>
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map(i => (
             <div key={i} className="card space-y-4">
               <div className="skeleton h-6 w-3/4" />
@@ -96,29 +96,37 @@ export default function ProductsPage() {
   // ─── Error ────────────────────────────────────────
   if (error) {
     return (
-      <div className="alert alert-error">
-        <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-        </svg>
-        <div className="flex-1">
-          <p className="font-semibold">Couldn&apos;t load products</p>
-          <p className="mt-0.5 text-sm opacity-80">{error}</p>
+      <div className="space-y-6">
+        <div className="mesh-hero rounded-3xl p-6 sm:p-7">
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Loan products</h1>
+          <p className="mt-1 text-sm text-white/70">
+            Browse what&apos;s available and check your eligibility
+          </p>
         </div>
-        <button onClick={loadProducts} className="btn btn-sm btn-outline shrink-0">
-          Try again
-        </button>
+        <div className="alert alert-error" role="alert">
+          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-base font-semibold">Couldn&apos;t load products</p>
+            <p className="mt-0.5 text-sm opacity-80">{error}</p>
+          </div>
+          <button onClick={loadProducts} className="btn btn-sm btn-outline shrink-0">
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Hero Header */}
       <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
-        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
         <div className="relative">
-          <h2 className="text-xl font-bold text-white sm:text-2xl">Loan products</h2>
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Loan products</h1>
           <p className="mt-1 text-sm text-white/70">
             Browse what&apos;s available and check your eligibility — {products.length} product{products.length === 1 ? '' : 's'} on offer
           </p>
@@ -136,6 +144,7 @@ export default function ProductsPage() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -225,7 +234,7 @@ export default function ProductsPage() {
       {filtered.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">
-            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -236,9 +245,20 @@ export default function ProductsPage() {
           </div>
           <p className="empty-state-title">No products match your filters</p>
           <p className="empty-state-text">Try broadening your search or clearing the filters above.</p>
+          <button
+            onClick={() => {
+              setSearch('');
+              setTypeFilter('');
+              setCategoryFilter('');
+              setShowFeatured(false);
+            }}
+            className="btn btn-secondary btn-sm mt-4"
+          >
+            Clear filters
+          </button>
         </div>
       ) : (
-        <div className="stagger grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="stagger grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filtered.map(product => (
             <ProductCard key={product.productId} product={product} />
           ))}
@@ -329,16 +349,17 @@ function ProductCard({ product }: { product: LoanProduct }) {
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
               style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+              aria-hidden="true"
             >
               {svgIcon}
             </div>
             <div className="min-w-0">
-              <h3 className="truncate font-semibold" style={{ color: 'var(--text-primary)' }}>
+              <h2 className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {product.productName}
-              </h3>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{typeLabel}</p>
+              </h2>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{typeLabel}</p>
             </div>
           </div>
           {product.isFeatured && <span className="badge badge-warning shrink-0">Featured</span>}
@@ -374,14 +395,14 @@ function ProductCard({ product }: { product: LoanProduct }) {
           ].map(info => (
             <div
               key={info.label}
-              className="rounded-xl px-3 py-2"
+              className="rounded-xl px-3 py-2.5"
               style={{ backgroundColor: 'var(--surface-input)' }}
             >
-              <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
                 {info.label}
               </p>
               <p
-                className={`text-sm font-semibold ${info.capitalize ? 'capitalize' : ''}`}
+                className={`mt-0.5 text-base font-semibold tabular-nums ${info.capitalize ? 'capitalize' : ''}`}
                 style={{ color: 'var(--text-primary)' }}
               >
                 {info.value}

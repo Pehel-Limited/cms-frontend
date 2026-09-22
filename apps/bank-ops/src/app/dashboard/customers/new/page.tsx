@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { RootState } from '@/store';
+import { type RootState } from '@/store';
 import apiClient from '@/lib/api-client';
 import { getCurrencySymbol } from '@/lib/format';
 
@@ -13,10 +13,8 @@ import { getCurrencySymbol } from '@/lib/format';
 // TYPE DEFINITIONS
 // ============================================
 
-// Main Customer Categories
 type CustomerCategory = 'INDIVIDUAL' | 'BUSINESS' | 'NON_PROFIT' | 'INSTITUTIONAL';
 
-// Subtypes for each category
 type IndividualSubtype = 'PERSONAL' | 'JOINT' | 'SOLE_TRADER';
 type BusinessSubtype = 'COMPANY' | 'PARTNERSHIP';
 type NonProfitSubtype = 'CHARITY' | 'CLUB' | 'ASSOCIATION';
@@ -28,19 +26,17 @@ type CustomerSubtype =
   | NonProfitSubtype
   | InstitutionalSubtype;
 
-// Category Configuration
 const CUSTOMER_CATEGORIES = [
   {
     value: 'INDIVIDUAL' as CustomerCategory,
     label: 'Individual',
-    icon: '👤',
     description: 'Personal accounts for individuals',
     subtypes: [
       { value: 'PERSONAL', label: 'Personal', description: 'Single individual account holder' },
       { value: 'JOINT', label: 'Joint', description: 'Two or more individuals sharing an account' },
       {
         value: 'SOLE_TRADER',
-        label: 'Sole Trader',
+        label: 'Sole trader',
         description: 'Self-employed individual trading under a business name',
       },
     ],
@@ -48,7 +44,6 @@ const CUSTOMER_CATEGORIES = [
   {
     value: 'BUSINESS' as CustomerCategory,
     label: 'Business',
-    icon: '🏢',
     description: 'Commercial and corporate entities',
     subtypes: [
       { value: 'COMPANY', label: 'Company', description: 'Limited company (Ltd, PLC, LLP, DAC)' },
@@ -57,149 +52,132 @@ const CUSTOMER_CATEGORIES = [
   },
   {
     value: 'NON_PROFIT' as CustomerCategory,
-    label: 'Non-Profit',
-    icon: '💚',
-    description: 'Charitable and community organizations',
+    label: 'Non-profit',
+    description: 'Charitable and community organisations',
     subtypes: [
-      { value: 'CHARITY', label: 'Charity', description: 'Registered charitable organization' },
-      { value: 'CLUB', label: 'Club', description: 'Sports, social, or members club' },
+      { value: 'CHARITY', label: 'Charity', description: 'Registered charitable organisation' },
+      { value: 'CLUB', label: 'Club', description: 'Sports, social or members club' },
       {
         value: 'ASSOCIATION',
         label: 'Association',
-        description: 'Trade, professional, or community association',
+        description: 'Trade, professional or community association',
       },
     ],
   },
   {
     value: 'INSTITUTIONAL' as CustomerCategory,
     label: 'Institutional',
-    icon: '🏛️',
     description: 'Financial and governmental institutions',
     subtypes: [
-      { value: 'FUND', label: 'Fund', description: 'Investment fund, pension fund, or trust' },
+      { value: 'FUND', label: 'Fund', description: 'Investment fund, pension fund or trust' },
       { value: 'GOVERNMENT', label: 'Government', description: 'Government body or agency' },
       {
         value: 'CREDIT_UNION',
-        label: 'Credit Union',
-        description: 'Credit union or cooperative financial institution',
+        label: 'Credit union',
+        description: 'Credit union or co-operative financial institution',
       },
     ],
   },
 ];
 
-// Company Types (for COMPANY subtype)
 const COMPANY_TYPES = [
-  { value: 'PRIVATE_LIMITED', label: 'Private Company Limited by Shares (Ltd)' },
-  { value: 'PUBLIC_LIMITED', label: 'Public Limited Company (PLC)' },
-  { value: 'LIMITED_LIABILITY_PARTNERSHIP', label: 'Limited Liability Partnership (LLP)' },
-  { value: 'DESIGNATED_ACTIVITY', label: 'Designated Activity Company (DAC)' },
-  { value: 'COMPANY_LIMITED_GUARANTEE', label: 'Company Limited by Guarantee (CLG)' },
-  { value: 'UNLIMITED', label: 'Unlimited Company' },
+  { value: 'PRIVATE_LIMITED', label: 'Private company limited by shares (Ltd)' },
+  { value: 'PUBLIC_LIMITED', label: 'Public limited company (PLC)' },
+  { value: 'LIMITED_LIABILITY_PARTNERSHIP', label: 'Limited liability partnership (LLP)' },
+  { value: 'DESIGNATED_ACTIVITY', label: 'Designated activity company (DAC)' },
+  { value: 'COMPANY_LIMITED_GUARANTEE', label: 'Company limited by guarantee (CLG)' },
+  { value: 'UNLIMITED', label: 'Unlimited company' },
 ];
 
-// Partnership Types (for PARTNERSHIP subtype)
 const PARTNERSHIP_TYPES = [
-  { value: 'GENERAL_PARTNERSHIP', label: 'General Partnership' },
-  { value: 'LIMITED_PARTNERSHIP', label: 'Limited Partnership (LP)' },
-  { value: 'INVESTMENT_LIMITED_PARTNERSHIP', label: 'Investment Limited Partnership (ILP)' },
+  { value: 'GENERAL_PARTNERSHIP', label: 'General partnership' },
+  { value: 'LIMITED_PARTNERSHIP', label: 'Limited partnership (LP)' },
+  { value: 'INVESTMENT_LIMITED_PARTNERSHIP', label: 'Investment limited partnership (ILP)' },
 ];
 
-// Fund Types (for FUND subtype)
 const FUND_TYPES = [
-  { value: 'UCITS', label: 'UCITS Fund' },
-  { value: 'AIF', label: 'Alternative Investment Fund (AIF)' },
-  { value: 'PENSION_FUND', label: 'Pension Fund' },
-  { value: 'INVESTMENT_TRUST', label: 'Investment Trust' },
-  { value: 'UNIT_TRUST', label: 'Unit Trust' },
+  { value: 'UCITS', label: 'UCITS fund' },
+  { value: 'AIF', label: 'Alternative investment fund (AIF)' },
+  { value: 'PENSION_FUND', label: 'Pension fund' },
+  { value: 'INVESTMENT_TRUST', label: 'Investment trust' },
+  { value: 'UNIT_TRUST', label: 'Unit trust' },
 ];
 
-// Member roles based on entity subtype
 const MEMBER_ROLES: Record<string, { value: string; label: string }[]> = {
-  // Individual - Joint Account
   JOINT: [
-    { value: 'PRIMARY_HOLDER', label: 'Primary Account Holder' },
-    { value: 'JOINT_HOLDER', label: 'Joint Account Holder' },
+    { value: 'PRIMARY_HOLDER', label: 'Primary account holder' },
+    { value: 'JOINT_HOLDER', label: 'Joint account holder' },
   ],
-  // Business - Company
   COMPANY: [
     { value: 'DIRECTOR', label: 'Director' },
-    { value: 'COMPANY_SECRETARY', label: 'Company Secretary' },
+    { value: 'COMPANY_SECRETARY', label: 'Company secretary' },
     { value: 'SHAREHOLDER', label: 'Shareholder' },
-    { value: 'BENEFICIAL_OWNER', label: 'Beneficial Owner (UBO)' },
-    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised Signatory' },
+    { value: 'BENEFICIAL_OWNER', label: 'Beneficial owner (UBO)' },
+    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised signatory' },
   ],
-  // Business - Partnership
   PARTNERSHIP: [
-    { value: 'GENERAL_PARTNER', label: 'General Partner' },
-    { value: 'LIMITED_PARTNER', label: 'Limited Partner' },
-    { value: 'MANAGING_PARTNER', label: 'Managing Partner' },
-    { value: 'BENEFICIAL_OWNER', label: 'Beneficial Owner (UBO)' },
+    { value: 'GENERAL_PARTNER', label: 'General partner' },
+    { value: 'LIMITED_PARTNER', label: 'Limited partner' },
+    { value: 'MANAGING_PARTNER', label: 'Managing partner' },
+    { value: 'BENEFICIAL_OWNER', label: 'Beneficial owner (UBO)' },
   ],
-  // Non-Profit - Charity
   CHARITY: [
     { value: 'TRUSTEE', label: 'Trustee' },
     { value: 'DIRECTOR', label: 'Director' },
     { value: 'CHAIRPERSON', label: 'Chairperson' },
     { value: 'TREASURER', label: 'Treasurer' },
     { value: 'SECRETARY', label: 'Secretary' },
-    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised Signatory' },
+    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised signatory' },
   ],
-  // Non-Profit - Club
   CLUB: [
     { value: 'CHAIRPERSON', label: 'Chairperson / President' },
-    { value: 'VICE_CHAIRPERSON', label: 'Vice Chairperson' },
+    { value: 'VICE_CHAIRPERSON', label: 'Vice chairperson' },
     { value: 'SECRETARY', label: 'Secretary' },
     { value: 'TREASURER', label: 'Treasurer' },
-    { value: 'COMMITTEE_MEMBER', label: 'Committee Member' },
-    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised Signatory' },
+    { value: 'COMMITTEE_MEMBER', label: 'Committee member' },
+    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised signatory' },
   ],
-  // Non-Profit - Association
   ASSOCIATION: [
     { value: 'PRESIDENT', label: 'President' },
-    { value: 'VICE_PRESIDENT', label: 'Vice President' },
+    { value: 'VICE_PRESIDENT', label: 'Vice president' },
     { value: 'SECRETARY', label: 'Secretary' },
     { value: 'TREASURER', label: 'Treasurer' },
-    { value: 'BOARD_MEMBER', label: 'Board Member' },
-    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised Signatory' },
+    { value: 'BOARD_MEMBER', label: 'Board member' },
+    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised signatory' },
   ],
-  // Institutional - Fund
   FUND: [
-    { value: 'FUND_MANAGER', label: 'Fund Manager' },
-    { value: 'INVESTMENT_MANAGER', label: 'Investment Manager' },
+    { value: 'FUND_MANAGER', label: 'Fund manager' },
+    { value: 'INVESTMENT_MANAGER', label: 'Investment manager' },
     { value: 'TRUSTEE', label: 'Trustee' },
     { value: 'CUSTODIAN', label: 'Custodian' },
     { value: 'ADMINISTRATOR', label: 'Administrator' },
     { value: 'DIRECTOR', label: 'Director' },
-    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised Signatory' },
+    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised signatory' },
   ],
-  // Institutional - Government
   GOVERNMENT: [
-    { value: 'AUTHORISED_OFFICER', label: 'Authorised Officer' },
-    { value: 'DEPARTMENT_HEAD', label: 'Department Head' },
-    { value: 'FINANCE_OFFICER', label: 'Finance Officer' },
-    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised Signatory' },
+    { value: 'AUTHORISED_OFFICER', label: 'Authorised officer' },
+    { value: 'DEPARTMENT_HEAD', label: 'Department head' },
+    { value: 'FINANCE_OFFICER', label: 'Finance officer' },
+    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised signatory' },
   ],
-  // Institutional - Credit Union
   CREDIT_UNION: [
     { value: 'CHAIRPERSON', label: 'Chairperson' },
     { value: 'DIRECTOR', label: 'Director' },
     { value: 'MANAGER', label: 'Manager' },
     { value: 'SECRETARY', label: 'Secretary' },
     { value: 'TREASURER', label: 'Treasurer' },
-    { value: 'SUPERVISORY_COMMITTEE', label: 'Supervisory Committee Member' },
-    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised Signatory' },
+    { value: 'SUPERVISORY_COMMITTEE', label: 'Supervisory committee member' },
+    { value: 'AUTHORISED_SIGNATORY', label: 'Authorised signatory' },
   ],
 };
 
-// Identity Document Types (EU/UK/Ireland)
 const IDENTITY_TYPES = [
   { value: 'PASSPORT', label: 'Passport' },
-  { value: 'NATIONAL_ID', label: 'National Identity Card' },
-  { value: 'DRIVING_LICENCE', label: 'Driving Licence' },
-  { value: 'RESIDENCE_PERMIT', label: 'Residence Permit' },
+  { value: 'NATIONAL_ID', label: 'National identity card' },
+  { value: 'DRIVING_LICENCE', label: 'Driving licence' },
+  { value: 'RESIDENCE_PERMIT', label: 'Residence permit' },
 ];
 
-// Countries
 const COUNTRIES = [
   { value: 'IE', label: 'Ireland' },
   { value: 'GB', label: 'United Kingdom' },
@@ -215,14 +193,29 @@ const COUNTRIES = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-// Employment Types
 const EMPLOYMENT_TYPES = [
   { value: 'EMPLOYED', label: 'Employed' },
-  { value: 'SELF_EMPLOYED', label: 'Self-Employed' },
+  { value: 'SELF_EMPLOYED', label: 'Self-employed' },
   { value: 'RETIRED', label: 'Retired' },
   { value: 'STUDENT', label: 'Student' },
   { value: 'UNEMPLOYED', label: 'Unemployed' },
   { value: 'HOMEMAKER', label: 'Homemaker' },
+];
+
+const RELATIONSHIPS = [
+  { value: 'SPOUSE', label: 'Spouse' },
+  { value: 'PARTNER', label: 'Partner' },
+  { value: 'PARENT', label: 'Parent' },
+  { value: 'CHILD', label: 'Child' },
+  { value: 'SIBLING', label: 'Sibling' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+const GENDERS = [
+  { value: 'MALE', label: 'Male' },
+  { value: 'FEMALE', label: 'Female' },
+  { value: 'OTHER', label: 'Other' },
+  { value: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say' },
 ];
 
 // ============================================
@@ -266,7 +259,6 @@ interface EntityMember {
   ownershipPercentage?: number;
   isSignatory: boolean;
   isPrimaryContact: boolean;
-  appointmentDate?: string;
   newMember?: IndividualFormData;
   isExisting: boolean;
 }
@@ -312,6 +304,419 @@ interface ExistingCustomer {
   email: string;
 }
 
+const EMPTY_INDIVIDUAL: IndividualFormData = {
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  dateOfBirth: '',
+  gender: '',
+  nationality: 'IE',
+  email: '',
+  phone: '',
+  identityType: 'PASSPORT',
+  identityNumber: '',
+  identityExpiry: '',
+  taxReferenceNumber: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  county: '',
+  postcode: '',
+  country: 'IE',
+  employmentStatus: '',
+  employerName: '',
+  occupation: '',
+  annualIncome: '',
+};
+
+const EMPTY_ENTITY: EntityFormData = {
+  legalName: '',
+  tradingName: '',
+  entitySubtype: '',
+  registrationNumber: '',
+  taxNumber: '',
+  vatNumber: '',
+  charityNumber: '',
+  dateOfIncorporation: '',
+  countryOfIncorporation: 'IE',
+  registeredAddressLine1: '',
+  registeredAddressLine2: '',
+  registeredCity: '',
+  registeredCounty: '',
+  registeredPostcode: '',
+  registeredCountry: 'IE',
+  tradingAddressLine1: '',
+  tradingAddressLine2: '',
+  tradingCity: '',
+  tradingCounty: '',
+  tradingPostcode: '',
+  tradingCountry: 'IE',
+  sameAsRegistered: true,
+  businessEmail: '',
+  businessPhone: '',
+  website: '',
+  industryCode: '',
+  businessDescription: '',
+  annualTurnover: '',
+  numberOfEmployees: '',
+  members: [],
+};
+
+// ============================================
+// Reusable form primitives
+// ============================================
+
+const FIELD_STYLE: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  border: '1px solid var(--rm-border)',
+  color: 'var(--rm-text)',
+};
+
+function fieldStyle(error?: string): React.CSSProperties {
+  return {
+    ...FIELD_STYLE,
+    border: `1px solid ${error ? 'rgba(239,68,68,0.6)' : 'var(--rm-border)'}`,
+  };
+}
+
+const FIELD_CLASS = 'w-full rounded-xl px-4 py-2.5 text-sm';
+
+function RequiredMark({ required }: { required?: boolean }) {
+  if (!required) return null;
+  return (
+    <>
+      <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+        {' '}
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
+}
+
+function FieldError({ id, error }: { id: string; error?: string }) {
+  if (!error) return null;
+  return (
+    <p id={`${id}-error`} role="alert" className="text-xs mt-1.5 text-red-700 dark:text-red-300">
+      {error}
+    </p>
+  );
+}
+
+function Label({
+  id,
+  label,
+  required,
+  hint,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  hint?: string;
+}) {
+  return (
+    <label htmlFor={id} className="block text-sm mb-1.5" style={{ color: 'var(--rm-text-secondary)' }}>
+      {label}
+      <RequiredMark required={required} />
+      {hint && (
+        <span className="block text-xs mt-0.5" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </span>
+      )}
+    </label>
+  );
+}
+
+type TextProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  required?: boolean;
+  error?: string;
+  placeholder?: string;
+  min?: string;
+  max?: string;
+  step?: string;
+};
+
+function TextField({
+  id,
+  label,
+  value,
+  onChange,
+  type = 'text',
+  required,
+  error,
+  placeholder,
+  min,
+  max,
+  step,
+}: TextProps) {
+  return (
+    <div>
+      <Label id={id} label={label} required={required} />
+      <input
+        id={id}
+        name={id}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        min={min}
+        max={max}
+        step={step}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        onChange={e => onChange(e.target.value)}
+        className={FIELD_CLASS}
+        style={fieldStyle(error)}
+      />
+      <FieldError id={id} error={error} />
+    </div>
+  );
+}
+
+type SelectProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  required?: boolean;
+  error?: string;
+  placeholder?: string;
+};
+
+function SelectField({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  required,
+  error,
+  placeholder,
+}: SelectProps) {
+  return (
+    <div>
+      <Label id={id} label={label} required={required} />
+      <select
+        id={id}
+        name={id}
+        value={value}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        onChange={e => onChange(e.target.value)}
+        className={FIELD_CLASS}
+        style={fieldStyle(error)}
+      >
+        <option value="">{placeholder || 'Select an option'}</option>
+        {options.map(o => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <FieldError id={id} error={error} />
+    </div>
+  );
+}
+
+function TextAreaField({
+  id,
+  label,
+  value,
+  onChange,
+  rows = 3,
+  required,
+  error,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  required?: boolean;
+  error?: string;
+}) {
+  return (
+    <div>
+      <Label id={id} label={label} required={required} />
+      <textarea
+        id={id}
+        name={id}
+        rows={rows}
+        value={value}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        onChange={e => onChange(e.target.value)}
+        className={FIELD_CLASS}
+        style={fieldStyle(error)}
+      />
+      <FieldError id={id} error={error} />
+    </div>
+  );
+}
+
+function Card({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            {title}
+          </h2>
+          {description && (
+            <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              {description}
+            </p>
+          )}
+        </div>
+        {action}
+      </div>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function SecondaryButton({
+  children,
+  onClick,
+  type = 'button',
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  type?: 'button' | 'submit';
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+      style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PrimaryButton({
+  children,
+  onClick,
+  type = 'button',
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  type?: 'button' | 'submit';
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+      style={{ backgroundColor: 'var(--rm-accent)' }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Dialog({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = `dialog-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+  useEffect(() => {
+    ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(2,6,23,0.55)' }}
+      onClick={onClose}
+    >
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-7"
+        style={{ backgroundColor: 'var(--rm-card)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h2
+            id={titleId}
+            className="text-xl font-semibold tracking-tight"
+            style={{ color: 'var(--rm-text)' }}
+          >
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="rounded-full p-2 transition-opacity hover:opacity-80"
+            style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="mt-5">{children}</div>
+        {footer && <div className="mt-6 flex justify-end gap-3">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -325,110 +730,38 @@ export default function NewCustomerPage() {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const [individualData, setIndividualData] = useState<IndividualFormData>({
-    firstName: '',
-    middleName: '',
-    lastName: '',
-    dateOfBirth: '',
-    gender: '',
-    nationality: 'IE',
-    email: '',
-    phone: '',
-    identityType: 'PASSPORT',
-    identityNumber: '',
-    identityExpiry: '',
-    taxReferenceNumber: '',
-    addressLine1: '',
-    addressLine2: '',
-    city: '',
-    county: '',
-    postcode: '',
-    country: 'IE',
-    employmentStatus: '',
-    employerName: '',
-    occupation: '',
-    annualIncome: '',
-  });
-
+  const [individualData, setIndividualData] = useState<IndividualFormData>(EMPTY_INDIVIDUAL);
   const [jointHolders, setJointHolders] = useState<JointHolderData[]>([]);
-
-  const [entityData, setEntityData] = useState<EntityFormData>({
-    legalName: '',
-    tradingName: '',
-    entitySubtype: '',
-    registrationNumber: '',
-    taxNumber: '',
-    vatNumber: '',
-    charityNumber: '',
-    dateOfIncorporation: '',
-    countryOfIncorporation: 'IE',
-    registeredAddressLine1: '',
-    registeredAddressLine2: '',
-    registeredCity: '',
-    registeredCounty: '',
-    registeredPostcode: '',
-    registeredCountry: 'IE',
-    tradingAddressLine1: '',
-    tradingAddressLine2: '',
-    tradingCity: '',
-    tradingCounty: '',
-    tradingPostcode: '',
-    tradingCountry: 'IE',
-    sameAsRegistered: true,
-    businessEmail: '',
-    businessPhone: '',
-    website: '',
-    industryCode: '',
-    businessDescription: '',
-    annualTurnover: '',
-    numberOfEmployees: '',
-    members: [],
-  });
+  const [entityData, setEntityData] = useState<EntityFormData>(EMPTY_ENTITY);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ExistingCustomer[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [addMemberType, setAddMemberType] = useState<'existing' | 'new'>('existing');
-  const [newMemberData, setNewMemberData] = useState<IndividualFormData>({
-    firstName: '',
-    middleName: '',
-    lastName: '',
-    dateOfBirth: '',
-    gender: '',
-    nationality: 'IE',
-    email: '',
-    phone: '',
-    identityType: 'PASSPORT',
-    identityNumber: '',
-    identityExpiry: '',
-    taxReferenceNumber: '',
-    addressLine1: '',
-    addressLine2: '',
-    city: '',
-    county: '',
-    postcode: '',
-    country: 'IE',
-    employmentStatus: '',
-    employerName: '',
-    occupation: '',
-    annualIncome: '',
-  });
+  const [newMemberData, setNewMemberData] = useState<IndividualFormData>(EMPTY_INDIVIDUAL);
   const [selectedMemberRole, setSelectedMemberRole] = useState('');
   const [memberOwnership, setMemberOwnership] = useState('');
   const [memberIsSignatory, setMemberIsSignatory] = useState(false);
   const [memberIsPrimaryContact, setMemberIsPrimaryContact] = useState(false);
+  const [memberError, setMemberError] = useState<string | null>(null);
 
   const handleCategorySelect = (category: CustomerCategory) => {
     setSelectedCategory(category);
     setSelectedSubtype(null);
     setStep(1);
+    setError(null);
+    setFieldErrors({});
   };
 
   const handleSubtypeSelect = (subtype: CustomerSubtype) => {
     setSelectedSubtype(subtype);
     setStep(2);
+    setError(null);
+    setFieldErrors({});
     if (subtype === 'COMPANY')
       setEntityData(prev => ({ ...prev, entitySubtype: 'PRIVATE_LIMITED' }));
     else if (subtype === 'PARTNERSHIP')
@@ -438,10 +771,24 @@ export default function NewCustomerPage() {
 
   const handleIndividualChange = (field: keyof IndividualFormData, value: string) => {
     setIndividualData(prev => ({ ...prev, [field]: value }));
+    setFieldErrors(prev => {
+      const key = `ind-${field}`;
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   const handleEntityChange = (field: keyof EntityFormData, value: string | boolean) => {
     setEntityData(prev => ({ ...prev, [field]: value }));
+    setFieldErrors(prev => {
+      const key = `ent-${field}`;
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     if (field === 'sameAsRegistered' && value === true) {
       setEntityData(prev => ({
         ...prev,
@@ -456,53 +803,28 @@ export default function NewCustomerPage() {
   };
 
   const searchExistingCustomers = async (query: string) => {
+    setSearchError(null);
     if (query.length < 2) {
       setSearchResults([]);
       return;
     }
     setIsSearching(true);
     try {
-      const response = await apiClient.get(
+      const response = await apiClient.get<ExistingCustomer[]>(
         `/api/admin/customers/search?q=${encodeURIComponent(query)}`
       );
       setSearchResults(response.data || []);
     } catch (err) {
       console.error('Search failed:', err);
       setSearchResults([]);
+      setSearchError('The customer search is unavailable right now. You can add a new person instead.');
     } finally {
       setIsSearching(false);
     }
   };
 
   const addJointHolder = () => {
-    setJointHolders(prev => [
-      ...prev,
-      {
-        firstName: '',
-        middleName: '',
-        lastName: '',
-        dateOfBirth: '',
-        gender: '',
-        nationality: 'IE',
-        email: '',
-        phone: '',
-        identityType: 'PASSPORT',
-        identityNumber: '',
-        identityExpiry: '',
-        taxReferenceNumber: '',
-        addressLine1: '',
-        addressLine2: '',
-        city: '',
-        county: '',
-        postcode: '',
-        country: 'IE',
-        employmentStatus: '',
-        employerName: '',
-        occupation: '',
-        annualIncome: '',
-        relationship: '',
-      },
-    ]);
+    setJointHolders(prev => [...prev, { ...EMPTY_INDIVIDUAL, relationship: '' }]);
   };
 
   const removeJointHolder = (index: number) =>
@@ -515,10 +837,14 @@ export default function NewCustomerPage() {
   };
 
   const addExistingMember = (customer: ExistingCustomer) => {
+    if (!selectedMemberRole) {
+      setMemberError('Choose a role before adding this person.');
+      return;
+    }
     const newMember: EntityMember = {
       id: `member-${Date.now()}`,
       customerId: customer.customerId,
-      customerName: `${customer.firstName} ${customer.lastName}`,
+      customerName: `${customer.firstName} ${customer.lastName}`.trim(),
       role: selectedMemberRole,
       ownershipPercentage: memberOwnership ? parseFloat(memberOwnership) : undefined,
       isSignatory: memberIsSignatory,
@@ -530,9 +856,17 @@ export default function NewCustomerPage() {
   };
 
   const addNewMember = () => {
+    if (!selectedMemberRole) {
+      setMemberError('Choose a role before adding this person.');
+      return;
+    }
+    if (!newMemberData.firstName.trim() || !newMemberData.lastName.trim()) {
+      setMemberError('Enter the person’s first and last name.');
+      return;
+    }
     const newMember: EntityMember = {
       id: `member-${Date.now()}`,
-      customerName: `${newMemberData.firstName} ${newMemberData.lastName}`,
+      customerName: `${newMemberData.firstName} ${newMemberData.lastName}`.trim(),
       role: selectedMemberRole,
       ownershipPercentage: memberOwnership ? parseFloat(memberOwnership) : undefined,
       isSignatory: memberIsSignatory,
@@ -553,37 +887,109 @@ export default function NewCustomerPage() {
     setAddMemberType('existing');
     setSearchQuery('');
     setSearchResults([]);
+    setSearchError(null);
+    setMemberError(null);
     setSelectedMemberRole('');
     setMemberOwnership('');
     setMemberIsSignatory(false);
     setMemberIsPrimaryContact(false);
-    setNewMemberData({
-      firstName: '',
-      middleName: '',
-      lastName: '',
-      dateOfBirth: '',
-      gender: '',
-      nationality: 'IE',
-      email: '',
-      phone: '',
-      identityType: 'PASSPORT',
-      identityNumber: '',
-      identityExpiry: '',
-      taxReferenceNumber: '',
-      addressLine1: '',
-      addressLine2: '',
-      city: '',
-      county: '',
-      postcode: '',
-      country: 'IE',
-      employmentStatus: '',
-      employerName: '',
-      occupation: '',
-      annualIncome: '',
-    });
+    setNewMemberData(EMPTY_INDIVIDUAL);
+  };
+
+  // -------------------------------------------------------------------------
+  // Validation — errors are linked to their fields and announced
+  // -------------------------------------------------------------------------
+
+  const validate = (): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    const required = (id: string, value: string | undefined, label: string) => {
+      if (!value || !String(value).trim()) errors[id] = `${label} is required.`;
+    };
+
+    if (selectedCategory === 'INDIVIDUAL') {
+      required('ind-firstName', individualData.firstName, 'First name');
+      required('ind-lastName', individualData.lastName, 'Last name');
+      required('ind-dateOfBirth', individualData.dateOfBirth, 'Date of birth');
+      required('ind-nationality', individualData.nationality, 'Nationality');
+      required('ind-email', individualData.email, 'Email');
+      required('ind-phone', individualData.phone, 'Phone number');
+      required('ind-identityType', individualData.identityType, 'ID type');
+      required('ind-identityNumber', individualData.identityNumber, 'ID number');
+      required('ind-addressLine1', individualData.addressLine1, 'Address line 1');
+      required('ind-city', individualData.city, 'City or town');
+      required('ind-country', individualData.country, 'Country');
+      if (selectedSubtype !== 'SOLE_TRADER')
+        required('ind-employmentStatus', individualData.employmentStatus, 'Employment status');
+      if (selectedSubtype === 'SOLE_TRADER')
+        required('ent-tradingName', entityData.tradingName, 'Trading name');
+      if (individualData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(individualData.email))
+        errors['ind-email'] = 'Enter a valid email address.';
+      jointHolders.forEach((h, i) => {
+        required(`jh-${i}-firstName`, h.firstName, `Joint holder ${i + 1} first name`);
+        required(`jh-${i}-lastName`, h.lastName, `Joint holder ${i + 1} last name`);
+        required(`jh-${i}-email`, h.email, `Joint holder ${i + 1} email`);
+        required(`jh-${i}-phone`, h.phone, `Joint holder ${i + 1} phone`);
+        required(`jh-${i}-dateOfBirth`, h.dateOfBirth, `Joint holder ${i + 1} date of birth`);
+      });
+    } else {
+      required('ent-legalName', entityData.legalName, 'Legal name');
+      required(
+        selectedSubtype === 'CHARITY' ? 'ent-charityNumber' : 'ent-registrationNumber',
+        selectedSubtype === 'CHARITY' ? entityData.charityNumber : entityData.registrationNumber,
+        selectedSubtype === 'CHARITY' ? 'CHY number' : 'Registration number'
+      );
+      required('ent-dateOfIncorporation', entityData.dateOfIncorporation, 'Date of incorporation');
+      required(
+        'ent-countryOfIncorporation',
+        entityData.countryOfIncorporation,
+        'Country of incorporation'
+      );
+      required('ent-businessEmail', entityData.businessEmail, 'Business email');
+      required('ent-businessPhone', entityData.businessPhone, 'Business phone');
+      required('ent-registeredAddressLine1', entityData.registeredAddressLine1, 'Address line 1');
+      required('ent-registeredCity', entityData.registeredCity, 'City');
+      required('ent-registeredCountry', entityData.registeredCountry, 'Country');
+      if (entityData.businessEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entityData.businessEmail))
+        errors['ent-businessEmail'] = 'Enter a valid email address.';
+      if (!entityData.sameAsRegistered) {
+        required('ent-tradingAddressLine1', entityData.tradingAddressLine1, 'Trading address line 1');
+        required('ent-tradingCity', entityData.tradingCity, 'Trading city');
+        required('ent-tradingCountry', entityData.tradingCountry, 'Trading country');
+      }
+    }
+    return errors;
+  };
+
+  const goToReview = () => {
+    const errors = validate();
+    setFieldErrors(errors);
+    const count = Object.keys(errors).length;
+    if (count > 0) {
+      setError(
+        `${count} field${count === 1 ? '' : 's'} still need attention. Everything you typed has been kept.`
+      );
+      const first = document.getElementById(Object.keys(errors)[0]);
+      first?.focus();
+      first?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    setError(null);
+    setStep(3);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async () => {
+    const errors = validate();
+    setFieldErrors(errors);
+    const count = Object.keys(errors).length;
+    if (count > 0) {
+      setError(
+        `${count} field${count === 1 ? '' : 's'} still need attention. Nothing was submitted and your input has been kept.`
+      );
+      setStep(2);
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     try {
@@ -610,7 +1016,7 @@ export default function NewCustomerPage() {
             await apiClient.post('/api/admin/customers', holderData);
           }
         }
-        toast.success('Customer created successfully!');
+        toast.success('Customer created');
         router.push(`/dashboard/customers/${response.data.customerId}`);
       } else {
         const entityPayload = {
@@ -673,7 +1079,10 @@ export default function NewCustomerPage() {
                 ? parseFloat(member.newMember.annualIncome)
                 : null,
             };
-            const customerResponse = await apiClient.post('/api/admin/customers', newCustomerData);
+            const customerResponse = await apiClient.post(
+              '/api/admin/customers',
+              newCustomerData
+            );
             await apiClient.post(`/api/admin/entities/${entityId}/members`, {
               customerId: customerResponse.data.customerId,
               role: member.role,
@@ -683,1478 +1092,1032 @@ export default function NewCustomerPage() {
             });
           }
         }
-        toast.success('Entity created successfully!');
+        toast.success('Entity created');
         router.push(`/dashboard/entities/${entityId}`);
       }
     } catch (err: unknown) {
       console.error('Error creating customer/entity:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create. Please try again.');
+      setError(
+        err instanceof Error
+          ? `${err.message} Nothing was submitted — your input has been kept.`
+          : 'We could not create this record. Nothing was submitted — your input has been kept.'
+      );
+      setStep(2);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // -------------------------------------------------------------------------
+  // Steps
+  // -------------------------------------------------------------------------
+
+  const steps = [
+    { n: 1, label: 'Type' },
+    { n: 2, label: 'Details' },
+    { n: 3, label: 'Review' },
+  ];
+
+  const categoryMeta = CUSTOMER_CATEGORIES.find(c => c.value === selectedCategory);
+  const subtypeMeta = categoryMeta?.subtypes.find(s => s.value === selectedSubtype);
+
   const renderCategorySelection = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">Select Customer Type</h2>
-        <p className="mt-2 text-gray-600">Choose the category that best describes your customer</p>
-      </div>
+    <Card
+      title="Choose a customer type"
+      description="Pick the category that best describes the customer you are onboarding."
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {CUSTOMER_CATEGORIES.map(category => (
-          <button
-            key={category.value}
-            onClick={() => handleCategorySelect(category.value)}
-            className={`p-6 border-2 rounded-xl text-left transition-all hover:shadow-lg ${
-              selectedCategory === category.value
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-gray-200 hover:border-blue-300'
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <span className="text-4xl">{category.icon}</span>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{category.label}</h3>
-                <p className="text-sm text-gray-500">{category.description}</p>
-              </div>
-            </div>
-          </button>
-        ))}
+        {CUSTOMER_CATEGORIES.map(category => {
+          const selected = selectedCategory === category.value;
+          return (
+            <button
+              key={category.value}
+              type="button"
+              onClick={() => handleCategorySelect(category.value)}
+              aria-pressed={selected}
+              className="rounded-2xl p-5 text-left transition-opacity hover:opacity-90"
+              style={{
+                backgroundColor: selected ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
+              }}
+            >
+              <span className="flex items-start gap-4">
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: selected ? 'var(--rm-card)' : 'var(--rm-card)',
+                    color: 'var(--rm-accent)',
+                  }}
+                  aria-hidden="true"
+                >
+                  <CategoryIcon value={category.value} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                    {category.label}
+                  </span>
+                  <span className="block text-sm mt-0.5" style={{ color: 'var(--rm-text-muted)' }}>
+                    {category.description}
+                  </span>
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </div>
-    </div>
+    </Card>
   );
 
   const renderSubtypeSelection = () => {
-    const category = CUSTOMER_CATEGORIES.find(c => c.value === selectedCategory);
-    if (!category) return null;
+    if (!categoryMeta) return null;
     return (
       <div className="space-y-6">
-        <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-gray-900">Select {category.label} Type</h2>
-          <p className="mt-2 text-gray-600">
-            Choose the specific type of {category.label.toLowerCase()}
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {category.subtypes.map(subtype => (
-            <button
-              key={subtype.value}
-              onClick={() => handleSubtypeSelect(subtype.value as CustomerSubtype)}
-              className={`p-6 border-2 rounded-xl text-left transition-all hover:shadow-lg ${
-                selectedSubtype === subtype.value
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-blue-300'
-              }`}
-            >
-              <h3 className="text-lg font-semibold text-gray-900">{subtype.label}</h3>
-              <p className="text-sm text-gray-500 mt-1">{subtype.description}</p>
-            </button>
-          ))}
-        </div>
-        <div className="flex justify-start">
-          <button
-            onClick={() => setSelectedCategory(null)}
-            className="text-gray-600 hover:text-gray-900 flex items-center gap-2"
+        <Card
+          title={`Choose a ${categoryMeta.label.toLowerCase()} type`}
+          description={`Select the specific type of ${categoryMeta.label.toLowerCase()}.`}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {categoryMeta.subtypes.map(subtype => {
+              const selected = selectedSubtype === subtype.value;
+              return (
+                <button
+                  key={subtype.value}
+                  type="button"
+                  onClick={() => handleSubtypeSelect(subtype.value as CustomerSubtype)}
+                  aria-pressed={selected}
+                  className="rounded-2xl p-5 text-left transition-opacity hover:opacity-90"
+                  style={{
+                    backgroundColor: selected ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
+                  }}
+                >
+                  <span className="block text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                    {subtype.label}
+                  </span>
+                  <span className="block text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+                    {subtype.description}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+        <button
+          type="button"
+          onClick={() => setSelectedCategory(null)}
+          className="inline-flex items-center gap-2 text-sm font-medium rounded-lg"
+          style={{ color: 'var(--rm-text-secondary)' }}
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            aria-hidden="true"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Back to categories
-          </button>
-        </div>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to categories
+        </button>
       </div>
     );
   };
 
   const renderIndividualForm = () => (
-    <div className="space-y-8">
-      {/* Personal Information */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
-            <input
-              type="text"
-              value={individualData.firstName}
-              onChange={e => handleIndividualChange('firstName', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
-            <input
-              type="text"
-              value={individualData.middleName}
-              onChange={e => handleIndividualChange('middleName', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
-            <input
-              type="text"
-              value={individualData.lastName}
-              onChange={e => handleIndividualChange('lastName', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
-            <input
-              type="date"
-              value={individualData.dateOfBirth}
-              onChange={e => handleIndividualChange('dateOfBirth', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-            <select
-              value={individualData.gender}
-              onChange={e => handleIndividualChange('gender', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select gender</option>
-              <option value="MALE">Male</option>
-              <option value="FEMALE">Female</option>
-              <option value="OTHER">Other</option>
-              <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nationality *</label>
-            <select
-              value={individualData.nationality}
-              onChange={e => handleIndividualChange('nationality', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              {COUNTRIES.map(country => (
-                <option key={country.value} value={country.value}>
-                  {country.label}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="space-y-6">
+      <Card title="Personal information">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <TextField id="ind-firstName" label="First name" required value={individualData.firstName} error={fieldErrors['ind-firstName']} onChange={v => handleIndividualChange('firstName', v)} />
+          <TextField id="ind-middleName" label="Middle name" value={individualData.middleName} error={fieldErrors['ind-middleName']} onChange={v => handleIndividualChange('middleName', v)} />
+          <TextField id="ind-lastName" label="Last name" required value={individualData.lastName} error={fieldErrors['ind-lastName']} onChange={v => handleIndividualChange('lastName', v)} />
+          <TextField id="ind-dateOfBirth" label="Date of birth" type="date" required value={individualData.dateOfBirth} error={fieldErrors['ind-dateOfBirth']} onChange={v => handleIndividualChange('dateOfBirth', v)} />
+          <SelectField id="ind-gender" label="Gender" placeholder="Prefer not to say" value={individualData.gender} options={GENDERS} onChange={v => handleIndividualChange('gender', v)} />
+          <SelectField id="ind-nationality" label="Nationality" required placeholder="Select a nationality" value={individualData.nationality} options={COUNTRIES} error={fieldErrors['ind-nationality']} onChange={v => handleIndividualChange('nationality', v)} />
         </div>
-      </div>
+      </Card>
 
-      {/* Contact Information */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-            <input
-              type="email"
-              value={individualData.email}
-              onChange={e => handleIndividualChange('email', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-            <input
-              type="tel"
-              value={individualData.phone}
-              onChange={e => handleIndividualChange('phone', e.target.value)}
-              placeholder="+353 1 234 5678"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
+      <Card title="Contact information">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <TextField id="ind-email" label="Email" type="email" required value={individualData.email} error={fieldErrors['ind-email']} onChange={v => handleIndividualChange('email', v)} />
+          <TextField id="ind-phone" label="Phone number" type="tel" required placeholder="+353 1 234 5678" value={individualData.phone} error={fieldErrors['ind-phone']} onChange={v => handleIndividualChange('phone', v)} />
         </div>
-      </div>
+      </Card>
 
-      {/* Identity Documents */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Identity Documents</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ID Type *</label>
-            <select
-              value={individualData.identityType}
-              onChange={e => handleIndividualChange('identityType', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              {IDENTITY_TYPES.map(type => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ID Number *</label>
-            <input
-              type="text"
-              value={individualData.identityNumber}
-              onChange={e => handleIndividualChange('identityNumber', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ID Expiry Date</label>
-            <input
-              type="date"
-              value={individualData.identityExpiry}
-              onChange={e => handleIndividualChange('identityExpiry', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {individualData.country === 'IE'
-                ? 'PPS Number'
+      <Card title="Identity documents">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <SelectField id="ind-identityType" label="ID type" required placeholder="Select an ID type" value={individualData.identityType} options={IDENTITY_TYPES} error={fieldErrors['ind-identityType']} onChange={v => handleIndividualChange('identityType', v)} />
+          <TextField id="ind-identityNumber" label="ID number" required value={individualData.identityNumber} error={fieldErrors['ind-identityNumber']} onChange={v => handleIndividualChange('identityNumber', v)} />
+          <TextField id="ind-identityExpiry" label="ID expiry date" type="date" value={individualData.identityExpiry} error={fieldErrors['ind-identityExpiry']} onChange={v => handleIndividualChange('identityExpiry', v)} />
+          <TextField
+            id="ind-taxReferenceNumber"
+            label={
+              individualData.country === 'IE'
+                ? 'PPS number'
                 : individualData.country === 'GB'
-                  ? 'National Insurance Number'
-                  : 'Tax Reference Number'}
-            </label>
-            <input
-              type="text"
-              value={individualData.taxReferenceNumber}
-              onChange={e => handleIndividualChange('taxReferenceNumber', e.target.value)}
-              placeholder={
-                individualData.country === 'IE'
-                  ? '1234567T'
-                  : individualData.country === 'GB'
-                    ? 'AB123456C'
-                    : ''
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+                  ? 'National insurance number'
+                  : 'Tax reference number'
+            }
+            placeholder={
+              individualData.country === 'IE'
+                ? '1234567T'
+                : individualData.country === 'GB'
+                  ? 'AB123456C'
+                  : undefined
+            }
+            value={individualData.taxReferenceNumber}
+            error={fieldErrors['ind-taxReferenceNumber']}
+            onChange={v => handleIndividualChange('taxReferenceNumber', v)}
+          />
+        </div>
+      </Card>
+
+      <Card title="Address">
+        <div className="grid grid-cols-1 gap-5">
+          <TextField id="ind-addressLine1" label="Address line 1" required value={individualData.addressLine1} error={fieldErrors['ind-addressLine1']} onChange={v => handleIndividualChange('addressLine1', v)} />
+          <TextField id="ind-addressLine2" label="Address line 2" value={individualData.addressLine2} error={fieldErrors['ind-addressLine2']} onChange={v => handleIndividualChange('addressLine2', v)} />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <TextField id="ind-city" label="City or town" required value={individualData.city} error={fieldErrors['ind-city']} onChange={v => handleIndividualChange('city', v)} />
+            <TextField id="ind-county" label="County or region" value={individualData.county} error={fieldErrors['ind-county']} onChange={v => handleIndividualChange('county', v)} />
+            <TextField id="ind-postcode" label={individualData.country === 'IE' ? 'Eircode' : 'Postcode'} placeholder={individualData.country === 'IE' ? 'D02 XY00' : undefined} value={individualData.postcode} error={fieldErrors['ind-postcode']} onChange={v => handleIndividualChange('postcode', v)} />
+            <SelectField id="ind-country" label="Country" required placeholder="Select a country" value={individualData.country} options={COUNTRIES} error={fieldErrors['ind-country']} onChange={v => handleIndividualChange('country', v)} />
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Address */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Address</h3>
-        <div className="grid grid-cols-1 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
-            <input
-              type="text"
-              value={individualData.addressLine1}
-              onChange={e => handleIndividualChange('addressLine1', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
-            <input
-              type="text"
-              value={individualData.addressLine2}
-              onChange={e => handleIndividualChange('addressLine2', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City/Town *</label>
-              <input
-                type="text"
-                value={individualData.city}
-                onChange={e => handleIndividualChange('city', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">County/Region</label>
-              <input
-                type="text"
-                value={individualData.county}
-                onChange={e => handleIndividualChange('county', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {individualData.country === 'IE' ? 'Eircode' : 'Postcode'}
-              </label>
-              <input
-                type="text"
-                value={individualData.postcode}
-                onChange={e => handleIndividualChange('postcode', e.target.value)}
-                placeholder={individualData.country === 'IE' ? 'D02 XY00' : ''}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
-              <select
-                value={individualData.country}
-                onChange={e => handleIndividualChange('country', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                {COUNTRIES.map(country => (
-                  <option key={country.value} value={country.value}>
-                    {country.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Employment */}
       {selectedSubtype !== 'SOLE_TRADER' && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Employment Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Employment Status *
-              </label>
-              <select
-                value={individualData.employmentStatus}
-                onChange={e => handleIndividualChange('employmentStatus', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select status</option>
-                {EMPLOYMENT_TYPES.map(type => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Occupation</label>
-              <input
-                type="text"
-                value={individualData.occupation}
-                onChange={e => handleIndividualChange('occupation', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+        <Card title="Employment information">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <SelectField id="ind-employmentStatus" label="Employment status" required placeholder="Select a status" value={individualData.employmentStatus} options={EMPLOYMENT_TYPES} error={fieldErrors['ind-employmentStatus']} onChange={v => handleIndividualChange('employmentStatus', v)} />
+            <TextField id="ind-occupation" label="Occupation" value={individualData.occupation} error={fieldErrors['ind-occupation']} onChange={v => handleIndividualChange('occupation', v)} />
             {individualData.employmentStatus === 'EMPLOYED' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Employer Name
-                </label>
-                <input
-                  type="text"
-                  value={individualData.employerName}
-                  onChange={e => handleIndividualChange('employerName', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              <TextField id="ind-employerName" label="Employer name" value={individualData.employerName} error={fieldErrors['ind-employerName']} onChange={v => handleIndividualChange('employerName', v)} />
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Annual Income ({getCurrencySymbol()})
-              </label>
-              <input
-                type="number"
-                value={individualData.annualIncome}
-                onChange={e => handleIndividualChange('annualIncome', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+            <TextField
+              id="ind-annualIncome"
+              label={`Annual income (${getCurrencySymbol()})`}
+              type="number"
+              min="0"
+              step="0.01"
+              value={individualData.annualIncome}
+              error={fieldErrors['ind-annualIncome']}
+              onChange={v => handleIndividualChange('annualIncome', v)}
+            />
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Sole Trader Business Details */}
       {selectedSubtype === 'SOLE_TRADER' && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Business Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Trading Name *</label>
-              <input
-                type="text"
-                value={entityData.tradingName}
-                onChange={e => handleEntityChange('tradingName', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tax Registration Number
-              </label>
-              <input
-                type="text"
-                value={entityData.taxNumber}
-                onChange={e => handleEntityChange('taxNumber', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">VAT Number</label>
-              <input
-                type="text"
-                value={entityData.vatNumber}
-                onChange={e => handleEntityChange('vatNumber', e.target.value)}
-                placeholder="IE1234567X"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Industry/Sector
-              </label>
-              <input
-                type="text"
-                value={entityData.industryCode}
-                onChange={e => handleEntityChange('industryCode', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+        <Card title="Business details">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <TextField id="ent-tradingName" label="Trading name" required value={entityData.tradingName} error={fieldErrors['ent-tradingName']} onChange={v => handleEntityChange('tradingName', v)} />
+            <TextField id="ent-taxNumber-st" label="Tax registration number" value={entityData.taxNumber} onChange={v => handleEntityChange('taxNumber', v)} />
+            <TextField id="ent-vatNumber-st" label="VAT number" placeholder="IE1234567X" value={entityData.vatNumber} onChange={v => handleEntityChange('vatNumber', v)} />
+            <TextField id="ent-industryCode-st" label="Industry or sector" value={entityData.industryCode} onChange={v => handleEntityChange('industryCode', v)} />
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Business Description
-              </label>
-              <textarea
-                value={entityData.businessDescription}
-                onChange={e => handleEntityChange('businessDescription', e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
+              <TextAreaField id="ent-businessDescription-st" label="Business description" value={entityData.businessDescription} onChange={v => handleEntityChange('businessDescription', v)} />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Annual Turnover ({getCurrencySymbol()})
-              </label>
-              <input
-                type="number"
-                value={entityData.annualTurnover}
-                onChange={e => handleEntityChange('annualTurnover', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
+            <TextField id="ent-annualTurnover-st" label={`Annual turnover (${getCurrencySymbol()})`} type="number" min="0" step="0.01" value={entityData.annualTurnover} onChange={v => handleEntityChange('annualTurnover', v)} />
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Joint Account Holders */}
       {selectedSubtype === 'JOINT' && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Joint Account Holders</h3>
-            <button
-              type="button"
-              onClick={addJointHolder}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-            >
-              + Add Joint Holder
-            </button>
-          </div>
+        <Card
+          title="Joint account holders"
+          description="Add anyone who will share this account."
+          action={<SecondaryButton onClick={addJointHolder}>Add joint holder</SecondaryButton>}
+        >
           {jointHolders.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
-              No joint holders added yet. Click the button above to add a joint account holder.
+            <p className="text-sm py-6 text-center" style={{ color: 'var(--rm-text-muted)' }}>
+              No joint holders added yet.
             </p>
           ) : (
-            <div className="space-y-6">
+            <ul className="space-y-5">
               {jointHolders.map((holder, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-medium text-gray-900">Joint Holder {index + 1}</h4>
+                <li
+                  key={index}
+                  className="rounded-2xl p-5"
+                  style={{ backgroundColor: 'var(--rm-input)' }}
+                >
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <h3 className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                      Joint holder {index + 1}
+                    </h3>
                     <button
                       type="button"
                       onClick={() => removeJointHolder(index)}
-                      className="text-red-600 hover:text-red-800 text-sm"
+                      className="rounded-full px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 transition-opacity hover:opacity-90"
+                      style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}
                     >
-                      Remove
+                      Remove holder
+                      <span className="sr-only"> {index + 1}</span>
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        First Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={holder.firstName}
-                        onChange={e => updateJointHolder(index, 'firstName', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Last Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={holder.lastName}
-                        onChange={e => updateJointHolder(index, 'lastName', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Relationship
-                      </label>
-                      <select
-                        value={holder.relationship}
-                        onChange={e => updateJointHolder(index, 'relationship', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select relationship</option>
-                        <option value="SPOUSE">Spouse</option>
-                        <option value="PARTNER">Partner</option>
-                        <option value="PARENT">Parent</option>
-                        <option value="CHILD">Child</option>
-                        <option value="SIBLING">Sibling</option>
-                        <option value="OTHER">Other</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email *
-                      </label>
-                      <input
-                        type="email"
-                        value={holder.email}
-                        onChange={e => updateJointHolder(index, 'email', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone *
-                      </label>
-                      <input
-                        type="tel"
-                        value={holder.phone}
-                        onChange={e => updateJointHolder(index, 'phone', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Date of Birth *
-                      </label>
-                      <input
-                        type="date"
-                        value={holder.dateOfBirth}
-                        onChange={e => updateJointHolder(index, 'dateOfBirth', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <TextField id={`jh-${index}-firstName`} label="First name" required value={holder.firstName} error={fieldErrors[`jh-${index}-firstName`]} onChange={v => updateJointHolder(index, 'firstName', v)} />
+                    <TextField id={`jh-${index}-lastName`} label="Last name" required value={holder.lastName} error={fieldErrors[`jh-${index}-lastName`]} onChange={v => updateJointHolder(index, 'lastName', v)} />
+                    <SelectField id={`jh-${index}-relationship`} label="Relationship to primary holder" placeholder="Select a relationship" value={holder.relationship} options={RELATIONSHIPS} onChange={v => updateJointHolder(index, 'relationship', v)} />
+                    <TextField id={`jh-${index}-email`} label="Email" type="email" required value={holder.email} error={fieldErrors[`jh-${index}-email`]} onChange={v => updateJointHolder(index, 'email', v)} />
+                    <TextField id={`jh-${index}-phone`} label="Phone" type="tel" required value={holder.phone} error={fieldErrors[`jh-${index}-phone`]} onChange={v => updateJointHolder(index, 'phone', v)} />
+                    <TextField id={`jh-${index}-dateOfBirth`} label="Date of birth" type="date" required value={holder.dateOfBirth} error={fieldErrors[`jh-${index}-dateOfBirth`]} onChange={v => updateJointHolder(index, 'dateOfBirth', v)} />
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </div>
+        </Card>
       )}
     </div>
   );
 
-  const renderEntityForm = () => (
-    <div className="space-y-8">
-      {/* Entity Type Selection */}
-      {(selectedSubtype === 'COMPANY' ||
-        selectedSubtype === 'PARTNERSHIP' ||
-        selectedSubtype === 'FUND') && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            {selectedSubtype === 'COMPANY'
-              ? 'Company Type'
-              : selectedSubtype === 'PARTNERSHIP'
-                ? 'Partnership Type'
-                : 'Fund Type'}
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(selectedSubtype === 'COMPANY'
-              ? COMPANY_TYPES
-              : selectedSubtype === 'PARTNERSHIP'
-                ? PARTNERSHIP_TYPES
-                : FUND_TYPES
-            ).map(type => (
-              <label
-                key={type.value}
-                className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                  entityData.entitySubtype === type.value
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-blue-300'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="entitySubtype"
-                  value={type.value}
-                  checked={entityData.entitySubtype === type.value}
-                  onChange={e => handleEntityChange('entitySubtype', e.target.value)}
-                  className="sr-only"
-                />
-                <span className="text-sm font-medium text-gray-900">{type.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+  const renderEntityForm = () => {
+    const subtypeOptions =
+      selectedSubtype === 'COMPANY'
+        ? COMPANY_TYPES
+        : selectedSubtype === 'PARTNERSHIP'
+          ? PARTNERSHIP_TYPES
+          : selectedSubtype === 'FUND'
+            ? FUND_TYPES
+            : null;
 
-      {/* Basic Information */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Legal Name *</label>
-            <input
-              type="text"
-              value={entityData.legalName}
-              onChange={e => handleEntityChange('legalName', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    return (
+      <div className="space-y-6">
+        {subtypeOptions && (
+          <Card
+            title={
+              selectedSubtype === 'COMPANY'
+                ? 'Company type'
+                : selectedSubtype === 'PARTNERSHIP'
+                  ? 'Partnership type'
+                  : 'Fund type'
+            }
+          >
+            <fieldset>
+              <legend className="sr-only">Entity legal form</legend>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {subtypeOptions.map(type => {
+                  const checked = entityData.entitySubtype === type.value;
+                  return (
+                    <label
+                      key={type.value}
+                      className="flex cursor-pointer items-center gap-3 rounded-2xl px-5 py-4"
+                      style={{
+                        backgroundColor: checked ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="entitySubtype"
+                        value={type.value}
+                        checked={checked}
+                        onChange={e => handleEntityChange('entitySubtype', e.target.value)}
+                        style={{ accentColor: 'var(--rm-accent)' }}
+                      />
+                      <span className="text-sm" style={{ color: 'var(--rm-text)' }}>
+                        {type.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </Card>
+        )}
+
+        <Card title="Basic information">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <TextField id="ent-legalName" label="Legal name" required value={entityData.legalName} error={fieldErrors['ent-legalName']} onChange={v => handleEntityChange('legalName', v)} />
+            <TextField id="ent-tradingName" label="Trading name" placeholder="If different from the legal name" value={entityData.tradingName} onChange={v => handleEntityChange('tradingName', v)} />
+            <TextField
+              id={selectedSubtype === 'CHARITY' ? 'ent-charityNumber' : 'ent-registrationNumber'}
+              label={selectedSubtype === 'CHARITY' ? 'CHY number' : 'Registration number'}
               required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Trading Name</label>
-            <input
-              type="text"
-              value={entityData.tradingName}
-              onChange={e => handleEntityChange('tradingName', e.target.value)}
-              placeholder="If different from legal name"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {selectedSubtype === 'CHARITY' ? 'CHY Number' : 'Registration Number'} *
-            </label>
-            <input
-              type="text"
+              placeholder={selectedSubtype === 'COMPANY' ? 'CRO number' : undefined}
               value={
                 selectedSubtype === 'CHARITY'
                   ? entityData.charityNumber
                   : entityData.registrationNumber
               }
-              onChange={e =>
+              error={
+                fieldErrors[
+                  selectedSubtype === 'CHARITY' ? 'ent-charityNumber' : 'ent-registrationNumber'
+                ]
+              }
+              onChange={v =>
                 handleEntityChange(
                   selectedSubtype === 'CHARITY' ? 'charityNumber' : 'registrationNumber',
-                  e.target.value
+                  v
                 )
               }
-              placeholder={selectedSubtype === 'COMPANY' ? 'CRO Number' : ''}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
             />
+            <TextField id="ent-taxNumber" label="Tax number" value={entityData.taxNumber} onChange={v => handleEntityChange('taxNumber', v)} />
+            <TextField id="ent-vatNumber" label="VAT number" placeholder="IE1234567X" value={entityData.vatNumber} onChange={v => handleEntityChange('vatNumber', v)} />
+            <TextField id="ent-dateOfIncorporation" label="Date of incorporation" type="date" required value={entityData.dateOfIncorporation} error={fieldErrors['ent-dateOfIncorporation']} onChange={v => handleEntityChange('dateOfIncorporation', v)} />
+            <SelectField id="ent-countryOfIncorporation" label="Country of incorporation" required placeholder="Select a country" value={entityData.countryOfIncorporation} options={COUNTRIES} error={fieldErrors['ent-countryOfIncorporation']} onChange={v => handleEntityChange('countryOfIncorporation', v)} />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tax Number</label>
-            <input
-              type="text"
-              value={entityData.taxNumber}
-              onChange={e => handleEntityChange('taxNumber', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">VAT Number</label>
-            <input
-              type="text"
-              value={entityData.vatNumber}
-              onChange={e => handleEntityChange('vatNumber', e.target.value)}
-              placeholder="IE1234567X"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date of Incorporation *
-            </label>
-            <input
-              type="date"
-              value={entityData.dateOfIncorporation}
-              onChange={e => handleEntityChange('dateOfIncorporation', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Country of Incorporation *
-            </label>
-            <select
-              value={entityData.countryOfIncorporation}
-              onChange={e => handleEntityChange('countryOfIncorporation', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              {COUNTRIES.map(country => (
-                <option key={country.value} value={country.value}>
-                  {country.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
+        </Card>
 
-      {/* Contact Information */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Business Email *</label>
-            <input
-              type="email"
-              value={entityData.businessEmail}
-              onChange={e => handleEntityChange('businessEmail', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
+        <Card title="Contact information">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <TextField id="ent-businessEmail" label="Business email" type="email" required value={entityData.businessEmail} error={fieldErrors['ent-businessEmail']} onChange={v => handleEntityChange('businessEmail', v)} />
+            <TextField id="ent-businessPhone" label="Business phone" type="tel" required value={entityData.businessPhone} error={fieldErrors['ent-businessPhone']} onChange={v => handleEntityChange('businessPhone', v)} />
+            <TextField id="ent-website" label="Website" type="url" placeholder="https://" value={entityData.website} onChange={v => handleEntityChange('website', v)} />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Business Phone *</label>
-            <input
-              type="tel"
-              value={entityData.businessPhone}
-              onChange={e => handleEntityChange('businessPhone', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
-            <input
-              type="url"
-              value={entityData.website}
-              onChange={e => handleEntityChange('website', e.target.value)}
-              placeholder="https://"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-        </div>
-      </div>
+        </Card>
 
-      {/* Registered Address */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Registered Address</h3>
-        <div className="grid grid-cols-1 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
-            <input
-              type="text"
-              value={entityData.registeredAddressLine1}
-              onChange={e => handleEntityChange('registeredAddressLine1', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
-            <input
-              type="text"
-              value={entityData.registeredAddressLine2}
-              onChange={e => handleEntityChange('registeredAddressLine2', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-              <input
-                type="text"
-                value={entityData.registeredCity}
-                onChange={e => handleEntityChange('registeredCity', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">County</label>
-              <input
-                type="text"
-                value={entityData.registeredCounty}
-                onChange={e => handleEntityChange('registeredCounty', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {entityData.registeredCountry === 'IE' ? 'Eircode' : 'Postcode'}
-              </label>
-              <input
-                type="text"
-                value={entityData.registeredPostcode}
-                onChange={e => handleEntityChange('registeredPostcode', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
-              <select
-                value={entityData.registeredCountry}
-                onChange={e => handleEntityChange('registeredCountry', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                {COUNTRIES.map(country => (
-                  <option key={country.value} value={country.value}>
-                    {country.label}
-                  </option>
-                ))}
-              </select>
+        <Card title="Registered address">
+          <div className="grid grid-cols-1 gap-5">
+            <TextField id="ent-registeredAddressLine1" label="Address line 1" required value={entityData.registeredAddressLine1} error={fieldErrors['ent-registeredAddressLine1']} onChange={v => handleEntityChange('registeredAddressLine1', v)} />
+            <TextField id="ent-registeredAddressLine2" label="Address line 2" value={entityData.registeredAddressLine2} onChange={v => handleEntityChange('registeredAddressLine2', v)} />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+              <TextField id="ent-registeredCity" label="City" required value={entityData.registeredCity} error={fieldErrors['ent-registeredCity']} onChange={v => handleEntityChange('registeredCity', v)} />
+              <TextField id="ent-registeredCounty" label="County" value={entityData.registeredCounty} onChange={v => handleEntityChange('registeredCounty', v)} />
+              <TextField id="ent-registeredPostcode" label={entityData.registeredCountry === 'IE' ? 'Eircode' : 'Postcode'} value={entityData.registeredPostcode} onChange={v => handleEntityChange('registeredPostcode', v)} />
+              <SelectField id="ent-registeredCountry" label="Country" required placeholder="Select a country" value={entityData.registeredCountry} options={COUNTRIES} error={fieldErrors['ent-registeredCountry']} onChange={v => handleEntityChange('registeredCountry', v)} />
             </div>
           </div>
-        </div>
-      </div>
+        </Card>
 
-      {/* Trading Address */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Trading Address</h3>
-          <label className="flex items-center gap-2 cursor-pointer">
+        <Card title="Trading address">
+          <label
+            htmlFor="ent-sameAsRegistered"
+            className="flex items-center gap-3 cursor-pointer mb-5"
+          >
             <input
+              id="ent-sameAsRegistered"
               type="checkbox"
               checked={entityData.sameAsRegistered}
               onChange={e => handleEntityChange('sameAsRegistered', e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="h-4 w-4 rounded"
+              style={{ accentColor: 'var(--rm-accent)' }}
             />
-            <span className="text-sm text-gray-700">Same as registered address</span>
+            <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+              Same as the registered address
+            </span>
           </label>
-        </div>
-        {!entityData.sameAsRegistered && (
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Address Line 1 *
-              </label>
-              <input
-                type="text"
-                value={entityData.tradingAddressLine1}
-                onChange={e => handleEntityChange('tradingAddressLine1', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
-              <input
-                type="text"
-                value={entityData.tradingAddressLine2}
-                onChange={e => handleEntityChange('tradingAddressLine2', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">City *</label>
-                <input
-                  type="text"
-                  value={entityData.tradingCity}
-                  onChange={e => handleEntityChange('tradingCity', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">County</label>
-                <input
-                  type="text"
-                  value={entityData.tradingCounty}
-                  onChange={e => handleEntityChange('tradingCounty', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {entityData.tradingCountry === 'IE' ? 'Eircode' : 'Postcode'}
-                </label>
-                <input
-                  type="text"
-                  value={entityData.tradingPostcode}
-                  onChange={e => handleEntityChange('tradingPostcode', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
-                <select
-                  value={entityData.tradingCountry}
-                  onChange={e => handleEntityChange('tradingCountry', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  {COUNTRIES.map(country => (
-                    <option key={country.value} value={country.value}>
-                      {country.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Business Details */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Business Details</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Industry/Sector</label>
-            <input
-              type="text"
-              value={entityData.industryCode}
-              onChange={e => handleEntityChange('industryCode', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Number of Employees
-            </label>
-            <input
-              type="number"
-              value={entityData.numberOfEmployees}
-              onChange={e => handleEntityChange('numberOfEmployees', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Annual Turnover ({getCurrencySymbol()})
-            </label>
-            <input
-              type="number"
-              value={entityData.annualTurnover}
-              onChange={e => handleEntityChange('annualTurnover', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Business Description
-            </label>
-            <textarea
-              value={entityData.businessDescription}
-              onChange={e => handleEntityChange('businessDescription', e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-        </div>
-      </div>
+          {!entityData.sameAsRegistered && (
+            <div className="grid grid-cols-1 gap-5">
+              <TextField id="ent-tradingAddressLine1" label="Address line 1" required value={entityData.tradingAddressLine1} error={fieldErrors['ent-tradingAddressLine1']} onChange={v => handleEntityChange('tradingAddressLine1', v)} />
+              <TextField id="ent-tradingAddressLine2" label="Address line 2" value={entityData.tradingAddressLine2} onChange={v => handleEntityChange('tradingAddressLine2', v)} />
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <TextField id="ent-tradingCity" label="City" required value={entityData.tradingCity} error={fieldErrors['ent-tradingCity']} onChange={v => handleEntityChange('tradingCity', v)} />
+                <TextField id="ent-tradingCounty" label="County" value={entityData.tradingCounty} onChange={v => handleEntityChange('tradingCounty', v)} />
+                <TextField id="ent-tradingPostcode" label={entityData.tradingCountry === 'IE' ? 'Eircode' : 'Postcode'} value={entityData.tradingPostcode} onChange={v => handleEntityChange('tradingPostcode', v)} />
+                <SelectField id="ent-tradingCountry" label="Country" required placeholder="Select a country" value={entityData.tradingCountry} options={COUNTRIES} error={fieldErrors['ent-tradingCountry']} onChange={v => handleEntityChange('tradingCountry', v)} />
+              </div>
+            </div>
+          )}
+        </Card>
 
-      {/* Key Personnel */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Key Personnel</h3>
-            <p className="text-sm text-gray-500">
-              Add directors, shareholders, partners, or other key individuals
-            </p>
+        <Card title="Business details">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <TextField id="ent-industryCode" label="Industry or sector" value={entityData.industryCode} onChange={v => handleEntityChange('industryCode', v)} />
+            <TextField id="ent-numberOfEmployees" label="Number of employees" type="number" min="0" step="1" value={entityData.numberOfEmployees} onChange={v => handleEntityChange('numberOfEmployees', v)} />
+            <TextField id="ent-annualTurnover" label={`Annual turnover (${getCurrencySymbol()})`} type="number" min="0" step="0.01" value={entityData.annualTurnover} onChange={v => handleEntityChange('annualTurnover', v)} />
+            <div className="md:col-span-2">
+              <TextAreaField id="ent-businessDescription" label="Business description" value={entityData.businessDescription} onChange={v => handleEntityChange('businessDescription', v)} />
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAddMemberModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-          >
-            + Add Person
-          </button>
-        </div>
-        {entityData.members.length === 0 ? (
-          <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        </Card>
+
+        <Card
+          title="Key people"
+          description="Add directors, shareholders, partners or other key individuals."
+          action={
+            <SecondaryButton
+              onClick={() => {
+                setMemberError(null);
+                setShowAddMemberModal(true);
+              }}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-            <p className="mt-2 text-gray-500">No key personnel added yet</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {entityData.members.map(member => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+              Add person
+            </SecondaryButton>
+          }
+        >
+          {entityData.members.length === 0 ? (
+            <div
+              className="rounded-2xl py-10 text-center"
+              style={{ border: '1px dashed var(--rm-border)' }}
+            >
+              <svg
+                className="mx-auto h-8 w-8"
+                style={{ color: 'var(--rm-text-muted)' }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={1.6}
+                aria-hidden="true"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-blue-600 font-medium">
-                      {member.customerName?.charAt(0) || '?'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{member.customerName}</p>
-                    <p className="text-sm text-gray-500">
-                      {MEMBER_ROLES[selectedSubtype!]?.find(r => r.value === member.role)?.label ||
-                        member.role}
-                      {member.ownershipPercentage && ` • ${member.ownershipPercentage}% ownership`}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {member.isSignatory && (
-                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                      Signatory
-                    </span>
-                  )}
-                  {member.isPrimaryContact && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                      Primary Contact
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeMember(member.id)}
-                    className="text-red-600 hover:text-red-800 p-1"
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-3-3"
+                />
+              </svg>
+              <p className="mt-3 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                No key people added yet.
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {entityData.members.map(member => {
+                const roleLabel =
+                  MEMBER_ROLES[selectedSubtype || '']?.find(r => r.value === member.role)?.label ||
+                  member.role;
+                return (
+                  <li
+                    key={member.id}
+                    className="flex items-center justify-between gap-4 rounded-2xl px-5 py-4"
+                    style={{ backgroundColor: 'var(--rm-input)' }}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                    <div className="flex items-center gap-4 min-w-0">
+                      <span
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+                        style={{
+                          backgroundColor: 'var(--rm-accent-muted)',
+                          color: 'var(--rm-accent)',
+                        }}
+                        aria-hidden="true"
+                      >
+                        {(member.customerName?.charAt(0) || '?').toUpperCase()}
+                      </span>
+                      <span className="min-w-0">
+                        <span
+                          className="block truncate text-base font-medium"
+                          style={{ color: 'var(--rm-text)' }}
+                        >
+                          {member.customerName}
+                        </span>
+                        <span className="block text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          {roleLabel}
+                          {member.ownershipPercentage != null &&
+                            ` · ${member.ownershipPercentage}% ownership`}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                      {member.isSignatory && <Tag>Signatory</Tag>}
+                      {member.isPrimaryContact && <Tag>Primary contact</Tag>}
+                      <button
+                        type="button"
+                        onClick={() => removeMember(member.id)}
+                        aria-label={`Remove ${member.customerName || 'this person'}`}
+                        className="rounded-full p-2 text-red-600 dark:text-red-400 transition-opacity hover:opacity-80"
+                        style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          strokeWidth={2}
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </div>
+    );
+  };
+
+  const renderReview = () => (
+    <div className="space-y-6">
+      <Card title="Review the details" description="Check everything before creating the record.">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+          <ReviewFact label="Customer type" value={`${categoryMeta?.label || '—'} · ${subtypeMeta?.label || '—'}`} />
+          {selectedCategory === 'INDIVIDUAL' ? (
+            <>
+              <ReviewFact
+                label="Name"
+                value={`${individualData.firstName} ${individualData.lastName}`.trim() || '—'}
+              />
+              <ReviewFact label="Email" value={individualData.email || '—'} />
+              <ReviewFact label="Phone" value={individualData.phone || '—'} />
+              <ReviewFact label="Date of birth" value={individualData.dateOfBirth || '—'} />
+              <ReviewFact
+                label="Address"
+                value={
+                  [
+                    individualData.addressLine1,
+                    individualData.city,
+                    individualData.postcode,
+                    COUNTRIES.find(c => c.value === individualData.country)?.label,
+                  ]
+                    .filter(Boolean)
+                    .join(', ') || '—'
+                }
+              />
+              {selectedSubtype === 'JOINT' && (
+                <ReviewFact
+                  label="Joint holders"
+                  value={`${jointHolders.length} added`}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <ReviewFact label="Legal name" value={entityData.legalName || '—'} />
+              <ReviewFact
+                label={selectedSubtype === 'CHARITY' ? 'CHY number' : 'Registration number'}
+                value={entityData.registrationNumber || entityData.charityNumber || '—'}
+              />
+              <ReviewFact label="Business email" value={entityData.businessEmail || '—'} />
+              <ReviewFact
+                label="Key people"
+                value={`${entityData.members.length} added`}
+              />
+            </>
+          )}
+        </dl>
+      </Card>
+
+      <div className="flex justify-between gap-3 flex-wrap">
+        <SecondaryButton onClick={() => setStep(2)}>Back to details</SecondaryButton>
+        <PrimaryButton onClick={handleSubmit} disabled={isSubmitting}>
+          {isSubmitting ? 'Creating…' : 'Create customer'}
+        </PrimaryButton>
       </div>
     </div>
   );
 
-  const renderAddMemberModal = () => {
-    if (!showAddMemberModal) return null;
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">Add Key Person</h2>
-              <button onClick={resetMemberForm} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <header className="rounded-3xl p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <Link
+          href="/dashboard/customers"
+          className="inline-flex items-center gap-1.5 text-sm font-medium rounded-lg"
+          style={{ color: 'var(--rm-text-muted)' }}
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to customers
+        </Link>
+
+        <div className="mt-4 flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h1
+              className="text-2xl font-semibold tracking-tight"
+              style={{ color: 'var(--rm-text)' }}
+            >
+              Add customer
+            </h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              {categoryMeta && subtypeMeta
+                ? `${categoryMeta.label} · ${subtypeMeta.label}`
+                : 'Choose a customer type to begin onboarding.'}
+            </p>
           </div>
-          <div className="p-6 space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
-              <select
-                value={selectedMemberRole}
-                onChange={e => setSelectedMemberRole(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Select role</option>
-                {(MEMBER_ROLES[selectedSubtype!] || []).map(role => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-              </select>
+
+          {selectedCategory && (
+            <ol
+              aria-label="Progress"
+              className="flex items-center gap-2 flex-wrap"
+              style={{ color: 'var(--rm-text-muted)' }}
+            >
+              {steps.map((s, i) => (
+                <li key={s.n} className="flex items-center gap-2">
+                  <span
+                    aria-current={step === s.n ? 'step' : undefined}
+                    className="rounded-full px-3.5 py-1.5 text-sm font-medium tabular-nums"
+                    style={{
+                      backgroundColor:
+                        step === s.n ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
+                      color: step === s.n ? 'var(--rm-accent)' : 'var(--rm-text-muted)',
+                    }}
+                  >
+                    {s.n}. {s.label}
+                    {step === s.n && <span className="sr-only"> (current step)</span>}
+                  </span>
+                  {i < steps.length - 1 && (
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </header>
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-3xl px-6 py-5 flex items-start gap-3"
+          style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
+        >
+          <svg
+            className="w-5 h-5 mt-0.5 shrink-0 text-red-600 dark:text-red-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={1.8}
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+            />
+          </svg>
+          <p className="text-sm" style={{ color: 'var(--rm-text)' }}>
+            {error}
+          </p>
+        </div>
+      )}
+
+      {!selectedCategory && renderCategorySelection()}
+      {selectedCategory && !selectedSubtype && renderSubtypeSelection()}
+
+      {selectedCategory && selectedSubtype && step === 2 && (
+        <div className="space-y-6">
+          {selectedCategory === 'INDIVIDUAL' ? renderIndividualForm() : renderEntityForm()}
+          <div className="flex justify-between gap-3 flex-wrap">
+            <SecondaryButton onClick={() => setSelectedSubtype(null)}>Back</SecondaryButton>
+            <PrimaryButton onClick={goToReview}>Review details</PrimaryButton>
+          </div>
+        </div>
+      )}
+
+      {selectedCategory && selectedSubtype && step === 3 && renderReview()}
+
+      {/* Add key person dialog */}
+      {showAddMemberModal && (
+        <Dialog
+          title="Add a key person"
+          onClose={resetMemberForm}
+          footer={
+            <>
+              <SecondaryButton onClick={resetMemberForm}>Cancel</SecondaryButton>
+              {addMemberType === 'new' && (
+                <PrimaryButton onClick={addNewMember}>Add person</PrimaryButton>
+              )}
+            </>
+          }
+        >
+          <div className="space-y-5">
+            <SelectField
+              id="member-role"
+              label="Role"
+              required
+              placeholder="Select a role"
+              value={selectedMemberRole}
+              options={MEMBER_ROLES[selectedSubtype || ''] || []}
+              onChange={v => {
+                setSelectedMemberRole(v);
+                setMemberError(null);
+              }}
+            />
+
+            <div
+              role="group"
+              aria-label="How to add the person"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            >
+              {(
+                [
+                  { key: 'existing' as const, label: 'Search an existing customer' },
+                  { key: 'new' as const, label: 'Add a new person' },
+                ]
+              ).map(opt => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => {
+                    setAddMemberType(opt.key);
+                    setMemberError(null);
+                  }}
+                  aria-pressed={addMemberType === opt.key}
+                  className="rounded-2xl px-5 py-4 text-sm font-medium transition-opacity hover:opacity-90"
+                  style={{
+                    backgroundColor:
+                      addMemberType === opt.key ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
+                    color:
+                      addMemberType === opt.key ? 'var(--rm-accent)' : 'var(--rm-text-secondary)',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => setAddMemberType('existing')}
-                className={`flex-1 p-4 border-2 rounded-lg text-center ${addMemberType === 'existing' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-              >
-                <span className="font-medium">Search Existing Customer</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddMemberType('new')}
-                className={`flex-1 p-4 border-2 rounded-lg text-center ${addMemberType === 'new' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-              >
-                <span className="font-medium">Add New Person</span>
-              </button>
-            </div>
+
             {addMemberType === 'existing' ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Search Customer
-                </label>
+                <Label id="member-search" label="Search customers" />
                 <input
-                  type="text"
+                  id="member-search"
+                  type="search"
                   value={searchQuery}
                   onChange={e => {
                     setSearchQuery(e.target.value);
                     searchExistingCustomers(e.target.value);
                   }}
-                  placeholder="Search by name or email..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Search by name or email"
+                  className={FIELD_CLASS}
+                  style={FIELD_STYLE}
+                  aria-describedby="member-search-status"
                 />
-                {isSearching && <p className="text-sm text-gray-500 mt-2">Searching...</p>}
+                <p
+                  id="member-search-status"
+                  role="status"
+                  className="text-xs mt-2"
+                  style={{ color: 'var(--rm-text-muted)' }}
+                >
+                  {isSearching
+                    ? 'Searching…'
+                    : searchQuery.length < 2
+                      ? 'Type at least two characters to search.'
+                      : `${searchResults.length} match${searchResults.length === 1 ? '' : 'es'} found.`}
+                </p>
+                {searchError && (
+                  <p
+                    role="alert"
+                    className="rounded-2xl px-5 py-4 text-sm mt-3"
+                    style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--rm-text)' }}
+                  >
+                    {searchError}
+                  </p>
+                )}
                 {searchResults.length > 0 && (
-                  <div className="mt-2 border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  <ul
+                    className="mt-3 overflow-y-auto rounded-2xl"
+                    style={{ maxHeight: '12rem', backgroundColor: 'var(--rm-input)' }}
+                  >
                     {searchResults.map(customer => (
-                      <button
-                        key={customer.customerId}
-                        type="button"
-                        onClick={() => addExistingMember(customer)}
-                        disabled={!selectedMemberRole}
-                        className="w-full p-3 text-left hover:bg-gray-50 border-b last:border-b-0 disabled:opacity-50"
-                      >
-                        <p className="font-medium text-gray-900">
-                          {customer.firstName} {customer.lastName}
-                        </p>
-                        <p className="text-sm text-gray-500">{customer.email}</p>
-                      </button>
+                      <li key={customer.customerId}>
+                        <button
+                          type="button"
+                          onClick={() => addExistingMember(customer)}
+                          className="w-full px-5 py-4 text-left transition-opacity hover:opacity-80"
+                          style={{ borderBottom: '1px solid var(--rm-border)' }}
+                        >
+                          <span
+                            className="block text-base font-medium"
+                            style={{ color: 'var(--rm-text)' }}
+                          >
+                            {`${customer.firstName} ${customer.lastName}`.trim()}
+                          </span>
+                          <span className="block text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                            {customer.email || customer.customerNumber}
+                          </span>
+                        </button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      First Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={newMemberData.firstName}
-                      onChange={e =>
-                        setNewMemberData(prev => ({ ...prev, firstName: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Last Name *
-                    </label>
-                    <input
-                      type="text"
-                      value={newMemberData.lastName}
-                      onChange={e =>
-                        setNewMemberData(prev => ({ ...prev, lastName: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                    <input
-                      type="email"
-                      value={newMemberData.email}
-                      onChange={e => setNewMemberData(prev => ({ ...prev, email: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                    <input
-                      type="tel"
-                      value={newMemberData.phone}
-                      onChange={e => setNewMemberData(prev => ({ ...prev, phone: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Date of Birth *
-                    </label>
-                    <input
-                      type="date"
-                      value={newMemberData.dateOfBirth}
-                      onChange={e =>
-                        setNewMemberData(prev => ({ ...prev, dateOfBirth: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nationality
-                    </label>
-                    <select
-                      value={newMemberData.nationality}
-                      onChange={e =>
-                        setNewMemberData(prev => ({ ...prev, nationality: e.target.value }))
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      {COUNTRIES.map(country => (
-                        <option key={country.value} value={country.value}>
-                          {country.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ownership % (if applicable)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={memberOwnership}
-                  onChange={e => setMemberOwnership(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <TextField
+                  id="nm-firstName"
+                  label="First name"
+                  required
+                  value={newMemberData.firstName}
+                  onChange={v => setNewMemberData(prev => ({ ...prev, firstName: v }))}
+                />
+                <TextField
+                  id="nm-lastName"
+                  label="Last name"
+                  required
+                  value={newMemberData.lastName}
+                  onChange={v => setNewMemberData(prev => ({ ...prev, lastName: v }))}
+                />
+                <TextField
+                  id="nm-email"
+                  label="Email"
+                  type="email"
+                  value={newMemberData.email}
+                  onChange={v => setNewMemberData(prev => ({ ...prev, email: v }))}
+                />
+                <TextField
+                  id="nm-phone"
+                  label="Phone"
+                  type="tel"
+                  value={newMemberData.phone}
+                  onChange={v => setNewMemberData(prev => ({ ...prev, phone: v }))}
+                />
+                <TextField
+                  id="nm-dateOfBirth"
+                  label="Date of birth"
+                  type="date"
+                  value={newMemberData.dateOfBirth}
+                  onChange={v => setNewMemberData(prev => ({ ...prev, dateOfBirth: v }))}
+                />
+                <SelectField
+                  id="nm-nationality"
+                  label="Nationality"
+                  placeholder="Select a nationality"
+                  value={newMemberData.nationality}
+                  options={COUNTRIES}
+                  onChange={v => setNewMemberData(prev => ({ ...prev, nationality: v }))}
                 />
               </div>
-              <div className="flex items-end gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <TextField
+                id="member-ownership"
+                label="Ownership percentage"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={memberOwnership}
+                onChange={setMemberOwnership}
+              />
+              <div className="flex items-end gap-5">
+                <label
+                  htmlFor="member-isSignatory"
+                  className="flex items-center gap-2.5 cursor-pointer"
+                >
                   <input
+                    id="member-isSignatory"
                     type="checkbox"
                     checked={memberIsSignatory}
                     onChange={e => setMemberIsSignatory(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="h-4 w-4 rounded"
+                    style={{ accentColor: 'var(--rm-accent)' }}
                   />
-                  <span className="text-sm text-gray-700">Signatory</span>
+                  <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                    Signatory
+                  </span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label
+                  htmlFor="member-isPrimaryContact"
+                  className="flex items-center gap-2.5 cursor-pointer"
+                >
                   <input
+                    id="member-isPrimaryContact"
                     type="checkbox"
                     checked={memberIsPrimaryContact}
                     onChange={e => setMemberIsPrimaryContact(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="h-4 w-4 rounded"
+                    style={{ accentColor: 'var(--rm-accent)' }}
                   />
-                  <span className="text-sm text-gray-700">Primary Contact</span>
+                  <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                    Primary contact
+                  </span>
                 </label>
               </div>
             </div>
-          </div>
-          <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={resetMemberForm}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            {addMemberType === 'new' && (
-              <button
-                type="button"
-                onClick={addNewMember}
-                disabled={
-                  !selectedMemberRole || !newMemberData.firstName || !newMemberData.lastName
-                }
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+
+            {memberError && (
+              <p
+                role="alert"
+                className="rounded-2xl px-5 py-4 text-sm"
+                style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--rm-text)' }}
               >
-                Add Person
-              </button>
+                {memberError}
+              </p>
             )}
           </div>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard/customers" className="text-gray-500 hover:text-gray-700">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Add Customer</h1>
-                {selectedCategory && selectedSubtype && (
-                  <p className="text-sm text-gray-500">
-                    {CUSTOMER_CATEGORIES.find(c => c.value === selectedCategory)?.label} →{' '}
-                    {
-                      CUSTOMER_CATEGORIES.find(c => c.value === selectedCategory)?.subtypes.find(
-                        s => s.value === selectedSubtype
-                      )?.label
-                    }
-                  </p>
-                )}
-              </div>
-            </div>
-            {selectedCategory && (
-              <div className="flex items-center gap-2 text-sm">
-                <span
-                  className={`px-3 py-1 rounded-full ${step >= 1 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
-                >
-                  1. Type
-                </span>
-                <span className="text-gray-300">→</span>
-                <span
-                  className={`px-3 py-1 rounded-full ${step >= 2 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
-                >
-                  2. Details
-                </span>
-                <span className="text-gray-300">→</span>
-                <span
-                  className={`px-3 py-1 rounded-full ${step >= 3 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
-                >
-                  3. Review
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
-        {!selectedCategory && renderCategorySelection()}
-        {selectedCategory && !selectedSubtype && renderSubtypeSelection()}
-        {selectedCategory && selectedSubtype && step === 2 && (
-          <>
-            {selectedCategory === 'INDIVIDUAL' ? renderIndividualForm() : renderEntityForm()}
-            <div className="mt-8 flex justify-between">
-              <button
-                type="button"
-                onClick={() => setSelectedSubtype(null)}
-                className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep(3)}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Review & Submit
-              </button>
-            </div>
-          </>
-        )}
-        {selectedCategory && selectedSubtype && step === 3 && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Review Customer Details</h2>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500">Type:</span>
-                    <span className="ml-2 font-medium">
-                      {CUSTOMER_CATEGORIES.find(c => c.value === selectedCategory)?.label} -{' '}
-                      {
-                        CUSTOMER_CATEGORIES.find(c => c.value === selectedCategory)?.subtypes.find(
-                          s => s.value === selectedSubtype
-                        )?.label
-                      }
-                    </span>
-                  </div>
-                </div>
-                {selectedCategory === 'INDIVIDUAL' ? (
-                  <div className="border-t pt-4 mt-4">
-                    <h3 className="font-medium text-gray-900 mb-2">Personal Details</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-500">Name:</span>{' '}
-                        <span className="ml-2">
-                          {individualData.firstName} {individualData.lastName}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Email:</span>{' '}
-                        <span className="ml-2">{individualData.email}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Phone:</span>{' '}
-                        <span className="ml-2">{individualData.phone}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">DOB:</span>{' '}
-                        <span className="ml-2">{individualData.dateOfBirth}</span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="border-t pt-4 mt-4">
-                    <h3 className="font-medium text-gray-900 mb-2">Entity Details</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-500">Legal Name:</span>{' '}
-                        <span className="ml-2">{entityData.legalName}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Registration #:</span>{' '}
-                        <span className="ml-2">
-                          {entityData.registrationNumber || entityData.charityNumber}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Email:</span>{' '}
-                        <span className="ml-2">{entityData.businessEmail}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Key Personnel:</span>{' '}
-                        <span className="ml-2">{entityData.members.length} added</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Back to Edit
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-              >
-                {isSubmitting ? 'Creating...' : 'Create Customer'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-      {renderAddMemberModal()}
+        </Dialog>
+      )}
     </div>
+  );
+}
+
+// ============================================
+// Small presentational helpers
+// ============================================
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="rounded-full px-3 py-1 text-xs font-medium"
+      style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function ReviewFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function CategoryIcon({ value }: { value: CustomerCategory }) {
+  const common = {
+    className: 'w-5 h-5',
+    fill: 'none',
+    stroke: 'currentColor',
+    viewBox: '0 0 24 24',
+    strokeWidth: 1.8,
+    'aria-hidden': true,
+  } as const;
+  if (value === 'INDIVIDUAL')
+    return (
+      <svg {...common}>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.5-1.632z"
+        />
+      </svg>
+    );
+  if (value === 'BUSINESS')
+    return (
+      <svg {...common}>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M3.75 21h16.5M4.5 21V7.5l7.5-4.5 7.5 4.5V21M9 9h1.5m-1.5 4h1.5m3.75-4H15m-1.5 4H15"
+        />
+      </svg>
+    );
+  if (value === 'NON_PROFIT')
+    return (
+      <svg {...common}>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+        />
+      </svg>
+    );
+  return (
+    <svg {...common}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6v3H3V9zM3 21h18"
+      />
+    </svg>
   );
 }

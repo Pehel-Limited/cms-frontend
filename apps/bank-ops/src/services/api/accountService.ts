@@ -653,18 +653,18 @@ export const accountStatusLabels: Record<AccountStatus, string> = {
 };
 
 export const accountStatusColors: Record<AccountStatus, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  ACTIVE: 'bg-green-100 text-green-800',
-  DORMANT: 'bg-gray-100 text-gray-800',
-  FROZEN: 'bg-blue-100 text-blue-800',
-  CLOSED: 'bg-red-100 text-red-800',
-  BLOCKED: 'bg-red-100 text-red-800',
+  PENDING: 'bg-yellow-100 dark:bg-yellow-500/15 text-yellow-800 dark:text-yellow-300',
+  ACTIVE: 'bg-green-100 dark:bg-green-500/15 text-green-800 dark:text-green-300',
+  DORMANT: 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-300',
+  FROZEN: 'bg-blue-100 dark:bg-blue-500/15 text-blue-800 dark:text-blue-300',
+  CLOSED: 'bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300',
+  BLOCKED: 'bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300',
 };
 
 export const accountCategoryColors: Record<AccountCategory, string> = {
-  DEPOSIT: 'bg-emerald-100 text-emerald-800',
-  CREDIT: 'bg-purple-100 text-purple-800',
-  OPERATIONAL: 'bg-slate-100 text-slate-800',
+  DEPOSIT: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
+  CREDIT: 'bg-purple-100 dark:bg-purple-500/15 text-purple-800 dark:text-purple-300',
+  OPERATIONAL: 'bg-slate-100 dark:bg-slate-500/15 text-slate-800 dark:text-slate-300',
 };
 
 export const partyRoleTypeLabels: Record<AccountPartyRoleType, string> = {

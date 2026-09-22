@@ -95,24 +95,40 @@ export default function CompanyPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="spinner h-8 w-8" style={{ color: 'var(--brand)' }} role="status" aria-label="Loading company profile" />
+      <div className="mx-auto max-w-4xl space-y-6">
+        <div className="skeleton h-9 w-64" />
+        <div className="skeleton h-5 w-96 max-w-full" />
+        <div className="panel p-5">
+          <div className="skeleton h-5 w-40" />
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="skeleton h-12 w-full" />
+            ))}
+          </div>
+        </div>
+        <p className="sr-only" role="status">
+          Loading company profile
+        </p>
       </div>
     );
   }
 
   if (notBusiness) {
     return (
-      <div className="max-w-2xl mx-auto py-20">
+      <div className="mx-auto max-w-2xl py-10">
+        <h1 className="sr-only">Company</h1>
         <div className="empty-state">
           <div className="empty-state-icon">
-            <BuildingIcon className="w-7 h-7" />
+            <BuildingIcon className="h-7 w-7" />
           </div>
-          <h2 className="empty-state-title">No company workspace</h2>
+          <p className="empty-state-title">No company workspace</p>
           <p className="empty-state-text">
             This section is available for business and corporate customers. If you believe this is an
             error, please contact your relationship manager.
           </p>
+          <Link href="/portal" className="btn btn-secondary btn-sm mt-4">
+            Back to overview
+          </Link>
         </div>
       </div>
     );
@@ -120,11 +136,12 @@ export default function CompanyPage() {
 
   if (error && !company) {
     return (
-      <div className="max-w-2xl mx-auto mt-8">
+      <div className="mx-auto mt-8 max-w-2xl">
+        <h1 className="sr-only">Company</h1>
         <div className="alert alert-error" role="alert">
           <div className="flex-1">
-            <p className="font-semibold">Could not load company profile</p>
-            <p className="mt-1">{error}</p>
+            <p className="text-base font-semibold">Could not load company profile</p>
+            <p className="mt-1 text-sm">{error}</p>
             <button onClick={loadCompany} className="btn btn-secondary btn-sm mt-4">
               Try again
             </button>
@@ -147,18 +164,21 @@ export default function CompanyPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+          <h1
+            className="text-2xl font-bold tracking-tight sm:text-3xl"
+            style={{ color: 'var(--text-primary)' }}
+          >
             {company.legalName}
           </h1>
           <p
             className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
             style={{ color: 'var(--text-muted)' }}
           >
-            <span>{company.entityType?.replace(/_/g, ' ')}</span>
+            <span>{sentenceCase(company.entityType)}</span>
             <span aria-hidden="true">&middot;</span>
             <StatusBadge status={company.status} />
             <span aria-hidden="true">&middot;</span>
-            <span>Reg: {company.registrationNumber || '—'}</span>
+            <span>Registration number: {company.registrationNumber || '—'}</span>
           </p>
         </div>
         {activeTab !== 'members' && (
@@ -194,13 +214,20 @@ export default function CompanyPage() {
       )}
 
       {/* Tabs */}
-      <div style={{ borderBottom: '1px solid var(--surface-border)' }}>
-        <nav className="flex flex-wrap gap-6" role="tablist" aria-label="Company sections">
+      <div
+        className="flex flex-wrap items-end justify-between gap-3"
+        style={{ borderBottom: '1px solid var(--surface-border)' }}
+      >
+        <div className="flex flex-wrap gap-6" role="tablist" aria-label="Company sections">
           {tabs.map(t => (
             <button
               key={t.key}
+              type="button"
+              id={`tab-${t.key}`}
               role="tab"
               aria-selected={activeTab === t.key}
+              aria-controls={`tabpanel-${t.key}`}
+              tabIndex={activeTab === t.key ? 0 : -1}
               onClick={() => {
                 setActiveTab(t.key);
                 if (editing) handleCancel();
@@ -215,47 +242,49 @@ export default function CompanyPage() {
               {t.label}
             </button>
           ))}
-          {/* Team management link — navigates to sub-page */}
-          <Link
-            href="/portal/company/team"
-            className="border-b-2 border-transparent pb-3 text-sm font-medium transition-colors"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            Team management
-          </Link>
-        </nav>
+        </div>
+        {/* Team management is a separate page, so it sits outside the tablist */}
+        <Link href="/portal/company/team" className="link-arrow mb-3">
+          Team management <span data-arrow aria-hidden="true">→</span>
+        </Link>
       </div>
 
       {/* Tab content */}
-      <div className="panel">
+      <div
+        className="panel"
+        role="tabpanel"
+        id={`tabpanel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
+        tabIndex={0}
+      >
         {activeTab === 'overview' && (
           <div className="panel-body space-y-5">
             <SectionTitle>Legal information</SectionTitle>
             <FieldGrid>
-              <ReadOnlyField label="Legal Name" value={company.legalName} />
-              <ReadOnlyField label="Entity Type" value={company.entityType?.replace(/_/g, ' ')} />
-              <ReadOnlyField label="Registration Number" value={company.registrationNumber} />
-              <ReadOnlyField label="Registration Country" value={company.registrationCountry} />
-              <ReadOnlyField label="Registration Date" value={company.registrationDate} />
+              <ReadOnlyField label="Legal name" value={company.legalName} />
+              <ReadOnlyField label="Entity type" value={sentenceCase(company.entityType)} />
+              <ReadOnlyField label="Registration number" value={company.registrationNumber} />
+              <ReadOnlyField label="Registration country" value={company.registrationCountry} />
+              <ReadOnlyField label="Registration date" value={formatDate(company.registrationDate)} />
               <ReadOnlyField label="Tax ID" value={company.taxIdNumber} />
-              <ReadOnlyField label="VAT Number" value={company.vatNumber} />
+              <ReadOnlyField label="VAT number" value={company.vatNumber} />
             </FieldGrid>
 
             <SectionTitle>Business details</SectionTitle>
             <FieldGrid>
               <EditableField
                 editing={editing}
-                label="Trading Name"
+                label="Trading name"
                 value={form.tradingName}
                 onChange={v => handleChange('tradingName', v)}
               />
-              <ReadOnlyField label="Industry Sector" value={company.industrySector} />
-              <ReadOnlyField label="Year Established" value={company.yearEstablished?.toString()} />
+              <ReadOnlyField label="Industry sector" value={company.industrySector} />
+              <ReadOnlyField label="Year established" value={company.yearEstablished?.toString()} />
               <ReadOnlyField label="Employees" value={company.numberOfEmployees?.toString()} />
             </FieldGrid>
             <EditableField
               editing={editing}
-              label="Business Description"
+              label="Business description"
               value={form.businessDescription}
               onChange={v => handleChange('businessDescription', v)}
             />
@@ -293,8 +322,8 @@ export default function CompanyPage() {
                 Changes to the registered address require bank verification
               </p>
               <FieldGrid>
-                <ReadOnlyField label="Address Line 1" value={company.registeredAddressLine1} />
-                <ReadOnlyField label="Address Line 2" value={company.registeredAddressLine2} />
+                <ReadOnlyField label="Address line 1" value={company.registeredAddressLine1} />
+                <ReadOnlyField label="Address line 2" value={company.registeredAddressLine2} />
                 <ReadOnlyField label="City" value={company.registeredCity} />
                 <ReadOnlyField label="County" value={company.registeredCounty} />
                 <ReadOnlyField label="Eircode" value={company.registeredEircode} />
@@ -307,13 +336,13 @@ export default function CompanyPage() {
               <FieldGrid>
                 <EditableField
                   editing={editing}
-                  label="Address Line 1"
+                  label="Address line 1"
                   value={form.tradingAddressLine1}
                   onChange={v => handleChange('tradingAddressLine1', v)}
                 />
                 <EditableField
                   editing={editing}
-                  label="Address Line 2"
+                  label="Address line 2"
                   value={form.tradingAddressLine2}
                   onChange={v => handleChange('tradingAddressLine2', v)}
                 />
@@ -348,35 +377,43 @@ export default function CompanyPage() {
 
         {activeTab === 'members' && (
           <div className="panel-body">
-            <SectionTitle>Directors, shareholders &amp; signatories</SectionTitle>
+            <SectionTitle>Directors, shareholders and signatories</SectionTitle>
             {company.members && company.members.length > 0 ? (
-              <div className="mt-4 overflow-x-auto">
-                <table className="data-table min-w-full">
+              <div
+                className="mt-4 overflow-x-auto"
+                role="region"
+                aria-label="Directors, shareholders and signatories, scrollable"
+                tabIndex={0}
+              >
+                <table
+                  className="data-table min-w-full"
+                  aria-label="Directors, shareholders and signatories"
+                >
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Role</th>
-                      <th>Ownership</th>
-                      <th>Signatory</th>
-                      <th>UBO</th>
-                      <th>Status</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">Ownership</th>
+                      <th scope="col">Signatory</th>
+                      <th scope="col">Beneficial owner</th>
+                      <th scope="col">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {company.members.map(m => (
                       <tr key={m.id}>
                         <td className="whitespace-nowrap">
-                          <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                          <div className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                             {m.customerName || '—'}
                           </div>
-                          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
                             {m.customerEmail}
                           </div>
                         </td>
                         <td className="whitespace-nowrap capitalize">
                           {m.role?.replace(/_/g, ' ').toLowerCase()}
                         </td>
-                        <td className="whitespace-nowrap">
+                        <td className="whitespace-nowrap tabular-nums">
                           {m.ownershipPercentage != null ? `${m.ownershipPercentage}%` : '—'}
                         </td>
                         <td className="whitespace-nowrap">
@@ -406,9 +443,20 @@ export default function CompanyPage() {
                 </table>
               </div>
             ) : (
-              <p className="mt-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-                No members on file. Contact your relationship manager.
-              </p>
+              <div className="empty-state mt-4">
+                <div className="empty-state-icon">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6-4a4 4 0 11-3-3.87" />
+                  </svg>
+                </div>
+                <p className="empty-state-title">No members on file</p>
+                <p className="empty-state-text">
+                  Directors, shareholders and signatories added by the bank will appear here.
+                </p>
+                <Link href="/portal/company/parties" className="btn btn-primary btn-sm mt-4">
+                  Manage people and roles
+                </Link>
+              </div>
             )}
           </div>
         )}
@@ -419,21 +467,40 @@ export default function CompanyPage() {
 
 // ─── Shared components ─────────────────────────────────────────────
 
+/** "PRIVATE_LIMITED" → "Private limited" — enum codes read as sentence case. */
+function sentenceCase(value?: string | null): string {
+  if (!value) return '';
+  const words = value.replace(/_/g, ' ').trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** ISO date → readable locale date, falling back to the raw value. */
+function formatDate(value?: string | null): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="section-title uppercase tracking-wider">{children}</h3>;
+  return (
+    <h2 className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-secondary)' }}>
+      {children}
+    </h2>
+  );
 }
 
 function FieldGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>;
+  return <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{children}</div>;
 }
 
 function ReadOnlyField({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <dt className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+      <dt className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
         {label}
       </dt>
-      <dd className="mt-1 text-sm" style={{ color: 'var(--text-primary)' }}>
+      <dd className="mt-1 text-base" style={{ color: 'var(--text-primary)' }}>
         {value || '—'}
       </dd>
     </div>
@@ -479,12 +546,12 @@ function StatusBadge({ status }: { status?: string }) {
     DORMANT: 'badge-neutral',
   };
   const variant = variants[status || ''] || 'badge-neutral';
-  return <span className={`badge ${variant}`}>{status?.replace(/_/g, ' ') || 'Unknown'}</span>;
+  return <span className={`badge ${variant}`}>{sentenceCase(status) || 'Unknown'}</span>;
 }
 
 function PencilIcon() {
   return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -497,7 +564,7 @@ function PencilIcon() {
 
 function BuildingIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"

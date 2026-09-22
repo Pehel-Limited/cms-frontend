@@ -132,14 +132,14 @@ export const UPLOAD_STATUS_LABELS: Record<UploadStatus, string> = {
 };
 
 export const UPLOAD_STATUS_COLORS: Record<UploadStatus, string> = {
-  INITIATED: 'bg-blue-100 text-blue-700',
-  UPLOADED: 'bg-green-100 text-green-700',
-  VIRUS_CHECK_PENDING: 'bg-yellow-100 text-yellow-700',
-  VIRUS_CHECK_PASSED: 'bg-green-100 text-green-700',
-  VIRUS_CHECK_FAILED: 'bg-red-100 text-red-700',
-  VERIFIED: 'bg-emerald-100 text-emerald-700',
-  REJECTED: 'bg-red-100 text-red-700',
-  EXPIRED: 'bg-gray-100 text-gray-600',
+  INITIATED: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  UPLOADED: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+  VIRUS_CHECK_PENDING: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300',
+  VIRUS_CHECK_PASSED: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+  VIRUS_CHECK_FAILED: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  VERIFIED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  REJECTED: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  EXPIRED: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-200',
 };
 
 export const REQUEST_STATUS_LABELS: Record<DocRequestStatus, string> = {
@@ -151,11 +151,11 @@ export const REQUEST_STATUS_LABELS: Record<DocRequestStatus, string> = {
 };
 
 export const REQUEST_STATUS_COLORS: Record<DocRequestStatus, string> = {
-  PENDING: 'bg-amber-100 text-amber-800',
-  PARTIALLY_FULFILLED: 'bg-blue-100 text-blue-800',
-  FULFILLED: 'bg-green-100 text-green-800',
-  WAIVED: 'bg-gray-100 text-gray-600',
-  EXPIRED: 'bg-gray-100 text-gray-500',
+  PENDING: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+  PARTIALLY_FULFILLED: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
+  FULFILLED: 'bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300',
+  WAIVED: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-200',
+  EXPIRED: 'bg-gray-100 text-gray-500 dark:text-gray-400',
 };
 
 // ─── Helpers ───────────────────────────────────────────────────

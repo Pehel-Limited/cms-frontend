@@ -277,12 +277,18 @@ export const BENEFICIARIES: Beneficiary[] = [
   { id: 'b6', name: 'Noah Davies', handle: '@noahd', glyph: 'ND', gradient: 'linear-gradient(135deg, #06b6d4 0%, #0ea5e9 100%)' },
 ];
 
+/* Dates are relative to "now" so the upcoming-payments list is always genuinely
+   upcoming rather than freezing on a fixed calendar date. */
+function inDays(n: number): string {
+  return new Date(Date.now() + n * 86400000).toISOString();
+}
+
 export const SCHEDULED_PAYMENTS: ScheduledPayment[] = [
-  { id: 's1', payee: 'Octopus Energy', amount: 96.4, currency: 'EUR', nextDate: '2026-06-14', frequency: 'Monthly', glyph: '⚡' },
-  { id: 's2', payee: 'Vitality Health', amount: 48.0, currency: 'EUR', nextDate: '2026-06-18', frequency: 'Monthly', glyph: '💪' },
-  { id: 's3', payee: 'Netflix', amount: 17.99, currency: 'EUR', nextDate: '2026-06-22', frequency: 'Monthly', glyph: '🎬' },
-  { id: 's4', payee: 'Spotify Premium', amount: 11.99, currency: 'EUR', nextDate: '2026-06-25', frequency: 'Monthly', glyph: '🎧' },
-  { id: 's5', payee: 'Apartment Rent', amount: 1450.0, currency: 'EUR', nextDate: '2026-07-01', frequency: 'Monthly', glyph: '🏠' },
+  { id: 's1', payee: 'Octopus Energy', amount: 96.4, currency: 'EUR', nextDate: inDays(3), frequency: 'Monthly', glyph: '⚡' },
+  { id: 's2', payee: 'Vitality Health', amount: 48.0, currency: 'EUR', nextDate: inDays(7), frequency: 'Monthly', glyph: '💪' },
+  { id: 's3', payee: 'Netflix', amount: 17.99, currency: 'EUR', nextDate: inDays(11), frequency: 'Monthly', glyph: '🎬' },
+  { id: 's4', payee: 'Spotify Premium', amount: 11.99, currency: 'EUR', nextDate: inDays(14), frequency: 'Monthly', glyph: '🎧' },
+  { id: 's5', payee: 'Apartment Rent', amount: 1450.0, currency: 'EUR', nextDate: inDays(18), frequency: 'Monthly', glyph: '🏠' },
 ];
 
 /* ──────────────────────────────────────────────────────────────────

@@ -13,7 +13,11 @@ import {
   formatFileSize,
   getCategoryIcon,
 } from '@/services/api/document-service';
-import { applicationService, type LoanApplication } from '@/services/api/application-service';
+import {
+  applicationService,
+  STATUS_LABELS,
+  type LoanApplication,
+} from '@/services/api/application-service';
 
 type ViewMode = 'all' | 'by-application';
 
@@ -25,7 +29,7 @@ function Skeleton({ className = '' }: { className?: string }) {
 /* ─── Category SVG icons (replace emojis) ───────────────────── */
 const CATEGORY_SVG: Record<string, React.ReactNode> = {
   IDENTITY: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -35,7 +39,7 @@ const CATEGORY_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   ADDRESS_PROOF: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -51,7 +55,7 @@ const CATEGORY_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   INCOME_PROOF: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -61,7 +65,7 @@ const CATEGORY_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   DEFAULT: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -76,22 +80,7 @@ function getCategorySvg(cat: string) {
   return CATEGORY_SVG[cat] || CATEGORY_SVG.DEFAULT;
 }
 
-/* ─── Status badge with dot ─────────────────────────────────── */
-const DOC_STATUS_DOT: Record<string, string> = {
-  UPLOADED: 'bg-blue-500',
-  VERIFIED: 'bg-emerald-500',
-  REJECTED: 'bg-red-500',
-  PENDING: 'bg-amber-500',
-  UNDER_REVIEW: 'bg-violet-500',
-};
-
-const DOC_STATUS_BG: Record<string, string> = {
-  UPLOADED: 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
-  VERIFIED: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  REJECTED: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300',
-  PENDING: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-  UNDER_REVIEW: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
-};
+/* ─── Status colours come from document-service (UPLOAD_STATUS_COLORS) ─── */
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<ApplicationDocument[]>([]);
@@ -146,17 +135,21 @@ export default function DocumentsPage() {
     return acc;
   }, {});
 
+  const applicationCount = Object.keys(grouped).length;
+
   return (
-    <div className="space-y-5">
-      {/* ── Hero header ────────────────────────────────────── */}
+    <div className="space-y-6">
+      {/* ── Header ─────────────────────────────────────────── */}
       <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
         <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" />
 
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white sm:text-2xl">Documents</h2>
-            <p className="mt-1 text-sm text-white/70">
-              Upload and manage documents for your loan applications.
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Documents</h1>
+            <p className="mt-1.5 text-sm text-white/75">
+              {loading
+                ? 'Loading your documents…'
+                : `${documents.length} ${documents.length === 1 ? 'document' : 'documents'} across ${applicationCount} ${applicationCount === 1 ? 'application' : 'applications'}`}
             </p>
           </div>
           {applications.length > 0 && (
@@ -167,7 +160,7 @@ export default function DocumentsPage() {
               }}
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-white/25"
             >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -181,18 +174,19 @@ export default function DocumentsPage() {
         </div>
       </div>
 
-      {/* View mode segmented control */}
-      <div className="segmented" role="tablist" aria-label="Document view">
+      {/* View mode filter */}
+      <div className="segmented" role="group" aria-label="Choose how documents are grouped">
         {(['all', 'by-application'] as ViewMode[]).map(mode => (
           <button
             key={mode}
-            role="tab"
-            aria-selected={viewMode === mode}
+            type="button"
+            aria-pressed={viewMode === mode}
+            data-active={viewMode === mode ? 'true' : undefined}
             onClick={() => setViewMode(mode)}
             className="segmented-item"
           >
             {mode === 'all' ? (
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -201,7 +195,7 @@ export default function DocumentsPage() {
                 />
               </svg>
             ) : (
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -211,8 +205,8 @@ export default function DocumentsPage() {
               </svg>
             )}
             {mode === 'all' ? 'All documents' : 'By application'}
-            <span className="ml-0.5 text-xs tabular-nums opacity-60">
-              {mode === 'all' ? documents.length : Object.keys(grouped).length}
+            <span className="ml-0.5 text-xs tabular-nums opacity-70">
+              {mode === 'all' ? documents.length : applicationCount}
             </span>
           </button>
         ))}
@@ -220,14 +214,15 @@ export default function DocumentsPage() {
 
       {/* ── Content ────────────────────────────────────────── */}
       {loading ? (
-        <div className="space-y-3">
+        <div className="space-y-3" aria-busy="true">
+          <p className="sr-only" role="status">Loading your documents…</p>
           {[1, 2, 3].map(i => (
-            <div key={i} className="card p-5">
-              <div className="flex items-start gap-3">
-                <Skeleton className="h-10 w-10" />
+            <div key={i} className="panel px-5 py-4">
+              <div className="flex items-start gap-4">
+                <Skeleton className="h-11 w-11 rounded-xl" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-48" />
-                  <Skeleton className="h-3 w-80" />
+                  <Skeleton className="h-3.5 w-80" />
                 </div>
                 <Skeleton className="h-6 w-20 rounded-full" />
               </div>
@@ -235,8 +230,8 @@ export default function DocumentsPage() {
           ))}
         </div>
       ) : error ? (
-        <div className="alert alert-error">
-          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="alert alert-error" role="alert">
+          <svg aria-hidden="true" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -244,7 +239,10 @@ export default function DocumentsPage() {
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
             />
           </svg>
-          <p className="flex-1 font-medium">{error}</p>
+          <div className="flex-1">
+            <p className="font-semibold">We couldn&apos;t load your documents</p>
+            <p className="mt-0.5 text-sm opacity-80">{error}</p>
+          </div>
           <button onClick={fetchData} className="btn btn-sm btn-outline shrink-0">
             Try again
           </button>
@@ -284,45 +282,41 @@ export default function DocumentsPage() {
 
 function DocumentList({ documents }: { documents: ApplicationDocument[] }) {
   return (
-    <div className="stagger space-y-3">
+    <ul className="stagger space-y-3">
       {documents.map(doc => (
         <DocumentCard key={doc.id} doc={doc} />
       ))}
-    </div>
+    </ul>
   );
 }
 
 function DocumentCard({ doc }: { doc: ApplicationDocument }) {
   const statusLabel = UPLOAD_STATUS_LABELS[doc.uploadStatus] || doc.uploadStatus;
-  const dot = DOC_STATUS_DOT[doc.uploadStatus] || 'bg-slate-400';
-  const bg = DOC_STATUS_BG[doc.uploadStatus] || 'badge-neutral';
+  const statusColor = UPLOAD_STATUS_COLORS[doc.uploadStatus] || 'badge-neutral';
   const catLabel = CATEGORY_LABELS[doc.category] || doc.category;
 
   return (
-    <div className="card card-hover group p-5">
-      <div className="flex items-start gap-3">
+    <li className="panel px-5 py-4">
+      <div className="flex items-start gap-4">
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
         >
           {getCategorySvg(doc.category)}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h4 className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <h3 className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
               {doc.fileName}
-            </h4>
-            <span className={`badge ${bg}`}>
-              <span className={`badge-dot ${dot}`} />
-              {statusLabel}
-            </span>
+            </h3>
+            <span className={`badge ${statusColor}`}>{statusLabel}</span>
           </div>
           <div
-            className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+            className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
             style={{ color: 'var(--text-muted)' }}
           >
-            <span className="inline-flex items-center gap-1">
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="inline-flex items-center gap-1.5">
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -332,8 +326,9 @@ function DocumentCard({ doc }: { doc: ApplicationDocument }) {
               </svg>
               {catLabel}
             </span>
-            {doc.fileSizeBytes && <span>{formatFileSize(doc.fileSizeBytes)}</span>}
+            {doc.fileSizeBytes != null && <span className="tabular-nums">{formatFileSize(doc.fileSizeBytes)}</span>}
             <span>
+              Uploaded{' '}
               {new Date(doc.createdAt).toLocaleDateString(undefined, {
                 day: '2-digit',
                 month: 'short',
@@ -347,13 +342,13 @@ function DocumentCard({ doc }: { doc: ApplicationDocument }) {
             )}
           </div>
           {doc.rejectionReason && (
-            <p className="mt-2 inline-block rounded-lg bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
-              Reason: {doc.rejectionReason}
+            <p className="mt-2.5 text-sm text-red-600 dark:text-red-300">
+              <span className="font-semibold">Not accepted:</span> {doc.rejectionReason}
             </p>
           )}
         </div>
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -373,13 +368,13 @@ function GroupedView({
       {Object.entries(grouped).map(([appId, docs]) => {
         const app = appMap.get(appId);
         return (
-          <div key={appId}>
-            <div className="mb-3 flex items-center gap-3 px-1">
+          <section key={appId} aria-label={`Documents for ${app?.applicationNumber || appId}`}>
+            <div className="mb-3 flex flex-wrap items-center gap-3 px-1">
               <div
-                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                className="flex h-9 w-9 items-center justify-center rounded-lg"
                 style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-secondary)' }}
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -389,21 +384,22 @@ function GroupedView({
                 </svg>
               </div>
               <div>
-                <h3 className="section-title">{app?.applicationNumber || appId}</h3>
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {docs.length} document{docs.length !== 1 ? 's' : ''}
-                </span>
+                <h2 className="section-title">{app?.applicationNumber || appId}</h2>
+                <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {docs.length} {docs.length === 1 ? 'document' : 'documents'}
+                  {app ? ` · ${STATUS_LABELS[app.status] || app.status}` : ''}
+                </p>
               </div>
               <Link href={`/portal/applications/${appId}`} className="link-arrow ml-auto">
                 View application <span data-arrow aria-hidden="true">→</span>
               </Link>
             </div>
-            <div className="space-y-2">
+            <ul className="space-y-3">
               {docs.map(doc => (
                 <DocumentCard key={doc.id} doc={doc} />
               ))}
-            </div>
-          </div>
+            </ul>
+          </section>
         );
       })}
     </div>
@@ -453,7 +449,10 @@ function UploadModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label="Upload document"
+      aria-labelledby="upload-doc-title"
+      onKeyDown={e => {
+        if (e.key === 'Escape') onClose();
+      }}
     >
       <div
         className="w-full max-w-lg overflow-hidden rounded-2xl border"
@@ -467,11 +466,11 @@ function UploadModal({
           className="flex items-center justify-between px-6 py-4"
           style={{ borderBottom: '1px solid var(--surface-border)' }}
         >
-          <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+          <h2 id="upload-doc-title" className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
             Upload document
-          </h3>
-          <button onClick={onClose} className="icon-btn" aria-label="Close">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          </h2>
+          <button onClick={onClose} className="icon-btn" aria-label="Close upload dialog">
+            <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -482,22 +481,31 @@ function UploadModal({
           </button>
         </div>
 
-        <div className="space-y-4 px-6 py-5">
+        <div className="space-y-5 px-6 py-5">
           {uploadError && (
             <div className="alert alert-error" role="alert">
-              {uploadError}
+              {uploadError} Your entries have been kept — try uploading again.
             </div>
           )}
 
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Fields marked <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+            <span className="sr-only">with an asterisk</span> are required.
+          </p>
+
           <div>
             <label className="field-label" htmlFor="upload-application">
-              Application
+              Application{' '}
+              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </label>
             <select
               id="upload-application"
               value={selectedApp}
               onChange={e => setSelectedApp(e.target.value)}
               className="select"
+              required
+              aria-required="true"
             >
               {applications.map(app => (
                 <option key={app.applicationId} value={app.applicationId}>
@@ -509,13 +517,17 @@ function UploadModal({
 
           <div>
             <label className="field-label" htmlFor="upload-category">
-              Category
+              Category{' '}
+              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </label>
             <select
               id="upload-category"
               value={category}
               onChange={e => setCategory(e.target.value as DocumentCategory)}
               className="select"
+              required
+              aria-required="true"
             >
               {CATEGORIES.map(cat => (
                 <option key={cat} value={cat}>
@@ -527,7 +539,9 @@ function UploadModal({
 
           <div>
             <label className="field-label" htmlFor="upload-name">
-              Document name
+              Document name{' '}
+              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </label>
             <input
               id="upload-name"
@@ -536,6 +550,8 @@ function UploadModal({
               onChange={e => setFileName(e.target.value)}
               placeholder="e.g. Passport_Front.pdf"
               className="input"
+              required
+              aria-required="true"
             />
             <p className="field-hint">
               File upload is metadata-only until ECM integration is ready.
@@ -544,7 +560,7 @@ function UploadModal({
 
           <div>
             <label className="field-label" htmlFor="upload-notes">
-              Notes (optional)
+              Notes <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
             </label>
             <textarea
               id="upload-notes"
@@ -561,7 +577,7 @@ function UploadModal({
           className="flex justify-end gap-3 px-6 py-4"
           style={{ borderTop: '1px solid var(--surface-border)' }}
         >
-          <button onClick={onClose} className="btn btn-secondary">
+          <button onClick={onClose} className="btn btn-secondary" type="button">
             Cancel
           </button>
           <button
@@ -575,14 +591,18 @@ function UploadModal({
             }}
             disabled={!canSubmit || uploading}
             className="btn btn-primary"
+            type="button"
           >
             {uploading ? (
               <span className="flex items-center gap-1.5">
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                  aria-hidden="true"
+                />
                 Uploading…
               </span>
             ) : (
-              'Upload'
+              'Upload document'
             )}
           </button>
         </div>
@@ -597,7 +617,7 @@ function EmptyState({ hasApps, onUpload }: { hasApps: boolean; onUpload: () => v
   return (
     <div className="empty-state">
       <div className="empty-state-icon">
-        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg aria-hidden="true" className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -606,14 +626,14 @@ function EmptyState({ hasApps, onUpload }: { hasApps: boolean; onUpload: () => v
           />
         </svg>
       </div>
-      <h3 className="empty-state-title">No documents uploaded yet</h3>
+      <h2 className="empty-state-title">No documents uploaded yet</h2>
       <p className="empty-state-text">
         {hasApps
-          ? 'Upload documents for your loan applications to get started.'
-          : 'Create a loan application first, then upload the required documents.'}
+          ? 'Upload the documents your loan applications need and we&apos;ll keep them here.'
+          : 'Create a loan application first, then upload the documents it asks for.'}
       </p>
       {hasApps && (
-        <button onClick={onUpload} className="btn btn-primary mt-5">
+        <button onClick={onUpload} className="btn btn-primary mt-5" type="button">
           Upload document
         </button>
       )}

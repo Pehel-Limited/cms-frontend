@@ -1,355 +1,733 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ACCOUNTS,
   BENEFICIARIES,
   SCHEDULED_PAYMENTS,
   TRANSACTIONS,
+  type BankAccount,
   type Beneficiary,
 } from '@/lib/banking-data';
 
 function fmt(n: number, currency = 'EUR'): string {
   return new Intl.NumberFormat('en-IE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
 }
-function nextDateLabel(iso: string): string {
+
+function dayNumber(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { day: '2-digit' });
+}
+function monthShort(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short' });
+}
+function dateLabel(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
-const TABS = ['Transfer between accounts', 'Pay someone new', 'Saved payees', 'Scheduled'] as const;
-type Tab = (typeof TABS)[number];
+/* ──────────────────────────────────────────────────────────────────
+ * Payment types
+ * ────────────────────────────────────────────────────────────────── */
 
-const PAYMENT_STATUSES = [
-  { date: '24 May 2025, 09:32', payee: 'Sarah Thompson', desc: 'Rent payment', from: 'Current Account', amount: 800, dir: 'OUT', status: 'Completed' },
-  { date: '24 May 2025, 10:15', payee: 'British Gas', desc: 'Direct Debit', from: 'Savings Account', amount: 87, dir: 'OUT', status: 'Pending' },
-  { date: '28 May 2025, 00:00', payee: 'Virgin Media', desc: 'Direct Debit', from: 'Current Account', amount: 62.50, dir: 'OUT', status: 'Scheduled' },
-  { date: '23 May 2025, 16:45', payee: 'Andrew Williams', desc: 'Birthday gift', from: 'Current Account', amount: 50, dir: 'OUT', status: 'Completed' },
-];
+type PaymentStatus = 'Completed' | 'Pending' | 'Scheduled' | 'Failed';
 
-const STATUS_COLORS: Record<string, string> = {
-  Completed: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
-  Pending: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
-  Scheduled: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
-  Failed: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+const STATUS_ORDER: PaymentStatus[] = ['Scheduled', 'Pending', 'Completed', 'Failed'];
+
+const STATUS_BADGE: Record<PaymentStatus, string> = {
+  Completed: 'badge badge-success',
+  Pending: 'badge badge-warning',
+  Scheduled: 'badge badge-info',
+  Failed: 'badge badge-error',
 };
 
-export default function PaymentsPage() {
-  const [tab, setTab] = useState<Tab>('Transfer between accounts');
-  const [selected, setSelected] = useState<Beneficiary | null>(null);
-  const [amount, setAmount] = useState('');
-  const [fromAccount, setFromAccount] = useState(ACCOUNTS[0].id);
-  const [toAccount, setToAccount] = useState(ACCOUNTS[1]?.id ?? '');
-  const [note, setNote] = useState('');
-  const [sent, setSent] = useState(false);
-  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+const STATUS_ICON: Record<PaymentStatus, string> = {
+  Completed: 'M4.5 12.75l6 6 9-13.5',
+  Pending: 'M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z',
+  Scheduled: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5',
+  Failed: 'M6 18L18 6M6 6l12 12',
+};
 
-  const account = ACCOUNTS.find(a => a.id === fromAccount) ?? ACCOUNTS[0];
-  const numericAmount = parseFloat(amount || '0');
-  const canSend = numericAmount > 0 && numericAmount <= account.balance;
+interface PaymentRow {
+  id: string;
+  when: number;
+  dateISO: string;
+  payee: string;
+  description: string;
+  fromAccount: string;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+}
 
-  const handleSend = () => {
-    if (!canSend) return;
-    setSent(true);
-    setTimeout(() => { setSent(false); setAmount(''); setNote(''); setSelected(null); }, 2400);
+const TABS = [
+  { id: 'transfer', label: 'Between my accounts' },
+  { id: 'saved', label: 'Saved payee' },
+  { id: 'new', label: 'Someone new' },
+] as const;
+type TabId = (typeof TABS)[number]['id'];
+
+/* ──────────────────────────────────────────────────────────────────
+ * Data resolution — the payment history is assembled from posted
+ * transactions plus the upcoming schedule, never from invented rows.
+ * ────────────────────────────────────────────────────────────────── */
+
+type LoadState = 'loading' | 'ready' | 'error';
+
+interface PaymentsData {
+  rows: PaymentRow[];
+  accounts: BankAccount[];
+  beneficiaries: Beneficiary[];
+  statuses: PaymentStatus[];
+}
+
+function resolvePayments(): PaymentsData {
+  if (!ACCOUNTS.length) throw new Error('No accounts returned');
+  const nameOf = (id: string) => ACCOUNTS.find(a => a.id === id)?.name ?? 'Unknown account';
+
+  const posted: PaymentRow[] = TRANSACTIONS.filter(t => t.direction === 'OUT')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 12)
+    .map(t => ({
+      id: t.id,
+      when: new Date(t.date).getTime(),
+      dateISO: t.date,
+      payee: t.merchant,
+      description: t.note ?? t.category,
+      fromAccount: nameOf(t.accountId),
+      amount: t.amount,
+      currency: t.currency,
+      status: t.status === 'PENDING' ? 'Pending' : t.status === 'DECLINED' ? 'Failed' : 'Completed',
+    }));
+
+  const scheduled: PaymentRow[] = SCHEDULED_PAYMENTS.map(s => ({
+    id: `scheduled-${s.id}`,
+    when: new Date(s.nextDate).getTime(),
+    dateISO: s.nextDate,
+    payee: s.payee,
+    description: `${s.frequency} payment`,
+    fromAccount: 'Standing order',
+    amount: s.amount,
+    currency: s.currency,
+    status: 'Scheduled',
+  }));
+
+  const rows = [...scheduled, ...posted].sort((a, b) => b.when - a.when);
+  const present = new Set(rows.map(r => r.status));
+
+  return {
+    rows,
+    accounts: ACCOUNTS,
+    beneficiaries: BENEFICIARIES,
+    statuses: STATUS_ORDER.filter(s => present.has(s)),
   };
+}
 
-  /* ─── quick recipients for the sidebar ─── */
-  const quickRecipients = BENEFICIARIES.slice(0, 4);
+function usePaymentsData() {
+  const [data, setData] = useState<PaymentsData | null>(null);
+  const [state, setState] = useState<LoadState>('loading');
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setState('loading');
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+      try {
+        setData(resolvePayments());
+        setState('ready');
+      } catch {
+        setData(null);
+        setState('error');
+      }
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [attempt]);
+
+  const retry = useCallback(() => setAttempt(a => a + 1), []);
+  return { data, state, retry };
+}
+
+function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="p-5">
+      <div className="empty-state">
+        <div className="empty-state-icon">
+          <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        </div>
+        <p className="empty-state-title">We couldn&apos;t load your payments</p>
+        <p className="empty-state-text">Something went wrong while reading your payment history. No payment has been made.</p>
+        <button type="button" onClick={onRetry} className="btn btn-primary btn-sm mt-4">
+          <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+
+export default function PaymentsPage() {
+  const [tab, setTab] = useState<TabId>('transfer');
+  const [payeeId, setPayeeId] = useState('');
+  const [payeeText, setPayeeText] = useState('');
+  const [amount, setAmount] = useState('');
+  const [fromAccount, setFromAccount] = useState(ACCOUNTS[0]?.id ?? '');
+  const [toAccount, setToAccount] = useState(ACCOUNTS[1]?.id ?? '');
+  const [reference, setReference] = useState('');
+  const [payDate, setPayDate] = useState(todayISO);
+  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'All'>('All');
+  const [submitted, setSubmitted] = useState<PaymentRow[]>([]);
+  const [confirmation, setConfirmation] = useState('');
+  const { data, state, retry } = usePaymentsData();
+
+  const accounts = data?.accounts ?? ACCOUNTS;
+  const beneficiaries = data?.beneficiaries ?? BENEFICIARIES;
+  const source = accounts.find(a => a.id === fromAccount) ?? accounts[0];
+  const otherAccounts = accounts.filter(a => a.id !== fromAccount);
+
+  const rows = useMemo(() => {
+    const all = [...submitted, ...(data?.rows ?? [])];
+    return all.sort((a, b) => b.when - a.when);
+  }, [submitted, data]);
+
+  const visibleRows = useMemo(
+    () => (statusFilter === 'All' ? rows : rows.filter(r => r.status === statusFilter)),
+    [rows, statusFilter]
+  );
+
+  const numericAmount = parseFloat(amount || '0');
+  const available = source?.available ?? 0;
+  const recipientChosen =
+    tab === 'transfer' ? Boolean(toAccount) : tab === 'saved' ? Boolean(payeeId) : Boolean(payeeText.trim());
+  const overBalance = numericAmount > available;
+  const canSend =
+    Boolean(source) && recipientChosen && Number.isFinite(numericAmount) && numericAmount > 0 && !overBalance;
+
+  const recipientLabel =
+    tab === 'transfer'
+      ? otherAccounts.find(a => a.id === toAccount)?.name ?? 'the selected account'
+      : tab === 'saved'
+        ? beneficiaries.find(b => b.id === payeeId)?.name ?? 'the selected payee'
+        : payeeText.trim() || 'the new payee';
+
+  useEffect(() => {
+    if (!confirmation) return;
+    const timer = window.setTimeout(() => setConfirmation(''), 6000);
+    return () => window.clearTimeout(timer);
+  }, [confirmation]);
+
+  const handleSubmit = useCallback(() => {
+    if (!canSend || !source) return;
+    const when = new Date(`${payDate}T12:00:00`).getTime();
+    const row: PaymentRow = {
+      id: `local-${Date.now()}`,
+      when: Number.isFinite(when) ? when : Date.now(),
+      dateISO: Number.isFinite(when) ? new Date(when).toISOString() : new Date().toISOString(),
+      payee: recipientLabel,
+      description: reference.trim() || 'One-off payment',
+      fromAccount: source.name,
+      amount: numericAmount,
+      currency: source.currency,
+      status: payDate > todayISO() ? 'Scheduled' : 'Pending',
+    };
+    setSubmitted(prev => [row, ...prev]);
+    setConfirmation(`${fmt(row.amount, row.currency)} to ${row.payee} submitted from ${row.fromAccount}.`);
+    setAmount('');
+    setReference('');
+  }, [canSend, source, payDate, recipientLabel, reference, numericAmount]);
+
+  const handleClear = useCallback(() => {
+    setAmount('');
+    setReference('');
+    setPayeeId('');
+    setPayeeText('');
+    setPayDate(todayISO());
+    setConfirmation('');
+  }, []);
+
+  const pickQuickRecipient = useCallback((b: Beneficiary) => {
+    setTab('saved');
+    setPayeeId(b.id);
+    setConfirmation(`${b.name} selected as the payee.`);
+  }, []);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Payments &amp; Transfers</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Move money securely between accounts and pay your payees.</p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Payments &amp; transfers</h1>
+          <p className="page-subtitle">Move money between your accounts, pay a saved payee, or set up someone new.</p>
+        </div>
       </div>
 
-      {/* Main layout: form + sidepanel */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        {/* Left: form */}
-        <div className="xl:col-span-2 space-y-4">
-          {/* Tabs */}
-          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex overflow-x-auto no-scrollbar" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-              {TABS.map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className="shrink-0 px-5 py-3.5 text-sm font-medium transition-colors whitespace-nowrap relative"
-                  style={{
-                    color: tab === t ? '#7f2b7b' : 'var(--text-muted)',
-                    borderBottom: tab === t ? '2px solid #7f2b7b' : '2px solid transparent',
-                  }}
-                >
-                  {t}
-                </button>
-              ))}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        {/* Left: form + history */}
+        <div className="space-y-6 xl:col-span-2">
+          <form
+            className="panel"
+            onSubmit={e => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+          >
+            <div className="panel-header">
+              <h2 className="panel-title">Make a payment</h2>
             </div>
 
-            <div className="p-6 space-y-5">
-              {/* From */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--text-secondary)' }}>From</label>
-                  <div className="relative">
-                    <select
-                      value={fromAccount}
-                      onChange={e => setFromAccount(e.target.value)}
-                      className="w-full rounded-xl px-4 py-3 pr-8 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                      style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
+            <div className="panel-body space-y-6">
+              {/* Payment type */}
+              <div>
+                <span id="payment-type-label" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Payment type
+                </span>
+                <div role="group" aria-labelledby="payment-type-label" className="segmented w-full">
+                  {TABS.map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTab(t.id)}
+                      aria-pressed={tab === t.id}
+                      data-active={tab === t.id}
+                      className="segmented-item flex-1 !shrink justify-center"
                     >
-                      {ACCOUNTS.map(a => (
-                        <option key={a.id} value={a.id}>{a.name} — {fmt(a.balance, a.currency)}</option>
-                      ))}
-                    </select>
-                    <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-                  </div>
+                      {t.label}
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* From */}
                 <div>
-                  <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--text-secondary)' }}>
-                    {tab === 'Transfer between accounts' ? 'To (account)' : 'To'}
+                  <label htmlFor="pay-from" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    From
                   </label>
-                  {tab === 'Transfer between accounts' ? (
-                    <div className="relative">
+                  <select
+                    id="pay-from"
+                    value={fromAccount}
+                    onChange={e => setFromAccount(e.target.value)}
+                    className="select"
+                  >
+                    {accounts.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} — {fmt(a.available, a.currency)} available
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* To */}
+                <div>
+                  {tab === 'transfer' && (
+                    <>
+                      <label htmlFor="pay-to-account" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                        To account
+                      </label>
                       <select
+                        id="pay-to-account"
                         value={toAccount}
                         onChange={e => setToAccount(e.target.value)}
-                        className="w-full rounded-xl px-4 py-3 pr-8 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                        style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
+                        className="select"
                       >
-                        {ACCOUNTS.filter(a => a.id !== fromAccount).map(a => (
-                          <option key={a.id} value={a.id}>{a.name} — {fmt(a.balance, a.currency)}</option>
+                        {otherAccounts.length === 0 && <option value="">No other accounts</option>}
+                        {otherAccounts.map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
                         ))}
                       </select>
-                      <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-                    </div>
-                  ) : (
-                    <input
-                      placeholder="Select account or payee"
-                      className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                      style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
-                    />
+                    </>
+                  )}
+
+                  {tab === 'saved' && (
+                    <>
+                      <label htmlFor="pay-to-payee" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                        Saved payee
+                      </label>
+                      <select
+                        id="pay-to-payee"
+                        value={payeeId}
+                        onChange={e => setPayeeId(e.target.value)}
+                        className="select"
+                      >
+                        <option value="">Choose a payee</option>
+                        {beneficiaries.map(b => (
+                          <option key={b.id} value={b.id}>{b.name} ({b.handle})</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+
+                  {tab === 'new' && (
+                    <>
+                      <label htmlFor="pay-to-new" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                        Payee name
+                      </label>
+                      <input
+                        id="pay-to-new"
+                        type="text"
+                        value={payeeText}
+                        onChange={e => setPayeeText(e.target.value)}
+                        placeholder="e.g. Olivia Bennett"
+                        autoComplete="off"
+                        className="input"
+                      />
+                    </>
                   )}
                 </div>
               </div>
 
-              {/* Amount + Date */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* Amount */}
                 <div>
-                  <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--text-secondary)' }}>Amount</label>
+                  <label htmlFor="pay-amount" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    Amount
+                  </label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold" style={{ color: 'var(--text-muted)' }}>€</span>
+                    <span aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>
+                      €
+                    </span>
                     <input
+                      id="pay-amount"
                       type="text"
                       value={amount}
                       onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
                       placeholder="0.00"
                       inputMode="decimal"
-                      className="w-full rounded-xl pl-8 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                      style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
+                      aria-describedby="pay-amount-hint"
+                      className="input pl-8 tabular-nums"
                     />
                   </div>
-                  {numericAmount > account.balance && (
-                    <p className="mt-1.5 text-xs text-red-500 font-medium">Insufficient balance</p>
-                  )}
+                  <p id="pay-amount-hint" className="field-hint">
+                    {overBalance
+                      ? `That is more than the ${fmt(available, source?.currency ?? 'EUR')} available in ${source?.name ?? 'this account'}.`
+                      : `${fmt(available, source?.currency ?? 'EUR')} available in ${source?.name ?? 'this account'}`}
+                  </p>
                 </div>
+
+                {/* Date */}
                 <div>
-                  <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--text-secondary)' }}>Payment date</label>
+                  <label htmlFor="pay-date" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    Payment date
+                  </label>
                   <input
+                    id="pay-date"
                     type="date"
                     value={payDate}
+                    min={todayISO()}
                     onChange={e => setPayDate(e.target.value)}
-                    className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                    style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
+                    className="input"
                   />
+                  <p className="field-hint">Today if you leave this as it is.</p>
                 </div>
               </div>
 
-              {/* Reference + Note */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--text-secondary)' }}>Reference (optional)</label>
-                  <input
-                    value={note}
-                    onChange={e => setNote(e.target.value)}
-                    placeholder="e.g. Rent, Invoice #123"
-                    className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                    style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--text-secondary)' }}>Note to recipient (optional)</label>
-                  <input
-                    placeholder="e.g. Thank you"
-                    className="w-full rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                    style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
-                  />
-                </div>
+              {/* Reference */}
+              <div>
+                <label htmlFor="pay-reference" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Reference (optional)
+                </label>
+                <input
+                  id="pay-reference"
+                  type="text"
+                  value={reference}
+                  onChange={e => setReference(e.target.value)}
+                  placeholder="e.g. Rent, Invoice #123"
+                  autoComplete="off"
+                  className="input"
+                />
               </div>
 
-              <div className="flex gap-3 pt-1">
-                <button
-                  onClick={handleSend}
-                  disabled={!canSend || sent}
-                  className={`flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all ${canSend && !sent ? 'bg-[#7f2b7b] hover:bg-[#5e1f5b]' : 'bg-slate-300 dark:bg-white/20 cursor-not-allowed'}`}
-                >
-                  {sent ? '✓ Payment sent' : 'Continue'}
+              {overBalance && (
+                <p className="text-sm font-medium text-red-600 dark:text-red-400" role="alert">
+                  Insufficient available balance for this payment.
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-3 border-t pt-5" style={{ borderColor: 'var(--surface-border)' }}>
+                <button type="submit" disabled={!canSend} className="btn btn-primary flex-1">
+                  <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
+                  </svg>
+                  Submit payment
                 </button>
-                <button
-                  onClick={() => { setAmount(''); setNote(''); setSelected(null); setSent(false); }}
-                  className="px-6 py-3 rounded-xl text-sm font-semibold transition-colors"
-                  style={{ color: 'var(--text-secondary)', border: '1px solid var(--surface-border)' }}
-                >
+                <button type="button" onClick={handleClear} className="btn btn-secondary">
                   Clear
                 </button>
               </div>
-            </div>
-          </div>
 
-          {/* Payment status table */}
-          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Payment status</h3>
-              <div className="flex gap-1 rounded-lg p-0.5 text-xs" style={{ backgroundColor: 'var(--surface-input)' }}>
-                {['All', 'Completed', 'Pending', 'Scheduled'].map(s => (
-                  <button key={s} className="px-2.5 py-1 rounded-md font-medium transition-colors" style={{ color: 'var(--text-secondary)' }}>{s}</button>
-                ))}
+              <div aria-live="polite">
+                {confirmation && (
+                  <div className="alert alert-success">
+                    <svg aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    <span>{confirmation}</span>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                    {['Date', 'Payee', 'Description', 'From Account', 'Amount', 'Status', ''].map(h => (
-                      <th key={h} className="text-left px-5 py-3 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {PAYMENT_STATUSES.map((p, i) => (
-                    <tr key={i} className="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                      <td className="px-5 py-3.5 text-xs whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{p.date}</td>
-                      <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-primary)' }}>{p.payee}</td>
-                      <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{p.desc}</td>
-                      <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>{p.from}</td>
-                      <td className="px-5 py-3.5 font-semibold" style={{ color: 'var(--text-primary)' }}>{fmt(p.amount)}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_COLORS[p.status]}`}>
-                          {p.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <button className="p-1 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }}>
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </form>
+
+          {/* Payment history */}
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Payments and upcoming</h2>
+              <span className="chip tabular-nums" aria-live="polite">
+                {state === 'loading' ? 'Loading' : `${visibleRows.length} shown`}
+              </span>
             </div>
+
+            {data && data.statuses.length > 1 && (
+              <div
+                role="group"
+                aria-label="Filter payments by status"
+                className="flex flex-wrap gap-2 border-b px-5 py-4"
+                style={{ borderColor: 'var(--surface-border)' }}
+              >
+                {(['All', ...data.statuses] as (PaymentStatus | 'All')[]).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStatusFilter(s)}
+                    aria-pressed={statusFilter === s}
+                    className="chip transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                    style={
+                      statusFilter === s
+                        ? { backgroundColor: 'var(--brand-soft)', borderColor: 'var(--brand)', color: 'var(--brand-on-soft)' }
+                        : undefined
+                    }
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {state === 'loading' ? (
+              <div className="divide-token">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-5 py-4">
+                    <div className="skeleton h-10 w-10 shrink-0 rounded-xl" />
+                    <div className="flex-1 space-y-2">
+                      <div className="skeleton h-4 w-1/3" />
+                      <div className="skeleton h-3.5 w-1/4" />
+                    </div>
+                    <div className="skeleton h-4 w-20 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            ) : state === 'error' ? (
+              <LoadError onRetry={retry} />
+            ) : visibleRows.length === 0 ? (
+              <div className="p-5">
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                    </svg>
+                  </div>
+                  <p className="empty-state-title">
+                    {statusFilter === 'All' ? 'No payments yet' : `No ${statusFilter.toLowerCase()} payments`}
+                  </p>
+                  <p className="empty-state-text">
+                    {statusFilter === 'All'
+                      ? 'Payments you make and payments you schedule will both be listed here.'
+                      : `Nothing is currently marked as ${statusFilter.toLowerCase()}. Choose a different status to see the rest.`}
+                  </p>
+                  {statusFilter !== 'All' && (
+                    <button type="button" onClick={() => setStatusFilter('All')} className="btn btn-secondary btn-sm mt-4">
+                      Show all payments
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div
+                role="region"
+                aria-label="Payments and upcoming payments, scroll horizontally to see all columns"
+                tabIndex={0}
+                className="overflow-x-auto"
+              >
+                <table className="w-full min-w-[680px] border-collapse text-sm" aria-label="Payments and upcoming payments">
+                  <thead>
+                    <tr>
+                      {['Date', 'Payee', 'From', 'Amount', 'Status'].map(h => (
+                        <th
+                          key={h}
+                          scope="col"
+                          className="px-5 py-3 text-left text-sm font-semibold"
+                          style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--surface-border)' }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleRows.map(r => (
+                      <tr key={r.id} className="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
+                        <td className="px-5 py-4 text-sm whitespace-nowrap" style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--surface-border)' }}>
+                          {dateLabel(r.dateISO)}
+                        </td>
+                        <td className="px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                          <span className="block text-base font-medium" style={{ color: 'var(--text-primary)' }}>{r.payee}</span>
+                          <span className="block text-sm" style={{ color: 'var(--text-muted)' }}>{r.description}</span>
+                        </td>
+                        <td className="px-5 py-4 text-sm" style={{ color: 'var(--text-secondary)', borderBottom: '1px solid var(--surface-border)' }}>
+                          {r.fromAccount}
+                        </td>
+                        <td
+                          className="px-5 py-4 text-right text-base font-bold tabular-nums whitespace-nowrap"
+                          style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--surface-border)' }}
+                        >
+                          −{fmt(r.amount, r.currency)}
+                        </td>
+                        <td className="px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                          <span className={`${STATUS_BADGE[r.status]} whitespace-nowrap`}>
+                            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d={STATUS_ICON[r.status]} />
+                            </svg>
+                            {r.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right sidebar */}
-        <div className="space-y-4">
-          {/* Payment limits */}
-          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Payment limits</h3>
-              <button className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">View limits</button>
+        <div className="space-y-6">
+          {/* Quick transfers */}
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Quick transfers</h2>
             </div>
-            <div className="mb-3">
-              <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Daily remaining allowance</p>
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>€8,250<span className="text-sm font-semibold text-slate-400">.00</span></p>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>of €10,000.00</p>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="relative w-16 h-16">
-                <svg viewBox="0 0 36 36" className="w-16 h-16 -rotate-90">
-                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--surface-input)" strokeWidth="3" />
-                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="#7f2b7b" strokeWidth="3" strokeDasharray="82 18" strokeLinecap="round" />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color: 'var(--text-primary)' }}>82%</span>
+            {state === 'loading' ? (
+              <div className="divide-token">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-5 py-4">
+                    <div className="skeleton h-10 w-10 shrink-0 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <div className="skeleton h-4 w-1/2" />
+                      <div className="skeleton h-3.5 w-1/3" />
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="text-right">
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Daily limit resets in</p>
-                <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>14h 32m</p>
+            ) : state === 'error' ? (
+              <p className="px-5 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+                Saved payees are unavailable right now. Use “Try again” on the payment history panel.
+              </p>
+            ) : beneficiaries.length === 0 ? (
+              <div className="p-5">
+                <div className="empty-state !py-10">
+                  <div className="empty-state-icon">
+                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                    </svg>
+                  </div>
+                  <p className="empty-state-title">No saved payees</p>
+                  <p className="empty-state-text">People you pay more than once can be saved here for next time.</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="divide-token">
+                {beneficiaries.slice(0, 5).map(b => (
+                  <div key={b.id} className="flex items-center gap-3 px-5 py-4">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                      style={{ background: b.gradient }}
+                    >
+                      {b.glyph}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>{b.name}</p>
+                      <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {b.handle}
+                        {typeof b.lastSent === 'number' ? ` · last sent ${fmt(b.lastSent)}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => pickQuickRecipient(b)}
+                      className="btn btn-secondary btn-sm shrink-0"
+                      aria-label={`Pay ${b.name}`}
+                    >
+                      Pay
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Quick transfers */}
-          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Quick transfers</h3>
-              <button className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">View all</button>
+          {/* Upcoming scheduled */}
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Upcoming scheduled</h2>
+              <span className="chip tabular-nums">{SCHEDULED_PAYMENTS.length} total</span>
             </div>
-            <div className="space-y-2">
-              {quickRecipients.map(b => (
-                <div key={b.id} className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: b.gradient }}>
-                    {b.glyph}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{b.name}</p>
-                    <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{b.handle}</p>
-                  </div>
-                  <button
-                    onClick={() => { setSelected(b); setTab('Pay someone new'); }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#7f2b7b] dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
-                    style={{ border: '1px solid var(--surface-border)' }}
+            <div className="divide-token">
+              {SCHEDULED_PAYMENTS.map(s => (
+                <div key={s.id} className="flex items-center gap-3 px-5 py-4">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl"
+                    style={{ backgroundColor: 'var(--surface-input)' }}
                   >
-                    Transfer
-                  </button>
+                    <span className="text-xs font-semibold leading-none" style={{ color: 'var(--text-muted)' }}>
+                      {monthShort(s.nextDate)}
+                    </span>
+                    <span className="text-base font-bold leading-tight tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                      {dayNumber(s.nextDate)}
+                    </span>
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>{s.payee}</p>
+                    <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                      {s.frequency} · {dateLabel(s.nextDate)}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-base font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                    {fmt(s.amount, s.currency)}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Upcoming scheduled */}
-          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Upcoming scheduled</h3>
-              <button className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">View all</button>
-            </div>
-            <div className="space-y-3">
-              {SCHEDULED_PAYMENTS.slice(0, 4).map(s => {
-                const d = new Date(s.nextDate);
-                return (
-                  <div key={s.id} className="flex items-center gap-3">
-                    <div className="flex flex-col items-center w-9 shrink-0 rounded-lg py-1" style={{ backgroundColor: 'var(--surface-input)' }}>
-                      <span className="text-[8px] font-bold" style={{ color: 'var(--text-muted)' }}>
-                        {d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}
-                      </span>
-                      <span className="text-sm font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
-                        {String(d.getDate()).padStart(2, '0')}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{s.payee}</p>
-                      <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{s.frequency}</p>
-                    </div>
-                    <p className="text-xs font-bold shrink-0" style={{ color: 'var(--text-primary)' }}>{fmt(s.amount, s.currency)}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Security notice */}
-          <div className="rounded-2xl p-4 bg-gradient-to-br from-[#2d0e2b] via-[#4a1747] to-[#7f2b7b] text-white">
-            <div className="flex items-start gap-3">
-              <svg className="h-5 w-5 text-purple-200 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          {/* Fraud notice */}
+          <div className="panel flex items-start gap-3 p-5">
+            <span
+              aria-hidden="true"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+              style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+            >
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
-              <div>
-                <p className="text-xs font-bold mb-1">Fraud notice</p>
-                <p className="text-[10px] text-purple-200/80 leading-relaxed">We will never ask for your password or full card details.</p>
-              </div>
+            </span>
+            <div>
+              <p className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Fraud notice</p>
+              <p className="mt-1 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                We will never ask for your password, PIN or full card details. If someone does, report it through
+                messages straight away.
+              </p>
             </div>
           </div>
         </div>

@@ -7,10 +7,30 @@ import { toast } from 'react-toastify';
 import { authService } from '@/services/auth.service';
 import config from '@/config';
 
+/* Public page — intentionally light themed; it renders outside the dashboard shell. */
+
+const CAPABILITIES = [
+  'Account opening',
+  'Application tracking',
+  'Document upload',
+  'Secure sign-in',
+];
+
+const BRAND_LOGO_PATH =
+  'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z';
+
+const inputClass =
+  'w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-base text-slate-900 placeholder:text-slate-400';
+
 export default function RegisterPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
+  /* Values stay in state so a failed registration never loses typed input. */
   const [formData, setFormData] = useState({
     bankId: config.bank.defaultBankId,
     username: '',
@@ -22,455 +42,399 @@ export default function RegisterPage() {
     phoneNumber: '',
   });
 
-  const update = (field: string, value: string) =>
+  const update = (field: keyof typeof formData, value: string) => {
+    if (formError) setFormError(null);
+    if (field === 'confirmPassword' || field === 'password') setConfirmError(null);
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFormError(null);
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+      setConfirmError('Passwords do not match.');
       return;
     }
+    setConfirmError(null);
 
     setIsLoading(true);
     try {
-      const { confirmPassword, ...data } = formData;
-      await authService.registerCustomer(data);
-      toast.success('Account created successfully! Please login.');
+      /* confirmPassword is a client-side check only — it is never sent. */
+      await authService.registerCustomer({
+        bankId: formData.bankId,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber || undefined,
+      });
+      toast.success('Registration submitted. Sign in to continue.');
       router.push('/login');
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || error.message || 'Registration failed');
+    } catch (error) {
+      /* Server messages only — credentials are never echoed back. */
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      setFormError(
+        err?.response?.data?.message || err?.message || 'Registration failed. Please try again.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen flex">
-      {/* ──── Left panel: Branding ──── */}
-      <div className="hidden lg:flex lg:w-[45%] relative overflow-hidden bg-gradient-to-br from-[#0f2847] via-[#1a3a7a] to-[#2563eb]">
-        {/* Decorative blobs */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 bg-indigo-400/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-sky-400/5 rounded-full blur-2xl" />
+  const requiredMark = (
+    <>
+      <span className="text-red-500" aria-hidden="true">
+        {' '}
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
 
-        {/* Grid pattern overlay */}
+  return (
+    <div className="flex min-h-screen">
+      {/* ──── Brand panel ──── */}
+      <div className="relative hidden overflow-hidden bg-[#0f2847] lg:flex lg:w-[45%]">
         <div
-          className="absolute inset-0 opacity-[0.03]"
+          className="absolute -left-24 -top-24 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl"
+          aria-hidden="true"
+        />
+        <div
+          className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-indigo-400/10 blur-3xl"
+          aria-hidden="true"
+        />
+        <div
+          className="absolute inset-0 opacity-[0.04]"
           style={{
             backgroundImage:
               "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-rule='evenodd'%3E%3Ccircle cx='20' cy='20' r='1'/%3E%3C/g%3E%3C/svg%3E\")",
           }}
+          aria-hidden="true"
         />
 
-        <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          {/* Logo */}
+        <div className="relative z-10 flex w-full flex-col justify-between p-12">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center">
-              <svg
-                className="w-5 h-5 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                />
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15" aria-hidden="true">
+              <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d={BRAND_LOGO_PATH} />
               </svg>
-            </div>
-            <span className="text-lg font-semibold text-white tracking-wide">Rayva</span>
+            </span>
+            <span className="text-xl font-semibold tracking-tight text-white">Rayva</span>
           </div>
 
-          {/* Hero text */}
           <div className="space-y-6">
-            <h1 className="text-4xl font-bold text-white leading-tight">
-              Start Your Banking
-              <br />
-              Journey Today
-            </h1>
-            <p className="text-blue-200/80 text-lg leading-relaxed max-w-sm">
-              Create your account in minutes and get access to a complete suite of banking services.
+            <p className="text-4xl font-semibold leading-tight tracking-tight text-white">
+              Start your banking journey
             </p>
-
-            {/* Feature pills */}
-            <div className="flex flex-wrap gap-2 pt-2">
-              {['Quick Setup', 'Secure Platform', '24/7 Access', 'Digital First'].map(f => (
-                <span
-                  key={f}
-                  className="px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm text-sm text-blue-100 border border-white/10"
+            <p className="max-w-sm text-lg leading-relaxed text-blue-200/80">
+              Create an account to open facilities, track applications and manage documents in one
+              place.
+            </p>
+            <ul className="flex flex-wrap gap-2 pt-2">
+              {CAPABILITIES.map(capability => (
+                <li
+                  key={capability}
+                  className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-sm text-blue-100"
                 >
-                  {f}
-                </span>
+                  {capability}
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
 
-          {/* Footer quote */}
-          <div className="border-t border-white/10 pt-6">
-            <p className="text-blue-200/60 text-sm">
-              Trusted by leading financial institutions worldwide
-            </p>
-          </div>
+          <p className="border-t border-white/10 pt-6 text-sm text-blue-200/70">
+            Registrations are reviewed by the bank before portal access is granted.
+          </p>
         </div>
       </div>
 
-      {/* ──── Right panel: Registration form ──── */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-slate-50">
+      {/* ──── Registration form ──── */}
+      <main className="force-light flex flex-1 items-center justify-center bg-slate-50 p-6 sm:p-10">
         <div className="w-full max-w-md">
-          {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
-              <svg
-                className="w-4 h-4 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                />
+          <div className="mb-8 flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1a3a7a]" aria-hidden="true">
+              <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d={BRAND_LOGO_PATH} />
               </svg>
-            </div>
-            <span className="text-lg font-bold text-slate-900">Rayva</span>
+            </span>
+            <span className="text-xl font-semibold tracking-tight text-slate-900">Rayva</span>
           </div>
 
-          <h2 className="text-2xl font-bold text-slate-900">Create your account</h2>
-          <p className="text-slate-500 mt-1 mb-8">Fill in your details to get started</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            Create your account
+          </h1>
+          <p className="mt-2 text-base text-slate-600">
+            Fields marked with an asterisk are required.
+          </p>
 
-          {/* Existing customer callout */}
-          <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/60 p-4 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            <svg
+              className="mt-0.5 h-4 w-4 shrink-0 text-blue-700"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={2}
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <p className="text-sm text-blue-900">
+              Already registered?{' '}
+              <Link
+                href="/login"
+                className="font-semibold text-blue-800 underline underline-offset-2 hover:text-blue-950"
+              >
+                Sign in to your existing account
+              </Link>
+              .
+            </p>
+          </div>
+
+          {formError && (
+            <div
+              id="register-error"
+              role="alert"
+              className="mt-6 flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3"
+            >
               <svg
-                className="w-4 h-4 text-blue-600"
+                className="mt-0.5 h-4 w-4 shrink-0 text-red-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                strokeWidth={2}
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-blue-900">Already have an account?</p>
-              <p className="text-sm text-blue-700/80 mt-0.5">
-                If you&#39;re an existing customer, you can{' '}
-                <Link
-                  href="/login"
-                  className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-800"
-                >
-                  sign in directly
-                </Link>{' '}
-                with your credentials.
+              <p className="text-sm text-red-700">
+                {formError}
+                <span className="mt-0.5 block text-red-600/80">
+                  Your details were kept — correct anything highlighted and submit again.
+                </span>
               </p>
             </div>
-          </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name row */}
-            <div className="grid grid-cols-2 gap-4">
+          <form
+            onSubmit={handleSubmit}
+            className="mt-6 space-y-5"
+            aria-describedby={formError ? 'register-error' : undefined}
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  First Name
+                <label htmlFor="firstName" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  First name{requiredMark}
                 </label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <svg
-                      className="w-4 h-4 text-slate-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="John"
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
-                    value={formData.firstName}
-                    onChange={e => update('firstName', e.target.value)}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Last Name</label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <svg
-                      className="w-4 h-4 text-slate-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Doe"
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
-                    value={formData.lastName}
-                    onChange={e => update('lastName', e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Username */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Username</label>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <svg
-                    className="w-4 h-4 text-slate-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
                 <input
+                  id="firstName"
+                  name="firstName"
                   type="text"
                   required
-                  placeholder="Choose a username"
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
-                  value={formData.username}
-                  onChange={e => update('username', e.target.value)}
+                  aria-required="true"
+                  autoComplete="given-name"
+                  placeholder="Jane"
+                  value={formData.firstName}
+                  onChange={event => update('firstName', event.target.value)}
+                  className={inputClass}
                 />
               </div>
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <svg
-                    className="w-4 h-4 text-slate-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
+              <div>
+                <label htmlFor="lastName" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Last name{requiredMark}
+                </label>
                 <input
-                  type="email"
+                  id="lastName"
+                  name="lastName"
+                  type="text"
                   required
-                  placeholder="you@example.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
-                  value={formData.email}
-                  onChange={e => update('email', e.target.value)}
+                  aria-required="true"
+                  autoComplete="family-name"
+                  placeholder="Doe"
+                  value={formData.lastName}
+                  onChange={event => update('lastName', event.target.value)}
+                  className={inputClass}
                 />
               </div>
             </div>
 
-            {/* Phone */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Phone Number <span className="text-slate-400 font-normal">(optional)</span>
+              <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">
+                Username{requiredMark}
               </label>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <svg
-                    className="w-4 h-4 text-slate-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
-                  </svg>
-                </div>
-                <input
-                  type="tel"
-                  placeholder="+1 (555) 000-0000"
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
-                  value={formData.phoneNumber}
-                  onChange={e => update('phoneNumber', e.target.value)}
-                />
-              </div>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                required
+                aria-required="true"
+                autoComplete="username"
+                placeholder="Choose a username"
+                value={formData.username}
+                onChange={event => update('username', event.target.value)}
+                className={inputClass}
+              />
             </div>
 
-            {/* Password row */}
-            <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                Email{requiredMark}
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                aria-required="true"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={formData.email}
+                onChange={event => update('email', event.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="phoneNumber" className="mb-1.5 block text-sm font-medium text-slate-700">
+                Phone number <span className="font-normal text-slate-500">(optional)</span>
+              </label>
+              <input
+                id="phoneNumber"
+                name="phoneNumber"
+                type="tel"
+                autoComplete="tel"
+                placeholder="+353 1 234 5678"
+                value={formData.phoneNumber}
+                onChange={event => update('phoneNumber', event.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+                <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Password{requiredMark}
+                </label>
                 <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <svg
-                      className="w-4 h-4 text-slate-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                      />
-                    </svg>
-                  </div>
                   <input
-                    type="password"
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
-                    placeholder="••••••••"
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                    aria-required="true"
+                    autoComplete="new-password"
+                    placeholder="Create a password"
                     value={formData.password}
-                    onChange={e => update('password', e.target.value)}
+                    onChange={event => update('password', event.target.value)}
+                    className={`${inputClass} pr-12`}
                   />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Confirm</label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <svg
-                      className="w-4 h-4 text-slate-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(visible => !visible)}
+                    aria-pressed={showPassword}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:text-slate-800"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                        d={
+                          showPassword
+                            ? 'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18'
+                            : 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'
+                        }
                       />
                     </svg>
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••"
-                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
-                    value={formData.confirmPassword}
-                    onChange={e => update('confirmPassword', e.target.value)}
-                  />
+                  </button>
                 </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="confirmPassword"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Confirm password{requiredMark}
+                </label>
+                <div className="relative">
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type={showConfirm ? 'text' : 'password'}
+                    required
+                    aria-required="true"
+                    autoComplete="new-password"
+                    aria-invalid={confirmError ? true : undefined}
+                    aria-describedby={confirmError ? 'confirmPassword-error' : undefined}
+                    placeholder="Repeat your password"
+                    value={formData.confirmPassword}
+                    onChange={event => update('confirmPassword', event.target.value)}
+                    className={`${inputClass} pr-12 ${
+                      confirmError ? 'border-red-400' : ''
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(visible => !visible)}
+                    aria-pressed={showConfirm}
+                    aria-label={showConfirm ? 'Hide confirmation password' : 'Show confirmation password'}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:text-slate-800"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d={
+                          showConfirm
+                            ? 'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18'
+                            : 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'
+                        }
+                      />
+                    </svg>
+                  </button>
+                </div>
+                {confirmError && (
+                  <p id="confirmPassword-error" role="alert" className="mt-1.5 text-sm text-red-600">
+                    {confirmError}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 hover:from-blue-700 hover:to-indigo-700 focus:ring-2 focus:ring-blue-500/40 focus:ring-offset-2 disabled:opacity-50 transition-all duration-200"
+              className="w-full rounded-xl bg-[#1a3a7a] py-3 text-base font-semibold text-white transition-colors hover:bg-[#15306a] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  Creating Account...
+                  <span
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                    aria-hidden="true"
+                  />
+                  Creating account…
                 </span>
               ) : (
-                'Create Account'
+                'Create account'
               )}
             </button>
           </form>
 
-          {/* Footer */}
-          <div className="mt-8 space-y-4">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-slate-50 px-3 text-slate-400">or</span>
-              </div>
-            </div>
-
-            <Link
-              href="/login"
-              className="flex items-center justify-center gap-2 w-full rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-all"
-            >
-              <svg
-                className="w-4 h-4 text-slate-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
-                />
-              </svg>
-              Sign in to existing account
-            </Link>
-
-            <p className="text-center text-xs text-slate-400">
-              By creating an account, you agree to our{' '}
-              <Link
-                href="/terms"
-                className="text-slate-500 hover:text-slate-700 underline underline-offset-2"
-              >
-                Terms of Service
-              </Link>{' '}
-              and{' '}
-              <Link
-                href="/privacy"
-                className="text-slate-500 hover:text-slate-700 underline underline-offset-2"
-              >
-                Privacy Policy
-              </Link>
-            </p>
-          </div>
+          <p className="mt-8 text-center text-sm text-slate-500">
+            Your registration is reviewed by the bank before portal access is granted.
+          </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

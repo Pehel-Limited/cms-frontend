@@ -16,6 +16,14 @@ import { getCurrencySymbol } from '@/lib/format';
 
 type ModalMode = null | 'add' | 'edit';
 
+/** ISO date → readable locale date, falling back to the raw value. */
+function formatDay(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 const AVAILABLE_ROLES = [
   'DIRECTOR',
   'SHAREHOLDER',
@@ -100,13 +108,39 @@ export default function PartiesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div
-          className="spinner h-8 w-8"
-          style={{ color: 'var(--brand)' }}
-          role="status"
-          aria-label="Loading people and roles"
-        />
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div className="skeleton h-9 w-64" />
+        <div className="skeleton h-5 w-96 max-w-full" />
+        <div className="card p-0">
+          <div className="space-y-3 p-5">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="skeleton h-12 w-full" />
+            ))}
+          </div>
+        </div>
+        <p className="sr-only" role="status">
+          Loading people and roles
+        </p>
+      </div>
+    );
+  }
+
+  /* A failed load must never read as "no people" — offer a retry instead. */
+  if (error && parties.length === 0) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
+          People and roles
+        </h1>
+        <div className="alert alert-error" role="alert">
+          <div className="flex-1">
+            <p className="text-base font-semibold">Could not load people and roles</p>
+            <p className="mt-1 text-sm opacity-80">{error}</p>
+          </div>
+          <button onClick={loadData} className="btn btn-sm btn-outline shrink-0">
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
@@ -121,7 +155,7 @@ export default function PartiesPage() {
             className="icon-btn"
             aria-label="Back to company profile"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -131,14 +165,14 @@ export default function PartiesPage() {
             </svg>
           </button>
           <div>
-            <h2
-              className="text-xl font-bold tracking-tight sm:text-2xl"
+            <h1
+              className="text-2xl font-bold tracking-tight sm:text-3xl"
               style={{ color: 'var(--text-primary)' }}
             >
-              People &amp; roles
-            </h2>
+              People and roles
+            </h1>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              Manage directors, shareholders, UBOs and authorized signatories
+              Manage directors, shareholders, beneficial owners and authorized signatories
             </p>
           </div>
         </div>
@@ -149,10 +183,10 @@ export default function PartiesPage() {
           }}
           className="btn btn-primary"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Add party
+          Add person
         </button>
       </div>
 
@@ -175,12 +209,24 @@ export default function PartiesPage() {
       {validation && (
         <div
           className={`alert mb-6 items-start ${validation.isComplete ? 'alert-success' : 'alert-warning'}`}
+          role="status"
         >
-          <span className="text-lg leading-none">{validation.isComplete ? '✓' : '⚠'}</span>
+          <svg className="mt-0.5 h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d={
+                validation.isComplete
+                  ? 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+                  : 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z'
+              }
+            />
+          </svg>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold">
-              {validation.isComplete ? 'Party requirements met' : 'Action required'}
-            </h3>
+            <p className="text-base font-semibold">
+              {validation.isComplete ? 'Company requirements met' : 'Action required'}
+            </p>
             {!validation.isComplete && validation.issues.length > 0 && (
               <ul className="mt-1 list-inside list-disc text-sm">
                 {validation.issues.map((issue, i) => (
@@ -188,30 +234,29 @@ export default function PartiesPage() {
                 ))}
               </ul>
             )}
-            <div className="mt-2 flex flex-wrap gap-4 text-xs opacity-80">
-              <span>
-                {validation.summary.directors} Director
-                {validation.summary.directors !== 1 ? 's' : ''}
-              </span>
-              <span>
-                {validation.summary.shareholders} Shareholder
+            <ul className="mt-3 flex flex-wrap gap-2">
+              <li className="chip">
+                {validation.summary.directors} director{validation.summary.directors !== 1 ? 's' : ''}
+              </li>
+              <li className="chip">
+                {validation.summary.shareholders} shareholder
                 {validation.summary.shareholders !== 1 ? 's' : ''}
-              </span>
-              <span>
-                {validation.summary.ubos} UBO{validation.summary.ubos !== 1 ? 's' : ''} (
-                {validation.summary.totalUboOwnership}%)
-              </span>
-              <span>
-                {validation.summary.signatories} Signator
+              </li>
+              <li className="chip">
+                {validation.summary.ubos} beneficial owner{validation.summary.ubos !== 1 ? 's' : ''} ·{' '}
+                <span className="tabular-nums">{validation.summary.totalUboOwnership}%</span> ownership
+              </li>
+              <li className="chip">
+                {validation.summary.signatories} authorized signator
                 {validation.summary.signatories !== 1 ? 'ies' : 'y'}
-              </span>
-            </div>
+              </li>
+            </ul>
           </div>
         </div>
       )}
 
       {/* Filter */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <label className="text-sm" style={{ color: 'var(--text-muted)' }} htmlFor="role-filter">
           Filter by role
         </label>
@@ -236,26 +281,31 @@ export default function PartiesPage() {
       {/* Members Table */}
       {activeParties.length > 0 ? (
         <div className="card overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="data-table min-w-full">
+          <div
+            className="overflow-x-auto"
+            role="region"
+            aria-label="Active people and roles, scrollable"
+            tabIndex={0}
+          >
+            <table className="data-table min-w-full" aria-label="Active people and roles">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Role</th>
-                  <th>Ownership</th>
-                  <th className="text-center">Signatory</th>
-                  <th className="text-center">UBO</th>
-                  <th className="text-right">Actions</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Ownership</th>
+                  <th scope="col" className="text-center">Signatory</th>
+                  <th scope="col" className="text-center">Beneficial owner</th>
+                  <th scope="col" className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {activeParties.map(m => (
                   <tr key={m.id}>
                     <td>
-                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                      <div className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                         {m.customerName || 'Unknown'}
                       </div>
-                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
                         {m.customerEmail || ''}
                       </div>
                     </td>
@@ -264,26 +314,26 @@ export default function PartiesPage() {
                         {PARTY_ROLE_LABELS[m.role] || m.role}
                       </span>
                       {m.roleTitle && (
-                        <div className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <div className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
                           {m.roleTitle}
                         </div>
                       )}
                     </td>
-                    <td className="whitespace-nowrap">
+                    <td className="whitespace-nowrap tabular-nums">
                       {m.ownershipPercentage != null ? `${m.ownershipPercentage}%` : '—'}
                     </td>
                     <td className="text-center">
                       {m.isAuthorizedSignatory ? (
-                        <span className="font-medium text-emerald-500">✓</span>
+                        <span className="badge badge-success">Yes</span>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        <span style={{ color: 'var(--text-muted)' }}>No</span>
                       )}
                     </td>
                     <td className="text-center">
                       {m.isBeneficialOwner ? (
-                        <span className="font-medium text-emerald-500">✓</span>
+                        <span className="badge badge-success">Yes</span>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        <span style={{ color: 'var(--text-muted)' }}>No</span>
                       )}
                     </td>
                     <td className="text-right">
@@ -295,13 +345,13 @@ export default function PartiesPage() {
                           }}
                           className="btn btn-ghost btn-sm"
                         >
-                          Edit
+                          Edit<span className="sr-only"> {m.customerName || 'member'}</span>
                         </button>
                         <button
                           onClick={() => setDeleteConfirmId(m.id)}
                           className="btn btn-ghost btn-sm text-red-500 hover:text-red-600"
                         >
-                          Remove
+                          Remove<span className="sr-only"> {m.customerName || 'member'}</span>
                         </button>
                       </div>
                     </td>
@@ -311,51 +361,84 @@ export default function PartiesPage() {
             </table>
           </div>
         </div>
+      ) : roleFilter ? (
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <p className="empty-state-title">No one has this role</p>
+          <p className="empty-state-text">
+            No active members match the selected role filter.
+          </p>
+          <button onClick={() => setRoleFilter('')} className="btn btn-secondary btn-sm mt-4">
+            Clear filter
+          </button>
+        </div>
       ) : (
         <div className="empty-state">
-          <div className="empty-state-icon text-2xl">👥</div>
-          <h3 className="empty-state-title">No active parties</h3>
+          <div className="empty-state-icon">
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6-4a4 4 0 11-3-3.87" />
+            </svg>
+          </div>
+          <p className="empty-state-title">No active people</p>
           <p className="empty-state-text">
-            Add directors, shareholders and signatories to your company.
+            Add the directors, shareholders and signatories associated with your company.
           </p>
+          <button
+            onClick={() => {
+              setEditingMember(null);
+              setModalMode('add');
+            }}
+            className="btn btn-primary btn-sm mt-4"
+          >
+            Add person
+          </button>
         </div>
       )}
 
       {/* Inactive members */}
       {inactiveParties.length > 0 && (
         <div className="mt-6">
-          <h3 className="section-title mb-2">Inactive members</h3>
-          <div
-            className="divide-token overflow-hidden rounded-xl border"
+          <h2 className="section-title mb-3">Inactive members</h2>
+          <ul
+            className="divide-token overflow-hidden rounded-2xl border"
             style={{
               backgroundColor: 'var(--surface-input)',
               borderColor: 'var(--surface-border)',
             }}
           >
             {inactiveParties.map(m => (
-              <div
+              <li
                 key={m.id}
-                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
-                style={{ color: 'var(--text-muted)' }}
+                className="flex flex-wrap items-center justify-between gap-2 px-5 py-4"
               >
-                <span>
+                <span className="text-base" style={{ color: 'var(--text-secondary)' }}>
                   {m.customerName || 'Unknown'} — {PARTY_ROLE_LABELS[m.role] || m.role}
                 </span>
-                <span className="text-xs">Resigned {m.resignationDate || ''}</span>
-              </div>
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {m.resignationDate ? `Resigned ${formatDay(m.resignationDate)}` : 'Resignation date not recorded'}
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
 
       {/* Delete Confirmation */}
       {deleteConfirmId && (
-        <Modal onClose={() => setDeleteConfirmId(null)}>
-          <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+        <Modal onClose={() => setDeleteConfirmId(null)} labelledBy="confirm-remove-title">
+          <h2
+            id="confirm-remove-title"
+            className="text-lg font-semibold"
+            style={{ color: 'var(--text-primary)' }}
+          >
             Confirm removal
-          </h3>
+          </h2>
           <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Are you sure you want to remove this party member? This action cannot be undone.
+            Are you sure you want to remove this person? This action cannot be undone.
           </p>
           <div className="mt-5 flex justify-end gap-2">
             <button onClick={() => setDeleteConfirmId(null)} className="btn btn-secondary">
@@ -473,13 +556,17 @@ function PartyModal({
   }
 
   return (
-    <Modal onClose={onClose}>
-      <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-        {mode === 'add' ? 'Add party member' : 'Edit party member'}
-      </h3>
+    <Modal onClose={onClose} labelledBy="party-modal-title">
+      <h2
+        id="party-modal-title"
+        className="text-lg font-semibold"
+        style={{ color: 'var(--text-primary)' }}
+      >
+        {mode === 'add' ? 'Add person' : 'Edit person'}
+      </h2>
 
       {error && (
-        <div className="alert alert-error mt-3" role="alert">
+        <div className="alert alert-error mt-3" role="alert" id="party-modal-error">
           {error}
         </div>
       )}
@@ -498,8 +585,12 @@ function PartyModal({
               onChange={e => handleChange('customerId', e.target.value)}
               placeholder="UUID of existing customer"
               className="input"
+              aria-describedby={`party-customer-id-hint${error ? ' party-modal-error' : ''}`}
+              aria-invalid={error ? true : undefined}
             />
-            <p className="field-hint">The customer must already exist in the system</p>
+            <p className="field-hint" id="party-customer-id-hint">
+              The customer must already exist in the system
+            </p>
           </div>
         )}
 
@@ -588,8 +679,9 @@ function PartyModal({
 
         {/* Checkboxes */}
         <div className="space-y-3">
-          <label className="flex cursor-pointer items-center gap-2">
+          <label className="flex cursor-pointer items-center gap-2" htmlFor="party-signatory">
             <input
+              id="party-signatory"
               type="checkbox"
               checked={form.isAuthorizedSignatory}
               onChange={e => handleChange('isAuthorizedSignatory', e.target.checked)}
@@ -618,8 +710,9 @@ function PartyModal({
             </div>
           )}
 
-          <label className="flex cursor-pointer items-center gap-2">
+          <label className="flex cursor-pointer items-center gap-2" htmlFor="party-ubo">
             <input
+              id="party-ubo"
               type="checkbox"
               checked={form.isBeneficialOwner}
               onChange={e => handleChange('isBeneficialOwner', e.target.checked)}
@@ -640,8 +733,9 @@ function PartyModal({
 
         {/* Status (edit only) */}
         {mode === 'edit' && (
-          <label className="flex cursor-pointer items-center gap-2">
+          <label className="flex cursor-pointer items-center gap-2" htmlFor="party-active">
             <input
+              id="party-active"
               type="checkbox"
               checked={form.isActive}
               onChange={e => handleChange('isActive', e.target.checked)}
@@ -661,7 +755,7 @@ function PartyModal({
           Cancel
         </button>
         <button onClick={handleSubmit} disabled={saving} className="btn btn-primary">
-          {saving ? 'Saving…' : mode === 'add' ? 'Add member' : 'Save changes'}
+          {saving ? 'Saving…' : mode === 'add' ? 'Add person' : 'Save changes'}
         </button>
       </div>
     </Modal>
@@ -670,14 +764,36 @@ function PartyModal({
 
 // ─── Modal Shell ───────────────────────────────────────────────
 
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function Modal({
+  children,
+  onClose,
+  labelledBy,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+  labelledBy: string;
+}) {
+  /* Escape closes the dialog, matching the rest of the portal's overlays */
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby={labelledBy}
     >
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border p-6"
         style={{

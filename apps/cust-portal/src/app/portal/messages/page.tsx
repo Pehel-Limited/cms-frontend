@@ -1,213 +1,406 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import {
+  messagingService,
+  formatMessageTime,
+  SENDER_TYPE_LABELS,
+  type Conversation,
+  type Message,
+} from '@/services/api/messaging-service';
 
-const CONVERSATIONS = [
-  {
-    id: '1',
-    from: 'Support Team',
-    initials: 'ST',
-    gradient: 'linear-gradient(135deg,#7f2b7b,#ae3fa9)',
-    subject: 'Account verification completed',
-    preview: 'Your identity has been successfully verified. You now have full access...',
-    time: '2h ago',
-    unread: true,
-    messages: [
-      { sender: 'Support Team', text: 'Your identity has been successfully verified. You now have full access to all banking services. Welcome!', time: '10:32 AM', mine: false },
-      { sender: 'You', text: 'Thank you! That was faster than expected.', time: '10:45 AM', mine: true },
-    ],
-  },
-  {
-    id: '2',
-    from: 'James Carter',
-    initials: 'JC',
-    gradient: 'linear-gradient(135deg,#475569,#334155)',
-    subject: 'Mortgage enquiry follow-up',
-    preview: 'Hi Sarah, following up on our conversation about the mortgage in principle...',
-    time: 'Yesterday',
-    unread: false,
-    messages: [
-      { sender: 'James Carter', text: 'Hi Sarah, following up on our conversation about the mortgage in principle application. Do you need any help completing the documents?', time: 'Yesterday, 3:15 PM', mine: false },
-      { sender: 'You', text: 'Yes please, I have a question about the income verification section.', time: 'Yesterday, 3:22 PM', mine: true },
-      { sender: 'James Carter', text: 'Of course! You can upload your last 3 months of payslips or a P60. Just use the document upload section in your application.', time: 'Yesterday, 3:30 PM', mine: false },
-    ],
-  },
-  {
-    id: '3',
-    from: 'Fraud Prevention',
-    initials: 'FP',
-    gradient: 'linear-gradient(135deg,#f59e0b,#d97706)',
-    subject: 'Unusual activity detected',
-    preview: 'We noticed a sign-in from a new device. Was this you?',
-    time: '2 days ago',
-    unread: false,
-    messages: [
-      { sender: 'Fraud Prevention', text: 'We noticed a sign-in from a new device (MacBook Pro, London). Was this you?', time: '2 days ago, 8:15 AM', mine: false },
-      { sender: 'You', text: 'Yes, that was me. I just got a new laptop.', time: '2 days ago, 8:45 AM', mine: true },
-      { sender: 'Fraud Prevention', text: 'Great, we have added this device to your trusted list. Stay safe!', time: '2 days ago, 9:00 AM', mine: false },
-    ],
-  },
-];
+const STATUS_LABELS: Record<Conversation['status'], string> = {
+  ACTIVE: 'Active',
+  RESOLVED: 'Resolved',
+  ARCHIVED: 'Archived',
+};
 
-const QUICK_HELP = [
-  { icon: '💳', title: 'Card issues', desc: 'Report a lost, stolen or damaged card' },
-  { icon: '🔒', title: 'Account locked', desc: 'Unlock your account or reset access' },
-  { icon: '💸', title: 'Payment dispute', desc: 'Dispute a transaction or get a refund' },
-  { icon: '📋', title: 'Account statement', desc: 'Request a printed or digital statement' },
-];
+const STATUS_BADGES: Record<Conversation['status'], string> = {
+  ACTIVE: 'badge-success',
+  RESOLVED: 'badge-neutral',
+  ARCHIVED: 'badge-neutral',
+};
+
+function errorMessage(err: unknown, fallback: string): string {
+  const e = err as { message?: string };
+  return e?.message || fallback;
+}
 
 export default function MessagesPage() {
-  const [activeId, setActiveId] = useState<string | null>('1');
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+
   const [draft, setDraft] = useState('');
-  const active = CONVERSATIONS.find(c => c.id === activeId);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const loadConversations = useCallback(async (selectFirst: boolean) => {
+    try {
+      setListLoading(true);
+      setListError(null);
+      const list = await messagingService.listConversations();
+      const sorted = [...(list ?? [])].sort((a, b) => {
+        const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return bt - at;
+      });
+      setConversations(sorted);
+      if (selectFirst) setActiveId(sorted.length > 0 ? sorted[0].id : null);
+    } catch (err) {
+      setListError(errorMessage(err, 'Could not load your conversations'));
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadConversations(true);
+  }, [loadConversations]);
+
+  const active = useMemo(
+    () => conversations.find(c => c.id === activeId) ?? null,
+    [conversations, activeId]
+  );
+
+  const loadMessages = useCallback(async (applicationId: string) => {
+    try {
+      setMessagesLoading(true);
+      setMessagesError(null);
+      const res = await messagingService.getMessages(applicationId);
+      setMessages(res?.messages ?? []);
+    } catch (err) {
+      setMessages([]);
+      setMessagesError(errorMessage(err, 'Could not load these messages'));
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, []);
+
+  /* Keyed on the application id so metadata refreshes don't refetch the thread */
+  const activeApplicationId = active?.applicationId ?? null;
+
+  useEffect(() => {
+    if (!activeApplicationId) {
+      setMessages([]);
+      return;
+    }
+    loadMessages(activeApplicationId);
+  }, [activeApplicationId, loadMessages]);
+
+  /* Keep the newest message in view as the log grows */
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length, messagesLoading]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter(c => c.subject?.toLowerCase().includes(q));
+  }, [conversations, search]);
+
+  async function handleSend(e?: React.FormEvent) {
+    e?.preventDefault();
+    const body = draft.trim();
+    if (!active || !body || sending) return;
+    try {
+      setSending(true);
+      setSendError(null);
+      const sent = await messagingService.sendMessage(active.applicationId, body);
+      setMessages(prev => [...prev, sent]);
+      setDraft('');
+      /* Keep the list's message count and "last activity" honest after a send */
+      setConversations(prev =>
+        prev.map(c =>
+          c.id === active.id
+            ? { ...c, messageCount: c.messageCount + 1, lastMessageAt: sent.createdAt }
+            : c
+        )
+      );
+    } catch (err) {
+      setSendError(errorMessage(err, 'Could not send your message'));
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Messages &amp; Support</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Get help or chat with your relationship manager.</p>
-        </div>
-        <button className="inline-flex items-center gap-2 rounded-xl bg-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#5e1f5b]">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          New message
-        </button>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
+          Messages
+        </h1>
+        <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+          {!listLoading && !listError
+            ? `${conversations.length} conversation${conversations.length === 1 ? '' : 's'} with your bank`
+            : 'Your conversations with the bank, in one place.'}
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left: conversation list */}
-        <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-          <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                placeholder="Search messages..."
-                className="w-full pl-9 pr-4 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
-              />
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Conversations</h2>
+            <button
+              onClick={() => loadConversations(false)}
+              className="btn btn-ghost btn-sm shrink-0"
+              disabled={listLoading}
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
+            <label className="field-label" htmlFor="conversation-search">
+              Search conversations
+            </label>
+            <input
+              id="conversation-search"
+              type="search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by subject"
+              className="input"
+            />
+          </div>
+
+          {listLoading ? (
+            <div className="space-y-3 p-5">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="skeleton h-14 w-full" />
+              ))}
             </div>
-          </div>
-
-          <div className="divide-y" style={{ '--tw-divide-color': 'var(--surface-border)' } as React.CSSProperties}>
-            {CONVERSATIONS.map(conv => (
-              <button
-                key={conv.id}
-                onClick={() => setActiveId(conv.id)}
-                className="w-full text-left px-4 py-3.5 transition-all"
-                style={{
-                  backgroundColor: activeId === conv.id ? 'rgba(127,43,123,0.08)' : undefined,
-                  borderLeft: activeId === conv.id ? '3px solid #7f2b7b' : '3px solid transparent',
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white text-xs font-bold" style={{ background: conv.gradient }}>
-                    {conv.initials}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className={`text-sm truncate ${conv.unread ? 'font-bold' : 'font-medium'}`} style={{ color: 'var(--text-primary)' }}>
-                        {conv.from}
-                      </p>
-                      <span className="text-[10px] shrink-0 ml-1" style={{ color: 'var(--text-muted)' }}>{conv.time}</span>
-                    </div>
-                    <p className={`text-xs truncate ${conv.unread ? 'font-semibold' : ''}`} style={{ color: 'var(--text-secondary)' }}>{conv.subject}</p>
-                    <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-muted)' }}>{conv.preview}</p>
-                  </div>
-                  {conv.unread && <span className="shrink-0 h-2.5 w-2.5 rounded-full bg-[#7f2b7b] mt-1" />}
+          ) : listError ? (
+            <div className="p-5">
+              <div className="alert alert-error" role="alert">
+                <div className="flex-1">
+                  <p className="text-base font-semibold">Could not load conversations</p>
+                  <p className="mt-0.5 text-sm opacity-80">{listError}</p>
                 </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Right: chat view */}
-        <div className="lg:col-span-2 space-y-4">
-          {active ? (
-            <div className="rounded-2xl overflow-hidden flex flex-col" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)', minHeight: '500px' }}>
-              {/* Chat header */}
-              <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white text-xs font-bold" style={{ background: active.gradient }}>
-                  {active.initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{active.from}</p>
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{active.subject}</p>
-                </div>
-                <button className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)', backgroundColor: 'var(--surface-input)' }}>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                  </svg>
+                <button onClick={() => loadConversations(true)} className="btn btn-sm btn-outline shrink-0">
+                  Try again
                 </button>
               </div>
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="p-5">
+              <div className="empty-state">
+                <div className="empty-state-icon">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <p className="empty-state-title">No conversations yet</p>
+                <p className="empty-state-text">
+                  A conversation opens when you start an application, so you can ask questions and
+                  track it in one thread.
+                </p>
+                <Link href="/portal/applications" className="btn btn-primary btn-sm mt-4">
+                  View your applications
+                </Link>
+              </div>
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+              No conversations match “{search}”.
+            </p>
+          ) : (
+            <ul className="divide-token">
+              {filtered.map(conv => {
+                const selected = conv.id === activeId;
+                return (
+                  <li key={conv.id}>
+                    <button
+                      onClick={() => setActiveId(conv.id)}
+                      aria-current={selected ? 'true' : undefined}
+                      className="w-full px-5 py-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                      style={{
+                        backgroundColor: selected ? 'var(--brand-soft)' : undefined,
+                        borderLeft: selected ? '3px solid var(--brand)' : '3px solid transparent',
+                      }}
+                    >
+                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {conv.subject || 'Untitled conversation'}
+                      </p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                        <span className={`badge ${STATUS_BADGES[conv.status] || 'badge-neutral'}`}>
+                          {STATUS_LABELS[conv.status] || conv.status}
+                        </span>
+                        <span>{conv.messageCount} message{conv.messageCount === 1 ? '' : 's'}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{conv.lastMessageAt ? formatMessageTime(conv.lastMessageAt) : 'No messages yet'}</span>
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {active.messages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.mine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-xs lg:max-w-sm xl:max-w-md rounded-2xl px-4 py-3 ${msg.mine ? 'rounded-br-sm bg-[#7f2b7b] text-white' : 'rounded-bl-sm'}`}
-                      style={!msg.mine ? { backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)' } : undefined}>
-                      {!msg.mine && (
-                        <p className="text-[10px] font-bold mb-1 text-[#7f2b7b] dark:text-purple-300">{msg.sender}</p>
-                      )}
-                      <p className="text-sm leading-relaxed">{msg.text}</p>
-                      <p className={`text-[10px] mt-1.5 ${msg.mine ? 'text-white/70' : ''}`}
-                        style={!msg.mine ? { color: 'var(--text-muted)' } : undefined}>{msg.time}</p>
-                    </div>
-                  </div>
-                ))}
+        {/* Right: message thread */}
+        <div className="lg:col-span-2">
+          {!active ? (
+            <div className="empty-state h-full">
+              <div className="empty-state-icon">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </div>
+              <p className="empty-state-title">Select a conversation</p>
+              <p className="empty-state-text">
+                {conversations.length > 0
+                  ? 'Choose a conversation from the list to read and reply to its messages.'
+                  : 'Once you have a conversation, its messages will appear here.'}
+              </p>
+            </div>
+          ) : (
+            <div className="panel flex flex-col">
+              <div className="panel-header">
+                <div className="min-w-0">
+                  <h2 className="panel-title truncate">{active.subject || 'Untitled conversation'}</h2>
+                  <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {STATUS_LABELS[active.status] || active.status}
+                    {active.lastMessageAt ? ` · last activity ${formatMessageTime(active.lastMessageAt)}` : ''}
+                  </p>
+                </div>
               </div>
 
-              {/* Input */}
-              <div className="px-5 py-4" style={{ borderTop: '1px solid var(--surface-border)' }}>
+              <div
+                ref={scrollRef}
+                className="max-h-[28rem] min-h-[16rem] overflow-y-auto p-5"
+                role="region"
+                aria-label={`Messages in ${active.subject || 'this conversation'}, scrollable`}
+                tabIndex={0}
+              >
+                {messagesLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="skeleton h-14 w-2/3" />
+                    ))}
+                  </div>
+                ) : messagesError ? (
+                  <div className="alert alert-error" role="alert">
+                    <div className="flex-1">
+                      <p className="text-base font-semibold">Could not load these messages</p>
+                      <p className="mt-0.5 text-sm opacity-80">{messagesError}</p>
+                    </div>
+                    <button
+                      onClick={() => loadMessages(active.applicationId)}
+                      className="btn btn-sm btn-outline shrink-0"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <p className="py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                    No messages in this conversation yet. Send the first one below.
+                  </p>
+                ) : (
+                  <div role="log" aria-live="polite" aria-relevant="additions text" className="space-y-4">
+                    {messages.map(msg => {
+                      const mine = msg.senderType === 'CUSTOMER';
+                      const sender =
+                        msg.senderName || SENDER_TYPE_LABELS[msg.senderType] || msg.senderType;
+                      return (
+                        <div key={msg.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                          <div
+                            className={`max-w-xs rounded-2xl px-4 py-3 lg:max-w-md ${
+                              mine ? 'rounded-br-sm text-white' : 'rounded-bl-sm'
+                            }`}
+                            style={
+                              mine
+                                ? { backgroundColor: 'var(--brand)' }
+                                : {
+                                    backgroundColor:
+                                      msg.senderType === 'SYSTEM'
+                                        ? 'rgba(16,185,129,0.14)'
+                                        : 'var(--surface-input)',
+                                    color: 'var(--text-primary)',
+                                  }
+                            }
+                          >
+                            {!mine && (
+                              <p className="mb-1 text-sm font-semibold" style={{ color: 'var(--brand-on-soft)' }}>
+                                {sender}
+                              </p>
+                            )}
+                            {mine && <span className="sr-only">You said: </span>}
+                            <p className="text-base leading-relaxed">{msg.body}</p>
+                            <p
+                              className="mt-1.5 text-sm"
+                              style={{ color: mine ? 'rgba(255,255,255,0.75)' : 'var(--text-muted)' }}
+                            >
+                              {formatMessageTime(msg.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <form
+                onSubmit={handleSend}
+                className="px-5 py-4"
+                style={{ borderTop: '1px solid var(--surface-border)' }}
+              >
+                {sendError && (
+                  <div className="alert alert-error mb-3" role="alert" id="message-send-error">
+                    <div className="flex-1">
+                      <p className="text-base font-semibold">Message not sent</p>
+                      <p className="mt-0.5 text-sm opacity-80">{sendError}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSend()}
+                      className="btn btn-sm btn-outline shrink-0"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+                <label className="field-label" htmlFor="message-input">
+                  Your message
+                </label>
                 <div className="flex items-center gap-3">
                   <input
+                    id="message-input"
                     value={draft}
                     onChange={e => setDraft(e.target.value)}
-                    placeholder="Type your message..."
-                    className="flex-1 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#7f2b7b]/40"
-                    style={{ backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)', border: '1px solid var(--surface-border)' }}
-                    onKeyDown={e => e.key === 'Enter' && setDraft('')}
+                    placeholder="Write a message to the bank…"
+                    disabled={sending}
+                    autoComplete="off"
+                    className="input flex-1"
+                    aria-describedby={sendError ? 'message-send-error' : undefined}
                   />
                   <button
-                    onClick={() => setDraft('')}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white transition-colors"
-                    style={{ backgroundColor: draft.trim() ? '#7f2b7b' : 'var(--surface-input)' }}
+                    type="submit"
+                    disabled={sending || !draft.trim()}
+                    aria-label="Send message"
+                    className="btn btn-primary h-11 w-11 shrink-0 rounded-xl p-0"
                   >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
                     </svg>
                   </button>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl flex flex-col items-center justify-center py-20" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl mb-4 text-3xl" style={{ backgroundColor: 'var(--surface-input)' }}>💬</div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Select a conversation</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Choose from the list to read messages</p>
+              </form>
             </div>
           )}
-
-          {/* Quick help */}
-          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Quick help topics</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {QUICK_HELP.map(h => (
-                <button key={h.title} className="flex items-start gap-3 p-3 rounded-xl text-left transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]" style={{ border: '1px solid var(--surface-border)' }}>
-                  <span className="text-xl shrink-0">{h.icon}</span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{h.title}</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{h.desc}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </div>

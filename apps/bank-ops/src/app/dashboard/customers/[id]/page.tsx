@@ -1,18 +1,30 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { toast } from 'react-toastify';
-import { customerService, Customer } from '@/services/api/customerService';
-import { applicationService, ApplicationResponse } from '@/services/api/applicationService';
-import { accountService, AccountSummaryResponse } from '@/services/api/accountService';
-import { aiCustomerIntelligenceService, CustomerIntelligenceState, Recommendation } from '@/services/api/aiCustomerIntelligenceService';
-import { formatCurrency as sharedFormatCurrency, getCurrencySymbol } from '@/lib/format';
+import { customerService, type Customer } from '@/services/api/customerService';
+import {
+  applicationService,
+  type ApplicationResponse,
+} from '@/services/api/applicationService';
+import {
+  accountService,
+  type AccountSummaryResponse,
+  accountCategoryLabels,
+  accountStatusLabels,
+  accountTypeLabels,
+} from '@/services/api/accountService';
+import {
+  aiCustomerIntelligenceService,
+  type CustomerIntelligenceState,
+  type Recommendation,
+} from '@/services/api/aiCustomerIntelligenceService';
+import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import config from '@/config';
 
 // ============================================================================
-// Constants
+// Shared option lists
 // ============================================================================
 
 const COUNTRIES = [
@@ -33,7 +45,7 @@ const IDENTITY_TYPES = [
 
 const EMPLOYMENT_TYPES = [
   { value: 'EMPLOYED', label: 'Employed' },
-  { value: 'SELF_EMPLOYED', label: 'Self-Employed' },
+  { value: 'SELF_EMPLOYED', label: 'Self-employed' },
   { value: 'RETIRED', label: 'Retired' },
   { value: 'STUDENT', label: 'Student' },
   { value: 'UNEMPLOYED', label: 'Unemployed' },
@@ -43,52 +55,90 @@ const CUSTOMER_STATUSES = [
   { value: 'ACTIVE', label: 'Active' },
   { value: 'INACTIVE', label: 'Inactive' },
   { value: 'SUSPENDED', label: 'Suspended' },
-  { value: 'PENDING_VERIFICATION', label: 'Pending Verification' },
+  { value: 'PENDING_VERIFICATION', label: 'Pending verification' },
 ];
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  ACTIVE: { label: 'Active Relationship', color: '#10b981' },
-  INACTIVE: { label: 'Inactive', color: '#64748b' },
-  SUSPENDED: { label: 'Suspended', color: '#ef4444' },
-  PENDING_VERIFICATION: { label: 'Pending Verification', color: '#f59e0b' },
-};
+const GENDERS = [
+  { value: 'MALE', label: 'Male' },
+  { value: 'FEMALE', label: 'Female' },
+  { value: 'OTHER', label: 'Other' },
+];
 
-const APP_STATUS_COLOR: Record<string, string> = {
-  DRAFT: '#64748b',
-  SUBMITTED: '#f59e0b',
-  UNDER_REVIEW: '#3b82f6',
-  IN_REVIEW: '#3b82f6',
-  APPROVED: '#10b981',
-  REJECTED: '#ef4444',
-  DISBURSED: '#10b981',
-  BOOKED: '#10b981',
-};
-
-const ACCOUNT_STATUS_COLOR: Record<string, string> = {
-  ACTIVE: '#10b981',
-  PENDING: '#f59e0b',
-  DORMANT: '#64748b',
-  FROZEN: '#3b82f6',
-  CLOSED: '#64748b',
-  BLOCKED: '#ef4444',
-};
-
-const RISK_COLOR: Record<string, string> = {
-  LOW: '#10b981',
-  MEDIUM: '#f59e0b',
-  HIGH: '#ef4444',
-  CRITICAL: '#dc2626',
-};
-
-const SIGNAL_SEVERITY_COLOR: Record<string, string> = {
-  LOW: '#10b981',
-  MEDIUM: '#f59e0b',
-  HIGH: '#ef4444',
-};
-
-const MIX_PALETTE = ['#0ea5e9', '#10b981', '#8b5cf6', '#f59e0b', '#38bdf8', '#ec4899', '#64748b'];
+/** Fields the API requires — marked visually and programmatically. */
+const REQUIRED_FIELDS: (keyof Customer)[] = ['primaryEmail', 'primaryPhone'];
 
 const TERMINAL_APP = /APPROV|REJECT|BOOK|DISBURS|CLOSED|CANCEL|WITHDRAW|FUNDED|COMPLETED|DECLIN/i;
+
+// ============================================================================
+// Tones — colour is never the only signal, every chip carries its label
+// ============================================================================
+
+type Tone = 'neutral' | 'positive' | 'warning' | 'negative' | 'accent';
+
+const TONE_BG: Record<Tone, string> = {
+  neutral: 'rgba(127,127,127,0.12)',
+  positive: 'rgba(16,185,129,0.14)',
+  warning: 'rgba(245,158,11,0.16)',
+  negative: 'rgba(239,68,68,0.14)',
+  accent: 'var(--rm-accent-muted)',
+};
+
+const TONE_DOT: Record<Tone, string> = {
+  neutral: 'var(--rm-text-muted)',
+  positive: '#10b981',
+  warning: '#f59e0b',
+  negative: '#ef4444',
+  accent: 'var(--rm-accent)',
+};
+
+function customerStatusTone(status?: string): Tone {
+  const s = (status || '').toUpperCase();
+  if (s === 'ACTIVE') return 'positive';
+  if (s === 'SUSPENDED') return 'negative';
+  if (s === 'PENDING_VERIFICATION') return 'warning';
+  return 'neutral';
+}
+
+function accountStatusTone(status?: string): Tone {
+  const s = (status || '').toUpperCase();
+  if (s === 'ACTIVE') return 'positive';
+  if (s === 'BLOCKED' || s === 'CLOSED') return 'negative';
+  if (s === 'PENDING' || s === 'DORMANT') return 'warning';
+  if (s === 'FROZEN') return 'accent';
+  return 'neutral';
+}
+
+function applicationStatusTone(status?: string): Tone {
+  const s = (status || '').toUpperCase();
+  if (/APPROV|BOOK|DISBURS|FUNDED|COMPLETED/.test(s)) return 'positive';
+  if (/REJECT|DECLIN|CANCEL|WITHDRAW/.test(s)) return 'negative';
+  if (/REVIEW|UNDERWRIT|CREDIT|PENDING/.test(s)) return 'warning';
+  return 'neutral';
+}
+
+function riskTone(rating?: string): Tone {
+  const r = (rating || '').toUpperCase();
+  if (!r || r === 'NOT_RATED') return 'neutral';
+  if (r === 'LOW') return 'positive';
+  if (r === 'MEDIUM') return 'warning';
+  return 'negative';
+}
+
+function kycTone(status?: string): Tone {
+  const k = (status || '').toUpperCase();
+  if (/APPROV|COMPLET|VERIF/.test(k)) return 'positive';
+  if (/REJECT|FAIL|FLAG/.test(k)) return 'negative';
+  if (/PEND|PROGRESS|EXPIRED|NOT_STARTED/.test(k) || !k) return 'warning';
+  return 'neutral';
+}
+
+function severityTone(severity?: string | null): Tone {
+  const s = (severity || '').toUpperCase();
+  if (s === 'HIGH') return 'negative';
+  if (s === 'MEDIUM') return 'warning';
+  if (s === 'LOW') return 'positive';
+  return 'neutral';
+}
 
 // ============================================================================
 // Helpers
@@ -103,12 +153,10 @@ function formatEnum(value?: string): string {
 }
 
 function formatDate(value?: string): string {
-  if (!value) return 'N/A';
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function initials(name: string): string {
@@ -125,7 +173,7 @@ function compact(amount: number): string {
   if (abs >= 1_000_000_000) return `${sign}${sym}${(abs / 1_000_000_000).toFixed(2)}B`;
   if (abs >= 1_000_000) return `${sign}${sym}${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 1_000) return `${sign}${sym}${(abs / 1_000).toFixed(1)}K`;
-  return `${sign}${sym}${abs.toFixed(0)}`;
+  return `${sign}${formatCurrency(abs)}`;
 }
 
 // ============================================================================
@@ -133,6 +181,14 @@ function compact(amount: number): string {
 // ============================================================================
 
 type TabId = 'overview' | 'applications' | 'accounts' | 'details' | 'kyc';
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'applications', label: 'Applications' },
+  { id: 'accounts', label: 'Accounts' },
+  { id: 'details', label: 'Details' },
+  { id: 'kyc', label: 'KYC and AML' },
+];
 
 export default function CustomerDetailPage() {
   const params = useParams();
@@ -143,41 +199,39 @@ export default function CustomerDetailPage() {
   const [applications, setApplications] = useState<ApplicationResponse[]>([]);
   const [accounts, setAccounts] = useState<AccountSummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [intelligence, setIntelligence] = useState<CustomerIntelligenceState | null>(null);
   const [intelligenceLoading, setIntelligenceLoading] = useState(true);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
-  const [recommendationActionLoadingId, setRecommendationActionLoadingId] = useState<string | null>(null);
+  const [recommendationBusyId, setRecommendationBusyId] = useState<string | null>(null);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedCustomer, setEditedCustomer] = useState<Partial<Customer>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteType, setDeleteType] = useState<'soft' | 'hard'>('soft');
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [newStatus, setNewStatus] = useState('');
-  const [activeTab, setActiveTab] = useState<TabId>('overview');
-
-  const asOf = useMemo(
-    () =>
-      new Date().toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }),
-    []
+  const [saveMessage, setSaveMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(
+    null
   );
 
-  useEffect(() => {
-    fetchCustomerData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteType, setDeleteType] = useState<'soft' | 'hard'>('soft');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const fetchCustomerData = async () => {
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [newStatus, setNewStatus] = useState('');
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+
+  const asOf = useMemo(() => formatDate(new Date().toISOString()), []);
+
+  const fetchCustomerData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      setLoading(true);
-      setError(null);
       const customerData = await customerService.getCustomerById(customerId);
       setCustomer(customerData);
       setEditedCustomer(customerData);
@@ -186,16 +240,18 @@ export default function CustomerDetailPage() {
         applicationService.getApplicationsByCustomer(customerId),
         accountService.getAccountsByParty(customerId),
       ]);
-      if (appsRes.status === 'fulfilled') setApplications(appsRes.value.content || []);
-      if (accountsRes.status === 'fulfilled') setAccounts(accountsRes.value || []);
+      setApplications(appsRes.status === 'fulfilled' ? appsRes.value.content || [] : []);
+      setAccounts(accountsRes.status === 'fulfilled' ? accountsRes.value || [] : []);
     } catch (err) {
       console.error('Failed to fetch customer data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load customer data');
+      setLoadError(
+        err instanceof Error ? err.message : 'We could not load this customer. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
 
-    // Loaded independently so a degraded/unavailable AI service never blocks the customer page.
+    // Loaded independently so an unavailable intelligence service never blocks the page.
     setIntelligenceLoading(true);
     aiCustomerIntelligenceService
       .getCustomerState(customerId, config.bank.defaultBankId)
@@ -206,88 +262,148 @@ export default function CustomerDetailPage() {
     setRecommendationsLoading(true);
     aiCustomerIntelligenceService
       .getRecommendations(customerId, config.bank.defaultBankId)
-      .then(setRecommendations)
+      .then(data => setRecommendations(Array.isArray(data) ? data : []))
       .catch(() => setRecommendations([]))
       .finally(() => setRecommendationsLoading(false));
-  };
+  }, [customerId]);
 
-  const handleRecommendationDecision = async (recommendationId: string, decision: 'accept' | 'dismiss') => {
-    setRecommendationActionLoadingId(recommendationId);
+  useEffect(() => {
+    fetchCustomerData();
+  }, [fetchCustomerData]);
+
+  const handleRecommendationDecision = async (
+    recommendationId: string,
+    decision: 'accept' | 'dismiss'
+  ) => {
+    setRecommendationBusyId(recommendationId);
+    setRecommendationError(null);
     try {
-      const updated = decision === 'accept'
-        ? await aiCustomerIntelligenceService.acceptRecommendation(recommendationId, config.bank.defaultBankId)
-        : await aiCustomerIntelligenceService.dismissRecommendation(recommendationId, config.bank.defaultBankId);
+      const updated =
+        decision === 'accept'
+          ? await aiCustomerIntelligenceService.acceptRecommendation(
+              recommendationId,
+              config.bank.defaultBankId
+            )
+          : await aiCustomerIntelligenceService.dismissRecommendation(
+              recommendationId,
+              config.bank.defaultBankId
+            );
       setRecommendations(prev => prev.filter(rec => rec.id !== updated.id));
     } catch (err) {
       console.error(`Failed to ${decision} recommendation:`, err);
+      setRecommendationError(
+        `We could not ${decision} that suggestion. The list is unchanged — please try again.`
+      );
     } finally {
-      setRecommendationActionLoadingId(null);
+      setRecommendationBusyId(null);
     }
   };
 
   const handleEditChange = (field: keyof Customer, value: string | number | null) => {
     setEditedCustomer(prev => ({ ...prev, [field]: value }));
+    setFieldErrors(prev => {
+      if (!prev[field as string]) return prev;
+      const next = { ...prev };
+      delete next[field as string];
+      return next;
+    });
+  };
+
+  const startEditing = () => {
+    setSaveMessage(null);
+    setFieldErrors({});
+    setEditedCustomer(customer || {});
+    setActiveTab('details');
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditedCustomer(customer || {});
+    setFieldErrors({});
+    setSaveMessage(null);
+    setIsEditing(false);
   };
 
   const handleSave = async () => {
     if (!customer) return;
+    const errors: Record<string, string> = {};
+    REQUIRED_FIELDS.forEach(f => {
+      const v = editedCustomer[f];
+      if (v == null || String(v).trim() === '') errors[f as string] = 'This field is required.';
+    });
+    const email = String(editedCustomer.primaryEmail || '');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      errors.primaryEmail = 'Enter a valid email address.';
+    setFieldErrors(errors);
+    setSaveMessage(null);
+    if (Object.keys(errors).length > 0) {
+      setSaveMessage({
+        tone: 'error',
+        text: `Please fix ${Object.keys(errors).length} field${Object.keys(errors).length === 1 ? '' : 's'} before saving. Your changes are still here.`,
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const updated = await customerService.updateCustomer(customerId, editedCustomer);
       setCustomer(updated);
+      setEditedCustomer(updated);
       setIsEditing(false);
-      toast.success('Customer updated successfully!');
+      setSaveMessage({ tone: 'success', text: 'Customer details saved.' });
     } catch (err) {
       console.error('Failed to update customer:', err);
-      toast.error('Failed to update customer. Please try again.');
+      setSaveMessage({
+        tone: 'error',
+        text: 'We could not save these changes. Your edits are still here — please try again.',
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditedCustomer(customer || {});
-    setIsEditing(false);
-  };
-
   const handleStatusChange = async () => {
-    if (!newStatus) return;
+    setStatusError(null);
+    if (!newStatus) {
+      setStatusError('Choose a status before updating.');
+      return;
+    }
     setIsSaving(true);
     try {
       const updated = await customerService.updateCustomerStatus(customerId, newStatus);
       setCustomer(updated);
       setShowStatusModal(false);
-      toast.success(`Customer status updated to ${newStatus}`);
+      setSaveMessage({
+        tone: 'success',
+        text: `Customer status set to ${formatEnum(newStatus)}.`,
+      });
     } catch (err) {
       console.error('Failed to update status:', err);
-      toast.error('Failed to update status. Please try again.');
+      setStatusError('We could not update the status. Please try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async () => {
+    setDeleteError(null);
     setIsSaving(true);
     try {
       if (deleteType === 'soft') {
         await customerService.softDeleteCustomer(customerId);
-        toast.success('Customer has been deactivated and marked as deleted.');
       } else {
         await customerService.hardDeleteCustomer(customerId);
-        toast.success('Customer has been permanently deleted.');
       }
       router.push('/dashboard/customers');
     } catch (err) {
       console.error('Failed to delete customer:', err);
-      toast.error('Failed to delete customer. Please try again.');
-    } finally {
+      setDeleteError('We could not remove this customer. Nothing was changed — please try again.');
       setIsSaving(false);
-      setShowDeleteModal(false);
     }
   };
 
   // -------------------------------------------------------------------------
-  // Derived metrics (all from real data)
+  // Derived values (all from the loaded records)
   // -------------------------------------------------------------------------
 
   const isBusiness = customer ? customer.customerType !== 'INDIVIDUAL' : false;
@@ -334,111 +450,52 @@ export default function CustomerDetailPage() {
 
   const annualFigure = isBusiness ? customer?.annualRevenue : customer?.annualIncome;
 
-  // Exposure & product mix — group active accounts by type
   const productMix = useMemo(() => {
-    const map = new Map<string, { label: string; value: number }>();
+    const map = new Map<string, number>();
     accounts.forEach(a => {
-      const key = a.accountTypeDisplay || formatEnum(a.accountType);
-      const prev = map.get(key)?.value || 0;
-      map.set(key, { label: key, value: prev + Math.abs(a.currentBalance || 0) });
+      const key = a.accountTypeDisplay || accountTypeLabels[a.accountType] || formatEnum(a.accountType);
+      map.set(key, (map.get(key) || 0) + Math.abs(a.currentBalance || 0));
     });
-    const rows = Array.from(map.values())
+    const rows = Array.from(map.entries())
+      .map(([label, value]) => ({ label, value }))
       .filter(r => r.value > 0)
       .sort((a, b) => b.value - a.value);
     const total = rows.reduce((s, r) => s + r.value, 0);
-    return rows.map((r, i) => ({
-      ...r,
-      pct: total > 0 ? (r.value / total) * 100 : 0,
-      color: MIX_PALETTE[i % MIX_PALETTE.length],
-    }));
+    return rows.map(r => ({ ...r, pct: total > 0 ? (r.value / total) * 100 : 0 }));
   }, [accounts]);
 
-  // Relationship health — transparent composite from real signals
-  const health = useMemo(() => {
-    if (!customer) return null;
-    const kyc = customer.kycStatus?.toUpperCase() || '';
-    const aml = customer.amlCheckStatus?.toUpperCase() || '';
-    const risk = customer.riskRating?.toUpperCase() || '';
-
-    const kycScore = /APPROVED|COMPLETED|VERIFIED/.test(kyc)
-      ? 25
-      : /PROGRESS|PENDING/.test(kyc)
-        ? 12
-        : 0;
-    const amlScore = /CLEAR|APPROVED|PASS/.test(aml)
-      ? 25
-      : /PENDING|PROGRESS/.test(aml)
-        ? 12
-        : /FLAG|FAIL/.test(aml)
-          ? 0
-          : 8;
-    const riskScore = risk === 'LOW' ? 25 : risk === 'MEDIUM' ? 15 : risk === 'HIGH' ? 6 : 12;
-    const depthScore = activeAccounts.length >= 3 ? 25 : activeAccounts.length >= 1 ? 15 : 5;
-
-    const total = kycScore + amlScore + riskScore + depthScore;
-    const band =
-      total >= 75
-        ? { label: 'Good', color: '#10b981' }
-        : total >= 50
-          ? { label: 'Fair', color: '#f59e0b' }
-          : { label: 'Watch', color: '#ef4444' };
-
-    const rate = (v: number, max: number) =>
-      v / max >= 0.8 ? 'High' : v / max >= 0.5 ? 'Medium' : 'Low';
-
-    return {
-      total,
-      band,
-      signals: [
-        { label: 'KYC / AML', value: rate(kycScore + amlScore, 50) },
-        { label: 'Risk Profile', value: rate(riskScore, 25) },
-        { label: 'Product Depth', value: rate(depthScore, 25) },
-        {
-          label: 'Engagement',
-          value: openApplications.length > 0 ? 'Active' : activeAccounts.length > 0 ? 'Steady' : 'Low',
-        },
-      ],
-    };
-  }, [customer, activeAccounts.length, openApplications.length]);
-
-  // Timeline — real events derived from timestamps
   const timeline = useMemo(() => {
     if (!customer) return [];
-    const events: { date: string; title: string; detail: string; color: string }[] = [];
+    const events: { date: string; title: string; detail: string }[] = [];
     if (customer.customerSince)
       events.push({
         date: customer.customerSince,
         title: 'Relationship established',
-        detail: `Onboarded as ${formatEnum(customer.customerType)} customer`,
-        color: '#0ea5e9',
+        detail: `Onboarded as a ${formatEnum(customer.customerType).toLowerCase()} customer`,
       });
     if (customer.kycCompletionDate)
       events.push({
         date: customer.kycCompletionDate,
         title: 'KYC completed',
         detail: `Status: ${formatEnum(customer.kycStatus)}`,
-        color: '#10b981',
       });
     if (customer.amlCheckDate)
       events.push({
         date: customer.amlCheckDate,
         title: 'AML check performed',
         detail: `Status: ${formatEnum(customer.amlCheckStatus)}`,
-        color: '#8b5cf6',
       });
     if (customer.riskRatingDate)
       events.push({
         date: customer.riskRatingDate,
         title: 'Risk rating assigned',
         detail: `Rating: ${formatEnum(customer.riskRating)}`,
-        color: '#f59e0b',
       });
     applications.slice(0, 6).forEach(a =>
       events.push({
         date: a.submittedAt || a.createdAt,
         title: `Application ${a.applicationNumber}`,
-        detail: `${a.product?.productName || 'Loan'} · ${sharedFormatCurrency(a.requestedAmount)}`,
-        color: '#38bdf8',
+        detail: `${a.product?.productName || 'Loan'} · ${formatCurrency(a.requestedAmount)}`,
       })
     );
     return events
@@ -447,83 +504,92 @@ export default function CustomerDetailPage() {
       .slice(0, 6);
   }, [customer, applications]);
 
-  const nextActions = useMemo(() => {
+  const nextSteps = useMemo(() => {
     if (!customer) return [];
-    const out: { label: string; color: string; href: string }[] = [];
+    const out: { label: string; href: string }[] = [];
     const kyc = customer.kycStatus?.toUpperCase() || '';
-    if (!kyc || /NOT_STARTED|PENDING|PROGRESS/.test(kyc))
+    if (!kyc || /NOT_STARTED|PENDING|PROGRESS|EXPIRED/.test(kyc))
       out.push({
-        label: 'Complete KYC / AML verification',
-        color: '#f59e0b',
+        label: 'Complete KYC and AML verification',
         href: `/dashboard/kyc/cases/new?customerId=${customer.customerId}`,
       });
     if (openApplications.length > 0)
       out.push({
         label: `Review ${openApplications.length} open application${openApplications.length > 1 ? 's' : ''}`,
-        color: '#3b82f6',
         href: `/dashboard/applications?customerId=${customer.customerId}`,
       });
     if (accounts.length === 0)
       out.push({
-        label: 'Open first account for this customer',
-        color: '#10b981',
+        label: 'Open the first account for this customer',
         href: `/dashboard/accounts/new?customerId=${customer.customerId}`,
       });
     if (deposits > 0 && exposure === 0)
       out.push({
-        label: 'Explore lending / credit opportunity',
-        color: '#8b5cf6',
+        label: 'Explore a lending or credit opportunity',
         href: `/dashboard/applications/new?customerId=${customer.customerId}`,
       });
     return out;
   }, [customer, openApplications.length, accounts.length, deposits, exposure]);
 
   // -------------------------------------------------------------------------
-  // Loading / error states
+  // Loading / error
   // -------------------------------------------------------------------------
 
   if (loading) {
     return (
-      <div className="min-h-screen" style={{ backgroundColor: 'var(--rm-bg)' }}>
-        <div className="mx-auto max-w-[1600px] px-6 py-6 space-y-5">
+      <div className="space-y-6" aria-busy="true">
+        <p role="status" className="sr-only">
+          Loading customer
+        </p>
+        <div
+          className="h-36 animate-pulse rounded-3xl"
+          style={{ backgroundColor: 'var(--rm-card)' }}
+        />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-24 animate-pulse rounded-3xl"
+              style={{ backgroundColor: 'var(--rm-card)' }}
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           <div
-            className="h-40 animate-pulse rounded-2xl"
-            style={{ backgroundColor: 'var(--rm-card-hover)' }}
+            className="h-72 animate-pulse rounded-3xl xl:col-span-2"
+            style={{ backgroundColor: 'var(--rm-card)' }}
           />
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-24 animate-pulse rounded-xl"
-                style={{ backgroundColor: 'var(--rm-card-hover)' }}
-              />
-            ))}
-          </div>
+          <div className="h-72 animate-pulse rounded-3xl" style={{ backgroundColor: 'var(--rm-card)' }} />
         </div>
       </div>
     );
   }
 
-  if (error || !customer) {
+  if (loadError || !customer) {
     return (
-      <div className="min-h-screen" style={{ backgroundColor: 'var(--rm-bg)' }}>
-        <div className="mx-auto max-w-3xl px-6 py-16">
-          <div
-            className="rounded-2xl p-12 text-center"
-            style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
-          >
-            <h2 className="text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
-              Customer Not Found
-            </h2>
-            <p className="mt-1" style={{ color: 'var(--rm-text-muted)' }}>
-              {error || 'Unable to load customer details'}
-            </p>
+      <div className="space-y-6">
+        <div className="rounded-3xl p-7 text-center" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Customer unavailable
+          </h1>
+          <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }} role="alert">
+            {loadError || 'We could not find this customer.'}
+          </p>
+          <div className="mt-6 flex items-center justify-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={fetchCustomerData}
+              className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: 'var(--rm-accent)' }}
+            >
+              Try again
+            </button>
             <Link
               href="/dashboard/customers"
-              className="mt-4 inline-block text-sm font-medium"
-              style={{ color: 'var(--rm-accent)' }}
+              className="rounded-full px-5 py-2.5 text-sm font-medium"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
             >
-              ← Back to Customers
+              Back to customers
             </Link>
           </div>
         </div>
@@ -531,605 +597,338 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const status = STATUS_META[customer.customerStatus] || {
-    label: formatEnum(customer.customerStatus),
-    color: '#64748b',
-  };
-
-  const tabs: { id: TabId; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'applications', label: `Applications (${applications.length})` },
-    { id: 'accounts', label: `Accounts (${accounts.length})` },
-    { id: 'details', label: 'Details' },
-    { id: 'kyc', label: 'KYC / AML' },
-  ];
+  const statusTone = customerStatusTone(customer.customerStatus);
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--rm-bg)' }}>
-      <div className="mx-auto max-w-[1600px] px-6 py-6 space-y-5">
-        {/* Back link */}
-        <Link
-          href="/dashboard/customers"
-          className="inline-flex items-center gap-1.5 text-sm font-medium"
-          style={{ color: 'var(--rm-text-muted)' }}
+    <div className="space-y-6">
+      {/* ══ Back ══ */}
+      <Link
+        href="/dashboard/customers"
+        className="inline-flex items-center gap-1.5 text-sm font-medium w-fit rounded-lg"
+        style={{ color: 'var(--rm-text-muted)' }}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Customers
-        </Link>
+          <path d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to customers
+      </Link>
 
-        {/* Header */}
-        <div
-          className="rounded-2xl p-6"
-          style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
-        >
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <span
-                className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white"
-                style={{ background: 'linear-gradient(135deg,#0ea5e9,#6366f1)' }}
-              >
-                {initials(displayName)}
-              </span>
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--rm-text)' }}>
-                    {displayName}
-                  </h1>
-                  <span
-                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-                    style={{ backgroundColor: `${status.color}22`, color: status.color }}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: status.color }} />
-                    {status.label}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                  {customer.customerNumber} · {formatEnum(customer.customerType)}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-2 hidden text-xs font-medium sm:inline" style={{ color: 'var(--rm-text-muted)' }}>
-                As of {asOf}
-              </span>
-              <HeaderButton
-                onClick={() => {
-                  setActiveTab('details');
-                  setIsEditing(true);
-                }}
-              >
-                Edit
-              </HeaderButton>
-              <HeaderButton
-                onClick={() => {
-                  setNewStatus(customer.customerStatus);
-                  setShowStatusModal(true);
-                }}
-              >
-                Change Status
-              </HeaderButton>
-              <button
-                onClick={() => router.push(`/dashboard/applications/new?customerId=${customer.customerId}`)}
-                className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                style={{ backgroundColor: 'var(--rm-accent)' }}
-              >
-                + New Application
-              </button>
-            </div>
-          </div>
-
-          {/* Info row */}
-          <div
-            className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t pt-5 sm:grid-cols-3 lg:grid-cols-6"
-            style={{ borderColor: 'var(--rm-border)' }}
-          >
-            <InfoItem label="Customer ID" value={customer.customerNumber} />
-            <InfoItem label="Segment" value={formatEnum(customer.customerSegment) || '—'} />
-            <InfoItem label="Industry" value={isBusiness ? formatEnum(customer.industrySector) : formatEnum(customer.occupation)} />
-            <InfoItem label="Relationship Manager" value={rmName} />
-            <InfoItem label="Customer Since" value={customer.customerSince ? formatDate(customer.customerSince) : '—'} />
-            <InfoItem
-              label="Risk Rating"
-              value={customer.riskRating ? formatEnum(customer.riskRating) : 'Not Rated'}
-              color={customer.riskRating ? RISK_COLOR[customer.riskRating.toUpperCase()] : undefined}
-            />
-          </div>
-        </div>
-
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
-          <KpiCard label="Total Exposure" value={accounts.length ? compact(exposure) : '—'} color="#6366f1" icon={<VaultIcon />} />
-          <KpiCard label="Deposits" value={accounts.length ? compact(deposits) : '—'} color="#10b981" icon={<CoinsIcon />} />
-          <KpiCard label="Active Products" value={String(activeAccounts.length)} color="#0ea5e9" icon={<GridIcon />} />
-          <KpiCard label="Open Applications" value={String(openApplications.length)} color="#f59e0b" icon={<DocIcon />} />
-          <KpiCard
-            label={isBusiness ? 'Annual Revenue' : 'Annual Income'}
-            value={annualFigure ? compact(annualFigure) : '—'}
-            color="#38bdf8"
-            icon={<ChartIcon />}
-          />
-          <KpiCard
-            label="Risk Rating"
-            value={customer.riskRating ? formatEnum(customer.riskRating) : 'N/R'}
-            color={customer.riskRating ? RISK_COLOR[customer.riskRating.toUpperCase()] || '#64748b' : '#64748b'}
-            icon={<ShieldIcon />}
-          />
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto border-b" style={{ borderColor: 'var(--rm-border)' }}>
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="relative whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors"
-              style={{ color: activeTab === tab.id ? 'var(--rm-accent)' : 'var(--rm-text-muted)' }}
+      {/* ══ Header ══ */}
+      <header className="rounded-3xl p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <div className="flex items-start gap-4 min-w-0">
+            <span
+              className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full text-base font-semibold"
+              style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+              aria-hidden="true"
             >
-              {tab.label}
-              {activeTab === tab.id && (
-                <span
-                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-full"
-                  style={{ backgroundColor: 'var(--rm-accent)' }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* OVERVIEW TAB */}
-        {/* ---------------------------------------------------------------- */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-            {/* Main column */}
-            <div className="space-y-5 xl:col-span-2">
-              {/* AI Relationship Summary */}
-              <Panel>
-                <PanelHeader icon={<SparkIcon />} title="AI Relationship Summary" beta />
-                <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--rm-text-secondary)' }}>
-                  {buildSummary(customer, displayName, {
-                    exposure,
-                    deposits,
-                    products: activeAccounts.length,
-                    openApps: openApplications.length,
-                  })}
-                </p>
-              </Panel>
-
-              {/* Exposure & Product Mix */}
-              <Panel>
-                <PanelHeader title="Exposure & Product Mix" />
-                {productMix.length === 0 ? (
-                  <EmptyRow>No active facilities or balances on record.</EmptyRow>
-                ) : (
-                  <div className="mt-4">
-                    <div className="flex h-3 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--rm-card-hover)' }}>
-                      {productMix.map(m => (
-                        <div key={m.label} style={{ width: `${m.pct}%`, backgroundColor: m.color }} />
-                      ))}
-                    </div>
-                    <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-                      {productMix.map(m => (
-                        <div key={m.label} className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2 truncate">
-                            <span className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
-                            <span className="truncate" style={{ color: 'var(--rm-text-secondary)' }}>{m.label}</span>
-                          </span>
-                          <span className="flex items-center gap-2 tabular-nums">
-                            <span className="font-semibold" style={{ color: 'var(--rm-text)' }}>{sharedFormatCurrency(m.value)}</span>
-                            <span style={{ color: 'var(--rm-text-muted)' }}>{m.pct.toFixed(1)}%</span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </Panel>
-
-              {/* Active Facilities */}
-              <Panel>
-                <div className="flex items-center justify-between">
-                  <PanelHeader title="Active Facilities" />
-                  {accounts.length > 0 && (
-                    <button onClick={() => setActiveTab('accounts')} className="text-xs font-semibold" style={{ color: 'var(--rm-accent)' }}>
-                      View all accounts →
-                    </button>
-                  )}
-                </div>
-                {accounts.length === 0 ? (
-                  <EmptyRow>No accounts opened for this customer yet.</EmptyRow>
-                ) : (
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
-                          <Th>Account</Th>
-                          <Th>Type</Th>
-                          <Th className="text-right">Balance</Th>
-                          <Th>Status</Th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {accounts.slice(0, 5).map(a => (
-                          <tr
-                            key={a.accountId}
-                            onClick={() => router.push(`/dashboard/accounts/${a.accountId}`)}
-                            className="cursor-pointer"
-                            style={{ borderBottom: '1px solid var(--rm-border)' }}
-                          >
-                            <td className="py-3 pr-4">
-                              <p className="font-medium" style={{ color: 'var(--rm-text)' }}>{a.accountName}</p>
-                              <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>{a.accountNumber}</p>
-                            </td>
-                            <td className="py-3 pr-4" style={{ color: 'var(--rm-text-secondary)' }}>{a.accountTypeDisplay || formatEnum(a.accountType)}</td>
-                            <td className="py-3 pr-4 text-right font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
-                              {sharedFormatCurrency(a.currentBalance || 0)}
-                            </td>
-                            <td className="py-3">
-                              <Badge color={ACCOUNT_STATUS_COLOR[a.status] || '#64748b'}>{a.statusDisplay || formatEnum(a.status)}</Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Panel>
-
-              {/* Recent Applications */}
-              <Panel>
-                <div className="flex items-center justify-between">
-                  <PanelHeader title="Recent Applications" />
-                  {applications.length > 0 && (
-                    <button onClick={() => setActiveTab('applications')} className="text-xs font-semibold" style={{ color: 'var(--rm-accent)' }}>
-                      View all →
-                    </button>
-                  )}
-                </div>
-                {applications.length === 0 ? (
-                  <EmptyRow>No applications submitted yet.</EmptyRow>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {applications.slice(0, 4).map(a => {
-                      const st = (a.lomsStatus || a.status).toUpperCase();
-                      const color = APP_STATUS_COLOR[st] || '#64748b';
-                      return (
-                        <button
-                          key={a.applicationId}
-                          onClick={() => router.push(`/dashboard/applications/${a.applicationId}`)}
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left"
-                          style={{ backgroundColor: 'var(--rm-card-hover)', border: '1px solid var(--rm-border)' }}
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium" style={{ color: 'var(--rm-text)' }}>
-                              {a.applicationNumber} · {a.product?.productName || 'Loan'}
-                            </p>
-                            <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>{formatDate(a.createdAt)}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
-                              {sharedFormatCurrency(a.requestedAmount)}
-                            </span>
-                            <Badge color={color}>{formatEnum(a.lomsStatus || a.status)}</Badge>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </Panel>
-
-              {/* Financial Snapshot */}
-              <Panel>
-                <PanelHeader title="Financial Snapshot" />
-                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  {isBusiness ? (
-                    <>
-                      <Stat label="Annual Revenue" value={customer.annualRevenue ? sharedFormatCurrency(customer.annualRevenue) : '—'} />
-                      <Stat label="Net Worth" value={customer.netWorth ? sharedFormatCurrency(customer.netWorth) : '—'} />
-                      <Stat label="Employees" value={customer.numberOfEmployees ? String(customer.numberOfEmployees) : '—'} />
-                      <Stat label="Years in Business" value={customer.yearsInBusiness ? String(customer.yearsInBusiness) : '—'} />
-                    </>
-                  ) : (
-                    <>
-                      <Stat label="Annual Income" value={customer.annualIncome ? sharedFormatCurrency(customer.annualIncome) : '—'} />
-                      <Stat label="Net Worth" value={customer.netWorth ? sharedFormatCurrency(customer.netWorth) : '—'} />
-                      <Stat label="Credit Score" value={customer.creditScore ? String(customer.creditScore) : '—'} />
-                      <Stat label="Employment" value={formatEnum(customer.employmentStatus)} />
-                    </>
-                  )}
-                </div>
-              </Panel>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-5">
-              {/* Relationship Health */}
-              {health && (
-                <Panel>
-                  <PanelHeader title="Relationship Health" />
-                  <div className="mt-4 flex items-center gap-5">
-                    <HealthDonut score={health.total} color={health.band.color} />
-                    <div className="flex-1 space-y-2">
-                      {health.signals.map(s => (
-                        <div key={s.label} className="flex items-center justify-between text-xs">
-                          <span style={{ color: 'var(--rm-text-secondary)' }}>{s.label}</span>
-                          <span className="font-semibold" style={{ color: 'var(--rm-text)' }}>{s.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="mt-3 text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>
-                    Composite score derived from KYC/AML, risk rating and product depth.
-                  </p>
-                </Panel>
-              )}
-
-              {/* Customer Intelligence Signals — real, evidence-backed (AI_roadmap.md §6.2) */}
-              <Panel>
-                <PanelHeader icon={<SparkIcon />} title="Intelligence Signals" beta />
-                {intelligenceLoading ? (
-                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>Computing signals…</p>
-                ) : !intelligence || intelligence.activeSignals.length === 0 ? (
-                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
-                    No active signals — nothing requires attention right now.
-                  </p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {intelligence.activeSignals.map((sig, idx) => (
-                      <div
-                        key={`${sig.signalType}-${sig.evidence?.applicationId ?? idx}`}
-                        className="flex items-start gap-2.5 rounded-lg px-3 py-2.5"
-                        style={{ backgroundColor: 'var(--rm-card-hover)', border: '1px solid var(--rm-border)' }}
-                      >
-                        <span
-                          className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full"
-                          style={{ backgroundColor: SIGNAL_SEVERITY_COLOR[sig.severity || 'MEDIUM'] || '#64748b' }}
-                        />
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold" style={{ color: 'var(--rm-text)' }}>
-                            {formatEnum(sig.signalType)}
-                          </p>
-                          <p className="text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>
-                            {sig.evidence?.applicationNumber ? `${sig.evidence.applicationNumber} · ` : ''}
-                            {new Date(sig.detectedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {intelligence && intelligence.warnings.length > 0 && (
-                  <p className="mt-2 text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>
-                    {intelligence.warnings.join(' ')}
-                  </p>
-                )}
-              </Panel>
-
-              {/* Proactive Journey recommendations — Kafka-driven, async (AI_roadmap.md §8.5/§20) */}
-              <Panel>
-                <PanelHeader icon={<SparkIcon />} title="Proactive Insights" beta />
-                {recommendationsLoading ? (
-                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>Checking for insights…</p>
-                ) : recommendations.length === 0 ? (
-                  <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
-                    No proactive insights right now.
-                  </p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {recommendations.map(rec => (
-                      <div
-                        key={rec.id}
-                        className="rounded-lg px-3 py-2.5"
-                        style={{ backgroundColor: 'var(--rm-card-hover)', border: '1px solid var(--rm-border)' }}
-                      >
-                        <p className="text-xs font-semibold" style={{ color: 'var(--rm-text)' }}>
-                          {formatEnum(rec.recommendationType)}
-                        </p>
-                        <p className="mt-0.5 text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>
-                          {typeof rec.rationale?.reason === 'string' ? rec.rationale.reason : 'New activity detected'}
-                        </p>
-                        <p className="mt-1 text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>
-                          {new Date(rec.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                        </p>
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            onClick={() => handleRecommendationDecision(rec.id, 'accept')}
-                            disabled={recommendationActionLoadingId === rec.id}
-                            className="rounded-md px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
-                            style={{ backgroundColor: '#10b981', color: '#fff' }}
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleRecommendationDecision(rec.id, 'dismiss')}
-                            disabled={recommendationActionLoadingId === rec.id}
-                            className="rounded-md px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
-                            style={{ border: '1px solid var(--rm-border)', color: 'var(--rm-text-secondary)' }}
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Panel>
-
-              {/* KYC / AML Status */}
-              <Panel>
-                <PanelHeader title="KYC / AML Status" />
-                <div className="mt-3 space-y-3">
-                  <SidebarRow label="KYC Status" value={formatEnum(customer.kycStatus) || 'Not Verified'} color={/APPROV|COMPLET|VERIF/i.test(customer.kycStatus || '') ? '#10b981' : /PEND|PROGRESS/i.test(customer.kycStatus || '') ? '#f59e0b' : '#64748b'} />
-                  <SidebarRow label="AML Status" value={formatEnum(customer.amlCheckStatus) || 'Not Checked'} color={/CLEAR|APPROV|PASS/i.test(customer.amlCheckStatus || '') ? '#10b981' : /FLAG|FAIL/i.test(customer.amlCheckStatus || '') ? '#ef4444' : '#64748b'} />
-                  <div className="flex items-center justify-between text-sm">
-                    <span style={{ color: 'var(--rm-text-secondary)' }}>KYC Completed</span>
-                    <span style={{ color: 'var(--rm-text)' }}>{formatDate(customer.kycCompletionDate)}</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setActiveTab('kyc')}
-                  className="mt-4 w-full rounded-lg py-2 text-xs font-semibold"
-                  style={{ border: '1px solid var(--rm-border)', color: 'var(--rm-text-secondary)' }}
-                >
-                  Manage KYC / AML
-                </button>
-              </Panel>
-
-              {/* Contact Details */}
-              <Panel>
-                <PanelHeader title="Contact Details" />
-                <div className="mt-3 space-y-3 text-sm">
-                  <ContactRow icon={<MailIcon />} value={customer.primaryEmail} />
-                  {customer.primaryPhone && <ContactRow icon={<PhoneIcon />} value={customer.primaryPhone} />}
-                  {customer.mobilePhone && <ContactRow icon={<PhoneIcon />} value={customer.mobilePhone} />}
-                  {(customer.city || customer.country) && (
-                    <ContactRow icon={<PinIcon />} value={[customer.city, customer.country].filter(Boolean).join(', ')} />
-                  )}
-                </div>
-              </Panel>
-
-              {/* Next Best Actions */}
-              <Panel>
-                <PanelHeader title="Next Best Actions" />
-                <div className="mt-3 space-y-2">
-                  {nextActions.length === 0 ? (
-                    <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>No outstanding actions. Relationship is in good standing.</p>
-                  ) : (
-                    nextActions.map((a, i) => (
-                      <Link
-                        key={i}
-                        href={a.href}
-                        className="flex items-center justify-between rounded-lg px-3 py-2.5 text-xs"
-                        style={{ backgroundColor: 'var(--rm-card-hover)', border: '1px solid var(--rm-border)' }}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: a.color }} />
-                          <span style={{ color: 'var(--rm-text-secondary)' }}>{a.label}</span>
-                        </span>
-                        <span style={{ color: 'var(--rm-accent)' }}>→</span>
-                      </Link>
-                    ))
-                  )}
-                </div>
-              </Panel>
-
-              {/* AI Opportunity Insight */}
-              <div
-                className="rounded-xl p-5"
-                style={{ background: 'linear-gradient(135deg, var(--rm-accent-muted), transparent)', border: '1px solid var(--rm-border)' }}
+              {initials(displayName)}
+            </span>
+            <div className="min-w-0">
+              <h1
+                className="text-2xl font-semibold tracking-tight break-words"
+                style={{ color: 'var(--rm-text)' }}
               >
-                <PanelHeader icon={<SparkIcon />} title="AI Opportunity Insight" beta />
-                <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--rm-text-secondary)' }}>
-                  {buildOpportunity(customer, { deposits, exposure, products: activeAccounts.length, openApps: openApplications.length })}
-                </p>
+                {displayName}
+              </h1>
+              <p className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                {customer.customerNumber} · {formatEnum(customer.customerType)}
+              </p>
+              <div className="mt-3">
+                <Pill tone={statusTone}>
+                  {CUSTOMER_STATUSES.find(s => s.value === customer.customerStatus)?.label ||
+                    formatEnum(customer.customerStatus)}
+                </Pill>
               </div>
             </div>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {isEditing ? (
+              <>
+                <SecondaryButton onClick={handleCancelEdit} disabled={isSaving}>
+                  Cancel
+                </SecondaryButton>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  style={{ backgroundColor: 'var(--rm-accent)' }}
+                >
+                  {isSaving ? 'Saving…' : 'Save changes'}
+                </button>
+              </>
+            ) : (
+              <>
+                <SecondaryButton
+                  onClick={() => {
+                    setNewStatus(customer.customerStatus);
+                    setStatusError(null);
+                    setShowStatusModal(true);
+                  }}
+                >
+                  Change status
+                </SecondaryButton>
+                <SecondaryButton onClick={startEditing}>Edit details</SecondaryButton>
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`/dashboard/applications/new?customerId=${customer.customerId}`)
+                  }
+                  className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: 'var(--rm-accent)' }}
+                >
+                  New application
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {saveMessage && (
+          <p
+            role={saveMessage.tone === 'error' ? 'alert' : 'status'}
+            className="mt-5 rounded-2xl px-5 py-4 text-sm"
+            style={{
+              backgroundColor:
+                saveMessage.tone === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.14)',
+              color: 'var(--rm-text)',
+            }}
+          >
+            {saveMessage.text}
+          </p>
         )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* APPLICATIONS TAB */}
-        {/* ---------------------------------------------------------------- */}
-        {activeTab === 'applications' && (
-          <Panel>
-            {applications.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>No applications found.</p>
-                <Link
-                  href={`/dashboard/applications/new?customerId=${customer.customerId}`}
-                  className="mt-3 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-white"
-                  style={{ backgroundColor: 'var(--rm-accent)' }}
-                >
-                  Create First Application
-                </Link>
-              </div>
+        {/* Key facts */}
+        <dl
+          className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 border-t pt-6 sm:grid-cols-3 lg:grid-cols-6"
+          style={{ borderColor: 'var(--rm-border)' }}
+        >
+          <Fact label="Customer number" value={customer.customerNumber || '—'} />
+          <Fact label="Segment" value={formatEnum(customer.customerSegment)} />
+          <Fact
+            label={isBusiness ? 'Industry' : 'Occupation'}
+            value={formatEnum(isBusiness ? customer.industrySector : customer.occupation)}
+          />
+          <Fact label="Relationship manager" value={rmName} />
+          <Fact label="Customer since" value={formatDate(customer.customerSince)} />
+          <Fact label="Risk rating" value={formatEnum(customer.riskRating) || 'Not rated'} />
+        </dl>
+      </header>
+
+      {/* ══ Figures ══ */}
+      <section
+        aria-label="Relationship figures"
+        className="grid grid-cols-2 gap-4 lg:grid-cols-5"
+      >
+        <Figure
+          label="Total exposure"
+          value={accounts.length ? compact(exposure) : '—'}
+          hint="Credit balances"
+        />
+        <Figure
+          label="Deposits"
+          value={accounts.length ? compact(deposits) : '—'}
+          hint="Deposit balances"
+        />
+        <Figure
+          label="Active products"
+          value={String(activeAccounts.length)}
+          hint="Accounts with active status"
+        />
+        <Figure
+          label="Open applications"
+          value={String(openApplications.length)}
+          hint="Not yet in a terminal state"
+        />
+        <Figure
+          label={isBusiness ? 'Annual revenue' : 'Annual income'}
+          value={annualFigure ? compact(annualFigure) : '—'}
+          hint="As declared on the record"
+        />
+      </section>
+
+      {/* ══ Tabs ══ */}
+      <div
+        role="tablist"
+        aria-label="Customer sections"
+        className="flex gap-1 overflow-x-auto rounded-full p-1 w-fit max-w-full"
+        style={{ backgroundColor: 'rgba(127,127,127,0.10)' }}
+      >
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            id={`tab-${t.id}`}
+            role="tab"
+            type="button"
+            aria-selected={activeTab === t.id}
+            aria-controls={`tabpanel-${t.id}`}
+            tabIndex={activeTab === t.id ? 0 : -1}
+            onClick={() => setActiveTab(t.id)}
+            className="rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap transition-opacity hover:opacity-90"
+            style={{
+              backgroundColor: activeTab === t.id ? 'var(--rm-card)' : 'transparent',
+              color: activeTab === t.id ? 'var(--rm-text)' : 'var(--rm-text-muted)',
+            }}
+          >
+            {t.label}
+            {t.id === 'applications' && applications.length > 0 && (
+              <span className="ml-1.5 tabular-nums opacity-70">{applications.length}</span>
+            )}
+            {t.id === 'accounts' && accounts.length > 0 && (
+              <span className="ml-1.5 tabular-nums opacity-70">{accounts.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ OVERVIEW ══ */}
+      <div
+        role="tabpanel"
+        id="tabpanel-overview"
+        aria-labelledby="tab-overview"
+        tabIndex={0}
+        hidden={activeTab !== 'overview'}
+        className={
+          activeTab === 'overview' ? 'grid grid-cols-1 gap-6 xl:grid-cols-3' : 'hidden'
+        }
+      >
+        <div className="space-y-6 xl:col-span-2 min-w-0">
+          <Panel title="Relationship summary">
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--rm-text-secondary)' }}>
+              {buildSummary(customer, displayName, {
+                exposure,
+                deposits,
+                products: activeAccounts.length,
+                openApps: openApplications.length,
+              })}
+            </p>
+          </Panel>
+
+          <Panel title="Exposure and product mix">
+            {productMix.length === 0 ? (
+              <EmptyRow>No balances are recorded against this customer.</EmptyRow>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
-                      <Th>Application #</Th>
-                      <Th>Product</Th>
-                      <Th className="text-right">Amount</Th>
-                      <Th>Status</Th>
-                      <Th>Created</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {applications.map(a => {
-                      const st = (a.lomsStatus || a.status).toUpperCase();
-                      const color = APP_STATUS_COLOR[st] || '#64748b';
-                      return (
-                        <tr
-                          key={a.applicationId}
-                          onClick={() => router.push(`/dashboard/applications/${a.applicationId}`)}
-                          className="cursor-pointer"
-                          style={{ borderBottom: '1px solid var(--rm-border)' }}
+              <>
+                <ul className="mt-1 space-y-3">
+                  {productMix.map(m => (
+                    <li key={m.label}>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span
+                          className="truncate"
+                          style={{ color: 'var(--rm-text-secondary)' }}
                         >
-                          <td className="py-3 pr-4 font-medium" style={{ color: 'var(--rm-text)' }}>{a.applicationNumber || 'N/A'}</td>
-                          <td className="py-3 pr-4" style={{ color: 'var(--rm-text-secondary)' }}>{a.product?.productName || 'N/A'}</td>
-                          <td className="py-3 pr-4 text-right font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>{sharedFormatCurrency(a.requestedAmount)}</td>
-                          <td className="py-3 pr-4"><Badge color={color}>{formatEnum(a.lomsStatus || a.status)}</Badge></td>
-                          <td className="py-3" style={{ color: 'var(--rm-text-muted)' }}>{formatDate(a.createdAt)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          {m.label}
+                        </span>
+                        <span className="flex items-center gap-3 shrink-0">
+                          <span
+                            className="text-base font-medium tabular-nums"
+                            style={{ color: 'var(--rm-text)' }}
+                          >
+                            {formatCurrency(m.value)}
+                          </span>
+                          <span
+                            className="text-sm tabular-nums w-14 text-right"
+                            style={{ color: 'var(--rm-text-muted)' }}
+                          >
+                            {m.pct.toFixed(1)}%
+                          </span>
+                        </span>
+                      </div>
+                      <div
+                        className="mt-2 h-1.5 rounded-full overflow-hidden"
+                        style={{ backgroundColor: 'var(--rm-input)' }}
+                        aria-hidden="true"
+                      >
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${m.pct}%`, backgroundColor: 'var(--rm-accent)' }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </Panel>
-        )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* ACCOUNTS TAB */}
-        {/* ---------------------------------------------------------------- */}
-        {activeTab === 'accounts' && (
-          <Panel>
-            {accounts.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>No accounts found for this customer.</p>
-                <Link
-                  href={`/dashboard/accounts/new?customerId=${customer.customerId}`}
-                  className="mt-3 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-white"
-                  style={{ backgroundColor: 'var(--rm-accent)' }}
+          <Panel
+            title="Active facilities"
+            action={
+              accounts.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('accounts')}
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: 'var(--rm-accent)' }}
                 >
-                  Open Account
-                </Link>
-              </div>
+                  View all accounts
+                </button>
+              ) : undefined
+            }
+          >
+            {accounts.length === 0 ? (
+              <EmptyRow>No accounts have been opened for this customer yet.</EmptyRow>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div
+                role="region"
+                aria-label="Active facilities, horizontally scrollable"
+                tabIndex={0}
+                className="mt-4 -mx-2 overflow-x-auto"
+              >
+                <table className="w-full" aria-label="Accounts held by this customer">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
                       <Th>Account</Th>
                       <Th>Type</Th>
-                      <Th>Category</Th>
-                      <Th className="text-right">Current Balance</Th>
-                      <Th className="text-right">Available</Th>
+                      <Th align="right">Balance</Th>
                       <Th>Status</Th>
                     </tr>
                   </thead>
                   <tbody>
-                    {accounts.map(a => (
+                    {accounts.slice(0, 5).map(a => (
                       <tr
                         key={a.accountId}
-                        onClick={() => router.push(`/dashboard/accounts/${a.accountId}`)}
                         className="cursor-pointer"
                         style={{ borderBottom: '1px solid var(--rm-border)' }}
+                        onClick={() => router.push(`/dashboard/accounts/${a.accountId}`)}
                       >
-                        <td className="py-3 pr-4">
-                          <p className="font-medium" style={{ color: 'var(--rm-text)' }}>{a.accountName}</p>
-                          <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>{a.primaryIban || a.accountNumber}</p>
+                        <td className="px-5 py-4">
+                          <Link
+                            href={`/dashboard/accounts/${a.accountId}`}
+                            onClick={e => e.stopPropagation()}
+                            className="text-base font-medium hover:underline"
+                            style={{ color: 'var(--rm-text)' }}
+                          >
+                            {a.accountName}
+                          </Link>
+                          <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                            {a.accountNumber}
+                          </p>
                         </td>
-                        <td className="py-3 pr-4" style={{ color: 'var(--rm-text-secondary)' }}>{a.accountTypeDisplay || formatEnum(a.accountType)}</td>
-                        <td className="py-3 pr-4" style={{ color: 'var(--rm-text-secondary)' }}>{formatEnum(a.accountCategory)}</td>
-                        <td className="py-3 pr-4 text-right font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>{sharedFormatCurrency(a.currentBalance || 0)} {a.currency}</td>
-                        <td className="py-3 pr-4 text-right tabular-nums" style={{ color: 'var(--rm-text-secondary)' }}>{sharedFormatCurrency(a.availableBalance || 0)}</td>
-                        <td className="py-3"><Badge color={ACCOUNT_STATUS_COLOR[a.status] || '#64748b'}>{a.statusDisplay || formatEnum(a.status)}</Badge></td>
+                        <td className="px-5 py-4 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                          {a.accountTypeDisplay || accountTypeLabels[a.accountType]}
+                        </td>
+                        <td
+                          className="px-5 py-4 text-right text-base font-medium tabular-nums whitespace-nowrap"
+                          style={{ color: 'var(--rm-text)' }}
+                        >
+                          {formatCurrency(a.currentBalance || 0, a.currency)}
+                        </td>
+                        <td className="px-5 py-4">
+                          <Pill tone={accountStatusTone(a.status)}>
+                            {a.statusDisplay || accountStatusLabels[a.status]}
+                          </Pill>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1137,231 +936,904 @@ export default function CustomerDetailPage() {
               </div>
             )}
           </Panel>
-        )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* DETAILS TAB (edit forms) */}
-        {/* ---------------------------------------------------------------- */}
-        {activeTab === 'details' && (
-          <div className="space-y-5">
-            <div className="flex justify-end gap-2">
-              {isEditing ? (
+          <Panel
+            title="Recent applications"
+            action={
+              applications.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('applications')}
+                  className="text-sm font-medium hover:underline"
+                  style={{ color: 'var(--rm-accent)' }}
+                >
+                  View all applications
+                </button>
+              ) : undefined
+            }
+          >
+            {applications.length === 0 ? (
+              <EmptyRow>No applications have been submitted yet.</EmptyRow>
+            ) : (
+              <ul className="mt-4 space-y-2.5">
+                {applications.slice(0, 4).map(a => (
+                  <li key={a.applicationId}>
+                    <Link
+                      href={`/dashboard/applications/${a.applicationId}`}
+                      className="flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 hover:opacity-90"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                    >
+                      <span className="min-w-0">
+                        <span
+                          className="block truncate text-base font-medium"
+                          style={{ color: 'var(--rm-text)' }}
+                        >
+                          {a.applicationNumber} · {a.product?.productName || 'Loan'}
+                        </span>
+                        <span className="block text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          Submitted {formatDate(a.submittedAt || a.createdAt)}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-3 shrink-0">
+                        <span
+                          className="text-base font-medium tabular-nums"
+                          style={{ color: 'var(--rm-text)' }}
+                        >
+                          {formatCurrency(a.requestedAmount)}
+                        </span>
+                        <Pill tone={applicationStatusTone(a.lomsStatus || a.status)}>
+                          {formatEnum(a.lomsStatus || a.status)}
+                        </Pill>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+
+          <Panel title="Financial snapshot">
+            <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+              {isBusiness ? (
                 <>
-                  <HeaderButton onClick={handleCancelEdit} disabled={isSaving}>Cancel</HeaderButton>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                    style={{ backgroundColor: 'var(--rm-accent)' }}
-                  >
-                    {isSaving ? 'Saving…' : 'Save Changes'}
-                  </button>
+                  <Fact
+                    label="Annual revenue"
+                    value={customer.annualRevenue ? formatCurrency(customer.annualRevenue) : '—'}
+                  />
+                  <Fact
+                    label="Net worth"
+                    value={customer.netWorth ? formatCurrency(customer.netWorth) : '—'}
+                  />
+                  <Fact
+                    label="Employees"
+                    value={customer.numberOfEmployees ? String(customer.numberOfEmployees) : '—'}
+                  />
+                  <Fact
+                    label="Years in business"
+                    value={customer.yearsInBusiness ? String(customer.yearsInBusiness) : '—'}
+                  />
                 </>
               ) : (
                 <>
-                  <HeaderButton onClick={() => setShowDeleteModal(true)}>Delete</HeaderButton>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: 'var(--rm-accent)' }}
-                  >
-                    Edit Details
-                  </button>
+                  <Fact
+                    label="Annual income"
+                    value={customer.annualIncome ? formatCurrency(customer.annualIncome) : '—'}
+                  />
+                  <Fact
+                    label="Net worth"
+                    value={customer.netWorth ? formatCurrency(customer.netWorth) : '—'}
+                  />
+                  <Fact
+                    label="Credit score"
+                    value={customer.creditScore ? String(customer.creditScore) : '—'}
+                  />
+                  <Fact label="Employment" value={formatEnum(customer.employmentStatus)} />
                 </>
               )}
-            </div>
+            </dl>
+          </Panel>
 
-            {isBusiness ? (
-              <Section title="Business Information">
-                <Field label="Business Name" k="businessName" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Legal Name" k="businessLegalName" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Registration Number" k="businessRegistrationNumber" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Business Type" k="businessType" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Industry Sector" k="industrySector" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Years in Business" k="yearsInBusiness" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="number" />
-                <Field label="Number of Employees" k="numberOfEmployees" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="number" />
-              </Section>
+          <Panel title="Relationship timeline">
+            {timeline.length === 0 ? (
+              <EmptyRow>No dated events are recorded for this relationship yet.</EmptyRow>
             ) : (
-              <Section title="Personal Information">
-                <Field label="First Name" k="firstName" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Middle Name" k="middleName" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Last Name" k="lastName" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                <Field label="Date of Birth" k="dateOfBirth" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="date" fmt={v => formatDate(v as string | undefined)} />
-                <Field label="Gender" k="gender" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} options={[{ value: 'MALE', label: 'Male' }, { value: 'FEMALE', label: 'Female' }, { value: 'OTHER', label: 'Other' }]} />
-                <Field label="Nationality" k="nationality" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} options={COUNTRIES} />
-              </Section>
-            )}
-
-            <Section title="Contact Information">
-              <Field label="Email" k="primaryEmail" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="email" />
-              <Field label="Phone" k="primaryPhone" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="tel" />
-              <Field label="Mobile" k="mobilePhone" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="tel" />
-              <Field label="Secondary Email" k="secondaryEmail" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="email" />
-            </Section>
-
-            <Section title="Identity Documents">
-              <Field label="ID Type" k="primaryIdentityType" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} options={IDENTITY_TYPES} />
-              <Field label="ID Number" k="primaryIdentityNumber" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-              <Field label="Tax Reference / PPS" k="taxIdNumber" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-            </Section>
-
-            <Section title="Address">
-              <Field label="Address Line 1" k="addressLine1" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-              <Field label="Address Line 2" k="addressLine2" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-              <Field label="City" k="city" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-              <Field label="County / Region" k="stateProvince" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-              <Field label="Eircode / Postcode" k="postalCode" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-              <Field label="Country" k="country" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} options={COUNTRIES} />
-            </Section>
-
-            <Section title="Employment & Financial">
-              {!isBusiness && (
-                <>
-                  <Field label="Employment Status" k="employmentStatus" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} options={EMPLOYMENT_TYPES} />
-                  <Field label="Employer" k="employerName" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                  <Field label="Occupation" k="occupation" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} />
-                  <Field label="Annual Income" k="annualIncome" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="number" fmt={v => (v ? sharedFormatCurrency(Number(v)) : 'N/A')} />
-                </>
-              )}
-              {isBusiness && (
-                <Field label="Annual Revenue" k="annualRevenue" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="number" fmt={v => (v ? sharedFormatCurrency(Number(v)) : 'N/A')} />
-              )}
-              <Field label="Net Worth" k="netWorth" c={customer} e={editedCustomer} ed={isEditing} on={handleEditChange} type="number" fmt={v => (v ? sharedFormatCurrency(Number(v)) : 'N/A')} />
-              <ReadOnlyField label="Credit Score" value={customer.creditScore ? String(customer.creditScore) : 'N/A'} />
-              <ReadOnlyField label="Risk Rating" value={customer.riskRating ? formatEnum(customer.riskRating) : 'Not Rated'} />
-            </Section>
-          </div>
-        )}
-
-        {/* ---------------------------------------------------------------- */}
-        {/* KYC / AML TAB */}
-        {/* ---------------------------------------------------------------- */}
-        {activeTab === 'kyc' && (
-          <Panel>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <PanelHeader title="KYC / AML Status" />
-              <div className="flex gap-2">
-                {(!customer.kycStatus || /NOT_STARTED|PENDING/.test(customer.kycStatus)) && (
-                  <button
-                    onClick={() => router.push(`/dashboard/kyc/cases/new?customerId=${customer.customerId}`)}
-                    className="rounded-lg px-3.5 py-2 text-sm font-semibold text-white"
-                    style={{ backgroundColor: 'var(--rm-accent)' }}
-                  >
-                    Initiate KYC
-                  </button>
-                )}
-                <HeaderButton onClick={() => router.push(`/dashboard/kyc/cases?customerId=${customer.customerId}`)}>View KYC Cases</HeaderButton>
-              </div>
-            </div>
-            <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat label="KYC Status" value={formatEnum(customer.kycStatus) || 'Not Verified'} />
-              <Stat label="KYC Completion" value={formatDate(customer.kycCompletionDate)} />
-              <Stat label="AML Status" value={formatEnum(customer.amlCheckStatus) || 'Not Checked'} />
-              <Stat label="AML Check Date" value={formatDate(customer.amlCheckDate)} />
-            </div>
-            {(!customer.kycStatus || customer.kycStatus === 'NOT_STARTED') && (
-              <div
-                className="mt-5 flex items-start gap-2 rounded-lg p-3"
-                style={{ backgroundColor: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)' }}
-              >
-                <span style={{ color: '#f59e0b' }}>⚠</span>
-                <div>
-                  <p className="text-sm font-medium" style={{ color: '#f59e0b' }}>KYC verification required</p>
-                  <p className="mt-0.5 text-xs" style={{ color: 'var(--rm-text-secondary)' }}>
-                    This customer has not completed KYC/AML verification. Click “Initiate KYC” to start the process.
-                  </p>
-                </div>
-              </div>
+              <ol className="mt-4 space-y-4">
+                {timeline.map((e, i) => (
+                  <li key={`${e.date}-${i}`} className="flex gap-4">
+                    <span
+                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: 'var(--rm-accent)' }}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                        {e.title}
+                      </span>
+                      <span className="block text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                        {formatDate(e.date)} · {e.detail}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             )}
           </Panel>
-        )}
+        </div>
 
-        {/* Footer */}
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 border-t pt-4 text-xs"
-          style={{ borderColor: 'var(--rm-border)', color: 'var(--rm-text-muted)' }}
-        >
-          <span>Last updated {formatDate(customer.customerSince)} · Data as at {asOf}</span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: '#10b981' }} />
-            All data sources connected
-          </span>
+        {/* Sidebar */}
+        <div className="space-y-6 min-w-0">
+          <Panel title="Compliance status">
+            <dl className="mt-1 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  KYC
+                </dt>
+                <dd>
+                  <Pill tone={kycTone(customer.kycStatus)}>
+                    {customer.kycStatus ? formatEnum(customer.kycStatus) : 'Not started'}
+                  </Pill>
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  AML check
+                </dt>
+                <dd>
+                  <Pill tone={kycTone(customer.amlCheckStatus)}>
+                    {customer.amlCheckStatus ? formatEnum(customer.amlCheckStatus) : 'Not run'}
+                  </Pill>
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  Risk rating
+                </dt>
+                <dd>
+                  <Pill tone={riskTone(customer.riskRating)}>
+                    {customer.riskRating ? formatEnum(customer.riskRating) : 'Not rated'}
+                  </Pill>
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  KYC completed
+                </dt>
+                <dd className="text-sm tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                  {formatDate(customer.kycCompletionDate)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  AML checked
+                </dt>
+                <dd className="text-sm tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                  {formatDate(customer.amlCheckDate)}
+                </dd>
+              </div>
+            </dl>
+            <button
+              type="button"
+              onClick={() => setActiveTab('kyc')}
+              className="mt-5 w-full rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+            >
+              Manage KYC and AML
+            </button>
+          </Panel>
+
+          <Panel title="Intelligence signals">
+            {intelligenceLoading ? (
+              <div className="mt-4 space-y-2.5">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-14 animate-pulse rounded-2xl"
+                    style={{ backgroundColor: 'var(--rm-input)' }}
+                  />
+                ))}
+              </div>
+            ) : !intelligence || intelligence.activeSignals.length === 0 ? (
+              <EmptyRow>No active signals — nothing requires attention right now.</EmptyRow>
+            ) : (
+              <ul className="mt-4 space-y-2.5">
+                {intelligence.activeSignals.map((sig, idx) => (
+                  <li
+                    key={`${sig.signalType}-${idx}`}
+                    className="rounded-2xl px-5 py-4"
+                    style={{ backgroundColor: 'var(--rm-input)' }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                        {formatEnum(sig.signalType)}
+                      </p>
+                      <Pill tone={severityTone(sig.severity)}>
+                        {sig.severity ? formatEnum(sig.severity) : 'Unrated'} severity
+                      </Pill>
+                    </div>
+                    <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+                      {sig.evidence?.applicationNumber
+                        ? `${String(sig.evidence.applicationNumber)} · `
+                        : ''}
+                      Detected {formatDate(sig.detectedAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {intelligence && intelligence.warnings.length > 0 && (
+              <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                {intelligence.warnings.join(' ')}
+              </p>
+            )}
+          </Panel>
+
+          <Panel title="Proactive suggestions">
+            {recommendationsLoading ? (
+              <div className="mt-4 space-y-2.5">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-20 animate-pulse rounded-2xl"
+                    style={{ backgroundColor: 'var(--rm-input)' }}
+                  />
+                ))}
+              </div>
+            ) : recommendations.length === 0 ? (
+              <EmptyRow>No suggestions right now.</EmptyRow>
+            ) : (
+              <>
+                {recommendationError && (
+                  <p
+                    role="alert"
+                    className="mt-4 rounded-2xl px-5 py-4 text-sm"
+                    style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--rm-text)' }}
+                  >
+                    {recommendationError}
+                  </p>
+                )}
+                <ul className="mt-4 space-y-2.5">
+                  {recommendations.map(rec => (
+                    <li
+                      key={rec.id}
+                      className="rounded-2xl px-5 py-4"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                    >
+                      <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                        {formatEnum(rec.recommendationType)}
+                      </p>
+                      <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                        {typeof rec.rationale?.reason === 'string'
+                          ? rec.rationale.reason
+                          : 'No rationale was provided with this suggestion.'}
+                      </p>
+                      <p className="mt-1 text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                        Raised {formatDate(rec.createdAt)}
+                      </p>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleRecommendationDecision(rec.id, 'accept')}
+                          disabled={recommendationBusyId === rec.id}
+                          className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+                          style={{
+                            backgroundColor: 'var(--rm-accent-muted)',
+                            color: 'var(--rm-accent)',
+                          }}
+                        >
+                          {recommendationBusyId === rec.id ? 'Working…' : 'Accept'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRecommendationDecision(rec.id, 'dismiss')}
+                          disabled={recommendationBusyId === rec.id}
+                          className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+                          style={{
+                            backgroundColor: 'var(--rm-card)',
+                            color: 'var(--rm-text-secondary)',
+                          }}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Panel>
+
+          <Panel title="Contact details">
+            <dl className="mt-1 space-y-3">
+              <ContactRow label="Email" value={customer.primaryEmail} icon={<MailIcon />} />
+              {customer.primaryPhone && (
+                <ContactRow label="Phone" value={customer.primaryPhone} icon={<PhoneIcon />} />
+              )}
+              {customer.mobilePhone && (
+                <ContactRow label="Mobile" value={customer.mobilePhone} icon={<PhoneIcon />} />
+              )}
+              {(customer.city || customer.country) && (
+                <ContactRow
+                  label="Location"
+                  value={[customer.city, customer.country].filter(Boolean).join(', ')}
+                  icon={<PinIcon />}
+                />
+              )}
+            </dl>
+          </Panel>
+
+          <Panel title="Suggested next steps">
+            {nextSteps.length === 0 ? (
+              <EmptyRow>Nothing outstanding — the relationship is in good standing.</EmptyRow>
+            ) : (
+              <ul className="mt-4 space-y-2.5">
+                {nextSteps.map(a => (
+                  <li key={a.href}>
+                    <Link
+                      href={a.href}
+                      className="flex items-center justify-between gap-3 rounded-2xl px-5 py-4 text-sm hover:opacity-90"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                    >
+                      <span style={{ color: 'var(--rm-text)' }}>{a.label}</span>
+                      <svg
+                        className="w-4 h-4 shrink-0"
+                        style={{ color: 'var(--rm-accent)' }}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+
+          <Panel title="Opportunity">
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--rm-text-secondary)' }}>
+              {buildOpportunity(customer, {
+                deposits,
+                exposure,
+                products: activeAccounts.length,
+              })}
+            </p>
+          </Panel>
         </div>
       </div>
 
-      {/* Status Change Modal */}
+      {/* ══ APPLICATIONS ══ */}
+      <div
+        role="tabpanel"
+        id="tabpanel-applications"
+        aria-labelledby="tab-applications"
+        tabIndex={0}
+        hidden={activeTab !== 'applications'}
+      >
+        <Panel title="Applications">
+          {applications.length === 0 ? (
+            <>
+              <EmptyRow>No applications have been submitted for this customer.</EmptyRow>
+              <Link
+                href={`/dashboard/applications/new?customerId=${customer.customerId}`}
+                className="mt-5 inline-flex rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
+                style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+              >
+                Create the first application
+              </Link>
+            </>
+          ) : (
+            <div
+              role="region"
+              aria-label="Applications, horizontally scrollable"
+              tabIndex={0}
+              className="mt-4 -mx-2 overflow-x-auto"
+            >
+              <table className="w-full" aria-label="Applications for this customer">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                    <Th>Application number</Th>
+                    <Th>Product</Th>
+                    <Th align="right">Amount</Th>
+                    <Th>Status</Th>
+                    <Th>Created</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {applications.map(a => (
+                    <tr
+                      key={a.applicationId}
+                      className="cursor-pointer"
+                      style={{ borderBottom: '1px solid var(--rm-border)' }}
+                      onClick={() => router.push(`/dashboard/applications/${a.applicationId}`)}
+                    >
+                      <td className="px-5 py-4">
+                        <Link
+                          href={`/dashboard/applications/${a.applicationId}`}
+                          onClick={e => e.stopPropagation()}
+                          className="text-base font-medium hover:underline"
+                          style={{ color: 'var(--rm-text)' }}
+                        >
+                          {a.applicationNumber || '—'}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-4 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                        {a.product?.productName || '—'}
+                      </td>
+                      <td
+                        className="px-5 py-4 text-right text-base font-medium tabular-nums whitespace-nowrap"
+                        style={{ color: 'var(--rm-text)' }}
+                      >
+                        {formatCurrency(a.requestedAmount)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <Pill tone={applicationStatusTone(a.lomsStatus || a.status)}>
+                          {formatEnum(a.lomsStatus || a.status)}
+                        </Pill>
+                      </td>
+                      <td className="px-5 py-4 text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                        {formatDate(a.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      {/* ══ ACCOUNTS ══ */}
+      <div
+        role="tabpanel"
+        id="tabpanel-accounts"
+        aria-labelledby="tab-accounts"
+        tabIndex={0}
+        hidden={activeTab !== 'accounts'}
+      >
+        <Panel title="Accounts">
+          {accounts.length === 0 ? (
+            <>
+              <EmptyRow>No accounts have been opened for this customer.</EmptyRow>
+              <Link
+                href={`/dashboard/accounts/new?customerId=${customer.customerId}`}
+                className="mt-5 inline-flex rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
+                style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+              >
+                Open an account
+              </Link>
+            </>
+          ) : (
+            <div
+              role="region"
+              aria-label="Accounts, horizontally scrollable"
+              tabIndex={0}
+              className="mt-4 -mx-2 overflow-x-auto"
+            >
+              <table className="w-full" aria-label="Accounts for this customer">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                    <Th>Account</Th>
+                    <Th>Type</Th>
+                    <Th>Category</Th>
+                    <Th align="right">Current balance</Th>
+                    <Th align="right">Available</Th>
+                    <Th>Status</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accounts.map(a => (
+                    <tr
+                      key={a.accountId}
+                      className="cursor-pointer"
+                      style={{ borderBottom: '1px solid var(--rm-border)' }}
+                      onClick={() => router.push(`/dashboard/accounts/${a.accountId}`)}
+                    >
+                      <td className="px-5 py-4">
+                        <Link
+                          href={`/dashboard/accounts/${a.accountId}`}
+                          onClick={e => e.stopPropagation()}
+                          className="text-base font-medium hover:underline"
+                          style={{ color: 'var(--rm-text)' }}
+                        >
+                          {a.accountName}
+                        </Link>
+                        <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          {a.primaryIban || a.accountNumber}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                        {a.accountTypeDisplay || accountTypeLabels[a.accountType]}
+                      </td>
+                      <td className="px-5 py-4 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                        {accountCategoryLabels[a.accountCategory]}
+                      </td>
+                      <td
+                        className="px-5 py-4 text-right text-base font-medium tabular-nums whitespace-nowrap"
+                        style={{ color: 'var(--rm-text)' }}
+                      >
+                        {formatCurrency(a.currentBalance || 0, a.currency)}
+                      </td>
+                      <td
+                        className="px-5 py-4 text-right text-base tabular-nums whitespace-nowrap"
+                        style={{ color: 'var(--rm-text-secondary)' }}
+                      >
+                        {formatCurrency(a.availableBalance || 0, a.currency)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <Pill tone={accountStatusTone(a.status)}>
+                          {a.statusDisplay || accountStatusLabels[a.status]}
+                        </Pill>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      {/* ══ DETAILS ══ */}
+      <div
+        role="tabpanel"
+        id="tabpanel-details"
+        aria-labelledby="tab-details"
+        tabIndex={0}
+        hidden={activeTab !== 'details'}
+        className="space-y-6"
+      >
+        {saveMessage && (
+          <p
+            role={saveMessage.tone === 'error' ? 'alert' : 'status'}
+            className="rounded-3xl px-6 py-5 text-sm"
+            style={{
+              backgroundColor:
+                saveMessage.tone === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.14)',
+              color: 'var(--rm-text)',
+            }}
+          >
+            {saveMessage.text}
+          </p>
+        )}
+
+        {isBusiness ? (
+          <Section title="Business information">
+            <Field label="Business name" k="businessName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Legal name" k="businessLegalName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Registration number" k="businessRegistrationNumber" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Business type" k="businessType" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Industry sector" k="industrySector" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Years in business" k="yearsInBusiness" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" />
+            <Field label="Number of employees" k="numberOfEmployees" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" />
+          </Section>
+        ) : (
+          <Section title="Personal information">
+            <Field label="First name" k="firstName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Middle name" k="middleName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Last name" k="lastName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+            <Field label="Date of birth" k="dateOfBirth" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="date" fmt={v => formatDate(v as string | undefined)} />
+            <Field label="Gender" k="gender" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} options={GENDERS} />
+            <Field label="Nationality" k="nationality" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} options={COUNTRIES} />
+          </Section>
+        )}
+
+        <Section title="Contact information">
+          <Field label="Email" k="primaryEmail" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="email" required />
+          <Field label="Phone" k="primaryPhone" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="tel" required />
+          <Field label="Mobile" k="mobilePhone" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="tel" />
+          <Field label="Secondary email" k="secondaryEmail" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="email" />
+        </Section>
+
+        <Section title="Identity documents">
+          <Field label="ID type" k="primaryIdentityType" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} options={IDENTITY_TYPES} />
+          <Field label="ID number" k="primaryIdentityNumber" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+          <Field label="Tax reference or PPS" k="taxIdNumber" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+        </Section>
+
+        <Section title="Address">
+          <Field label="Address line 1" k="addressLine1" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+          <Field label="Address line 2" k="addressLine2" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+          <Field label="City" k="city" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+          <Field label="County or region" k="stateProvince" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+          <Field label="Eircode or postcode" k="postalCode" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+          <Field label="Country" k="country" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} options={COUNTRIES} />
+        </Section>
+
+        <Section title="Employment and financial">
+          {!isBusiness && (
+            <>
+              <Field label="Employment status" k="employmentStatus" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} options={EMPLOYMENT_TYPES} />
+              <Field label="Employer" k="employerName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+              <Field label="Occupation" k="occupation" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+              <Field label="Annual income" k="annualIncome" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" fmt={v => (v ? formatCurrency(Number(v)) : '—')} />
+            </>
+          )}
+          {isBusiness && (
+            <Field label="Annual revenue" k="annualRevenue" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" fmt={v => (v ? formatCurrency(Number(v)) : '—')} />
+          )}
+          <Field label="Net worth" k="netWorth" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" fmt={v => (v ? formatCurrency(Number(v)) : '—')} />
+          <ReadOnlyFact label="Credit score" value={customer.creditScore ? String(customer.creditScore) : '—'} />
+          <ReadOnlyFact label="Risk rating" value={customer.riskRating ? formatEnum(customer.riskRating) : 'Not rated'} />
+        </Section>
+
+        {!isEditing && (
+          <section className="rounded-3xl p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Remove this customer
+            </h2>
+            <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              Deactivating keeps the record recoverable. Permanent deletion cannot be undone.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteError(null);
+                setShowDeleteModal(true);
+              }}
+              className="mt-4 rounded-full px-5 py-2.5 text-sm font-semibold text-red-600 dark:text-red-400 transition-opacity hover:opacity-90"
+              style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}
+            >
+              Remove customer
+            </button>
+          </section>
+        )}
+      </div>
+
+      {/* ══ KYC ══ */}
+      <div
+        role="tabpanel"
+        id="tabpanel-kyc"
+        aria-labelledby="tab-kyc"
+        tabIndex={0}
+        hidden={activeTab !== 'kyc'}
+      >
+        <Panel
+          title="KYC and AML status"
+          action={
+            <div className="flex gap-2.5 flex-wrap">
+              {(!customer.kycStatus || /NOT_STARTED|PENDING|EXPIRED/.test(customer.kycStatus)) && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`/dashboard/kyc/cases/new?customerId=${customer.customerId}`)
+                  }
+                  className="rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+                >
+                  Start KYC
+                </button>
+              )}
+              <SecondaryButton
+                onClick={() =>
+                  router.push(`/dashboard/kyc/cases?customerId=${customer.customerId}`)
+                }
+              >
+                View KYC cases
+              </SecondaryButton>
+            </div>
+          }
+        >
+          <dl className="mt-1 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                KYC status
+              </dt>
+              <dd className="mt-1.5">
+                <Pill tone={kycTone(customer.kycStatus)}>
+                  {customer.kycStatus ? formatEnum(customer.kycStatus) : 'Not started'}
+                </Pill>
+              </dd>
+            </div>
+            <Fact label="KYC completed" value={formatDate(customer.kycCompletionDate)} />
+            <div>
+              <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                AML status
+              </dt>
+              <dd className="mt-1.5">
+                <Pill tone={kycTone(customer.amlCheckStatus)}>
+                  {customer.amlCheckStatus ? formatEnum(customer.amlCheckStatus) : 'Not run'}
+                </Pill>
+              </dd>
+            </div>
+            <Fact label="AML checked" value={formatDate(customer.amlCheckDate)} />
+          </dl>
+
+          {(!customer.kycStatus || /NOT_STARTED|PENDING|EXPIRED/.test(customer.kycStatus)) && (
+            <div
+              className="mt-6 flex items-start gap-3 rounded-2xl px-5 py-4"
+              style={{ backgroundColor: 'rgba(245,158,11,0.14)' }}
+            >
+              <svg
+                className="w-5 h-5 mt-0.5 shrink-0"
+                style={{ color: '#f59e0b' }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                />
+              </svg>
+              <div>
+                <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  KYC verification needed
+                </p>
+                <p className="text-sm mt-1" style={{ color: 'var(--rm-text-secondary)' }}>
+                  This customer has not completed KYC and AML verification. Select “Start KYC” to
+                  open a case.
+                </p>
+              </div>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      {/* ══ Footer ══ */}
+      <p className="text-sm pb-2" style={{ color: 'var(--rm-text-muted)' }}>
+        Figures are read from the customer, application and account records. Data as at {asOf}.
+      </p>
+
+      {/* ══ Change status dialog ══ */}
       {showStatusModal && (
-        <Modal onClose={() => setShowStatusModal(false)} title="Change Customer Status">
-          <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>New Status</label>
+        <Dialog
+          title="Change customer status"
+          onClose={() => {
+            if (!isSaving) setShowStatusModal(false);
+          }}
+        >
+          <label
+            htmlFor="customer-new-status"
+            className="block text-sm mb-1.5"
+            style={{ color: 'var(--rm-text-secondary)' }}
+          >
+            New status
+          </label>
           <select
+            id="customer-new-status"
             value={newStatus}
             onChange={e => setNewStatus(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-            style={{ backgroundColor: 'var(--rm-input)', border: '1px solid var(--rm-border)', color: 'var(--rm-text)' }}
+            className="w-full rounded-xl px-4 py-2.5 text-sm"
+            style={{
+              backgroundColor: 'var(--rm-input)',
+              border: '1px solid var(--rm-border)',
+              color: 'var(--rm-text)',
+            }}
           >
+            <option value="">Select a status</option>
             {CUSTOMER_STATUSES.map(s => (
-              <option key={s.value} value={s.value}>{s.label}</option>
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
             ))}
           </select>
+
+          {statusError && (
+            <p
+              role="alert"
+              className="mt-4 rounded-2xl px-5 py-4 text-sm"
+              style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--rm-text)' }}
+            >
+              {statusError}
+            </p>
+          )}
+
           <div className="mt-6 flex justify-end gap-3">
-            <HeaderButton onClick={() => setShowStatusModal(false)}>Cancel</HeaderButton>
+            <SecondaryButton onClick={() => setShowStatusModal(false)} disabled={isSaving}>
+              Cancel
+            </SecondaryButton>
             <button
+              type="button"
               onClick={handleStatusChange}
               disabled={isSaving}
-              className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: 'var(--rm-accent)' }}
             >
-              {isSaving ? 'Updating…' : 'Update Status'}
+              {isSaving ? 'Updating…' : 'Update status'}
             </button>
           </div>
-        </Modal>
+        </Dialog>
       )}
 
-      {/* Delete Modal */}
+      {/* ══ Delete dialog ══ */}
       {showDeleteModal && (
-        <Modal onClose={() => setShowDeleteModal(false)} title="Delete Customer">
-          <p className="mb-4 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>How would you like to remove this customer?</p>
-          <div className="space-y-3">
-            {(['soft', 'hard'] as const).map(t => (
-              <label
-                key={t}
-                className="flex cursor-pointer items-start gap-3 rounded-lg p-4"
-                style={{
-                  border: `2px solid ${deleteType === t ? (t === 'hard' ? '#ef4444' : 'var(--rm-accent)') : 'var(--rm-border)'}`,
-                  backgroundColor: deleteType === t ? 'var(--rm-card-hover)' : 'transparent',
-                }}
-              >
-                <input type="radio" name="deleteType" checked={deleteType === t} onChange={() => setDeleteType(t)} className="mt-1" />
-                <div>
-                  <p className="font-medium" style={{ color: t === 'hard' ? '#ef4444' : 'var(--rm-text)' }}>
-                    {t === 'hard' ? 'Permanent Delete' : 'Deactivate (Soft Delete)'}
-                  </p>
-                  <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                    {t === 'hard' ? 'Permanently remove all customer data. This cannot be undone!' : 'Mark customer as inactive. Can be restored later.'}
-                  </p>
-                </div>
-              </label>
-            ))}
-          </div>
+        <Dialog
+          title="Remove customer"
+          onClose={() => {
+            if (!isSaving) setShowDeleteModal(false);
+          }}
+        >
+          <fieldset>
+            <legend className="text-sm mb-3" style={{ color: 'var(--rm-text-secondary)' }}>
+              How should this customer be removed?
+            </legend>
+            <div className="space-y-3">
+              {(
+                [
+                  {
+                    value: 'soft' as const,
+                    title: 'Deactivate (recoverable)',
+                    body: 'Marks the customer inactive. The record can be restored later.',
+                  },
+                  {
+                    value: 'hard' as const,
+                    title: 'Delete permanently',
+                    body: 'Removes the customer record for good. This cannot be undone.',
+                  },
+                ]
+              ).map(opt => (
+                <label
+                  key={opt.value}
+                  className="flex cursor-pointer items-start gap-3 rounded-2xl px-5 py-4"
+                  style={{
+                    backgroundColor:
+                      deleteType === opt.value ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="customer-delete-type"
+                    value={opt.value}
+                    checked={deleteType === opt.value}
+                    onChange={() => setDeleteType(opt.value)}
+                    className="mt-1"
+                    style={{ accentColor: 'var(--rm-accent)' }}
+                  />
+                  <span>
+                    <span className="block text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {opt.title}
+                    </span>
+                    <span className="block text-sm mt-0.5" style={{ color: 'var(--rm-text-muted)' }}>
+                      {opt.body}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {deleteError && (
+            <p
+              role="alert"
+              className="mt-4 rounded-2xl px-5 py-4 text-sm"
+              style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--rm-text)' }}
+            >
+              {deleteError}
+            </p>
+          )}
+
           <div className="mt-6 flex justify-end gap-3">
-            <HeaderButton onClick={() => setShowDeleteModal(false)}>Cancel</HeaderButton>
+            <SecondaryButton onClick={() => setShowDeleteModal(false)} disabled={isSaving}>
+              Keep customer
+            </SecondaryButton>
             <button
+              type="button"
               onClick={handleDelete}
               disabled={isSaving}
-              className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              style={{ backgroundColor: deleteType === 'hard' ? '#ef4444' : 'var(--rm-accent)' }}
+              className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: 'rgba(220,38,38,1)' }}
             >
-              {isSaving ? 'Processing…' : deleteType === 'hard' ? 'Permanently Delete' : 'Deactivate'}
+              {isSaving
+                ? 'Working…'
+                : deleteType === 'hard'
+                  ? 'Delete permanently'
+                  : 'Deactivate customer'}
             </button>
           </div>
-        </Modal>
+        </Dialog>
       )}
     </div>
   );
 }
 
 // ============================================================================
-// Content builders
+// Copy builders — describe only what the loaded records support
 // ============================================================================
 
 function buildSummary(
@@ -1374,39 +1846,57 @@ function buildSummary(
   parts.push(`${name} has been a ${formatEnum(c.customerType).toLowerCase()} customer${since}.`);
   if (m.products > 0) {
     parts.push(
-      `The relationship holds ${m.products} active product${m.products > 1 ? 's' : ''}${m.exposure > 0 ? ` with total exposure of ${sharedFormatCurrency(m.exposure)}` : ''}${m.deposits > 0 ? ` and deposits of ${sharedFormatCurrency(m.deposits)}` : ''}.`
+      `The relationship holds ${m.products} active product${m.products > 1 ? 's' : ''}${m.exposure > 0 ? ` with total exposure of ${formatCurrency(m.exposure)}` : ''}${m.deposits > 0 ? ` and deposits of ${formatCurrency(m.deposits)}` : ''}.`
     );
   } else {
-    parts.push('No active products are currently booked for this customer.');
+    parts.push('No products are currently active for this customer.');
   }
   parts.push(
-    `Risk rating is ${c.riskRating ? formatEnum(c.riskRating) : 'not yet assigned'} and KYC status is ${c.kycStatus ? formatEnum(c.kycStatus).toLowerCase() : 'not started'}.`
+    `The risk rating is ${c.riskRating ? formatEnum(c.riskRating).toLowerCase() : 'not yet assigned'} and the KYC status is ${c.kycStatus ? formatEnum(c.kycStatus).toLowerCase() : 'not started'}.`
   );
   if (m.openApps > 0)
-    parts.push(`${m.openApps} application${m.openApps > 1 ? 's are' : ' is'} currently in progress.`);
+    parts.push(
+      `${m.openApps} application${m.openApps > 1 ? 's are' : ' is'} currently in progress.`
+    );
   return parts.join(' ');
 }
 
 function buildOpportunity(
   c: Customer,
-  m: { deposits: number; exposure: number; products: number; openApps: number }
+  m: { deposits: number; exposure: number; products: number }
 ): string {
-  if (m.deposits > 0 && m.exposure === 0)
-    return `Strong deposit base with no active lending — a good candidate for cross-sell of credit or working-capital facilities.`;
-  if (m.exposure > 0 && m.deposits === 0)
-    return `Active borrower with no deposit relationship — consider promoting current/savings accounts to deepen the relationship.`;
   if (m.products === 0)
-    return `No products booked yet. Prioritise onboarding and opening an initial account to activate the relationship.`;
+    return 'No products are booked yet. Onboarding and opening an initial account would activate this relationship.';
+  if (m.deposits > 0 && m.exposure === 0)
+    return 'There is a deposit base with no active lending, so credit or working-capital facilities could be explored.';
+  if (m.exposure > 0 && m.deposits === 0)
+    return 'This is an active borrower with no deposit relationship, so current or savings accounts could deepen it.';
   if (c.riskRating?.toUpperCase() === 'LOW')
-    return `Low-risk profile with an established relationship — well positioned for premium product offers and limit increases.`;
-  return `Balanced relationship across deposits and lending. Monitor for periodic review and identify cross-sell based on recent activity.`;
+    return 'A low risk rating with an established relationship suits premium product offers or limit increases.';
+  return 'The relationship is balanced across deposits and lending. Monitor it for the next periodic review.';
 }
 
 // ============================================================================
-// Sub-components
+// Presentational components
 // ============================================================================
 
-function HeaderButton({
+function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium whitespace-nowrap"
+      style={{ backgroundColor: TONE_BG[tone], color: 'var(--rm-text)' }}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full shrink-0"
+        style={{ backgroundColor: TONE_DOT[tone] }}
+        aria-hidden="true"
+      />
+      {children}
+    </span>
+  );
+}
+
+function SecondaryButton({
   children,
   onClick,
   disabled,
@@ -1417,110 +1907,140 @@ function HeaderButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
-      style={{ color: 'var(--rm-text-secondary)', border: '1px solid var(--rm-border)', backgroundColor: 'var(--rm-card)' }}
+      className="rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+      style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
     >
       {children}
     </button>
   );
 }
 
-function InfoItem({ label, value, color }: { label: string; value: string; color?: string }) {
+function Panel({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>{label}</p>
-      <p className="mt-0.5 text-sm font-medium" style={{ color: color || 'var(--rm-text)' }}>{value}</p>
-    </div>
-  );
-}
-
-function KpiCard({ label, value, color, icon }: { label: string; value: string; color: string; icon: React.ReactNode }) {
-  return (
-    <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: `${color}1f`, color }}>{icon}</span>
-      <p className="mt-3 text-xl font-bold tabular-nums" style={{ color: 'var(--rm-text)' }}>{value}</p>
-      <p className="mt-0.5 text-xs font-medium" style={{ color: 'var(--rm-text-muted)' }}>{label}</p>
-    </div>
-  );
-}
-
-function Panel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl p-5" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
+    <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+          {title}
+        </h2>
+        {action}
+      </div>
       {children}
-    </div>
+    </section>
   );
 }
 
-function PanelHeader({ title, icon, beta }: { title: string; icon?: React.ReactNode; beta?: boolean }) {
+function Th({ children, align = 'left' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
   return (
-    <div className="flex items-center gap-2">
-      {icon && (
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}>{icon}</span>
-      )}
-      <h3 className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>{title}</h3>
-      {beta && (
-        <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}>BETA</span>
-      )}
-    </div>
-  );
-}
-
-function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <th className={`py-2 pr-4 text-left text-[11px] font-semibold uppercase tracking-wide ${className}`} style={{ color: 'var(--rm-text-muted)' }}>
+    <th
+      scope="col"
+      className={`px-5 py-3.5 text-sm font-medium whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}
+      style={{ color: 'var(--rm-text-muted)' }}
+    >
       {children}
     </th>
   );
 }
 
-function Badge({ children, color }: { children: React.ReactNode; color: string }) {
+function EmptyRow({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${color}22`, color }}>
+    <p className="mt-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
       {children}
-    </span>
+    </p>
   );
 }
 
-function EmptyRow({ children }: { children: React.ReactNode }) {
-  return <p className="mt-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>{children}</p>;
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>{label}</p>
-      <p className="mt-1 text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>{value}</p>
+      <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+        {value}
+      </dd>
     </div>
   );
 }
 
-function SidebarRow({ label, value, color }: { label: string; value: string; color: string }) {
+function ReadOnlyFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between text-sm">
-      <span style={{ color: 'var(--rm-text-secondary)' }}>{label}</span>
-      <Badge color={color}>{value}</Badge>
+    <div>
+      <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {label}
+      </dt>
+      <dd className="mt-1 text-base" style={{ color: 'var(--rm-text)' }}>
+        {value}
+      </dd>
     </div>
   );
 }
 
-function ContactRow({ icon, value }: { icon: React.ReactNode; value: string }) {
+function Figure({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span style={{ color: 'var(--rm-text-muted)' }}>{icon}</span>
-      <span className="truncate" style={{ color: 'var(--rm-text-secondary)' }}>{value}</span>
+    <div className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-card)' }}>
+      <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {label}
+      </p>
+      <p
+        className="mt-1.5 text-xl font-semibold tabular-nums"
+        style={{ color: 'var(--rm-text)' }}
+      >
+        {value}
+      </p>
+      <p className="text-xs mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+        {hint}
+      </p>
+    </div>
+  );
+}
+
+function ContactRow({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 shrink-0" style={{ color: 'var(--rm-text-muted)' }} aria-hidden="true">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {label}
+        </dt>
+        <dd className="text-base truncate" style={{ color: 'var(--rm-text)' }}>
+          {value || '—'}
+        </dd>
+      </div>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Panel>
-      <h3 className="mb-4 text-base font-semibold" style={{ color: 'var(--rm-text)' }}>{title}</h3>
-      <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
-    </Panel>
+    <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+      <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+        {title}
+      </h2>
+      <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+        {children}
+      </dl>
+    </section>
   );
 }
 
@@ -1530,134 +2050,201 @@ type FieldProps = {
   c: Customer;
   e: Partial<Customer>;
   ed: boolean;
+  err: Record<string, string>;
   on: (field: keyof Customer, value: string | number | null) => void;
   type?: string;
+  required?: boolean;
   options?: { value: string; label: string }[];
   fmt?: (v: string | number | undefined) => string;
 };
 
-function Field({ label, k, c, e, ed, on, type = 'text', options, fmt }: FieldProps) {
+function Field({
+  label,
+  k,
+  c,
+  e,
+  ed,
+  err,
+  on,
+  type = 'text',
+  required,
+  options,
+  fmt,
+}: FieldProps) {
+  const id = `customer-field-${String(k)}`;
+  const errorId = `${id}-error`;
+  const isRequired = required ?? REQUIRED_FIELDS.includes(k);
   const raw = (e[k] ?? c[k]) as string | number | undefined;
-  const inputStyle = {
+  const message = err[String(k)];
+
+  const inputStyle: React.CSSProperties = {
     backgroundColor: 'var(--rm-input)',
-    border: '1px solid var(--rm-border)',
+    border: `1px solid ${message ? 'rgba(239,68,68,0.6)' : 'var(--rm-border)'}`,
     color: 'var(--rm-text)',
-  } as const;
+  };
 
   let display: string;
-  if (options) display = options.find(o => o.value === c[k])?.label || (c[k] ? String(c[k]) : 'N/A');
+  if (options)
+    display = options.find(o => o.value === c[k])?.label || (c[k] ? formatEnum(String(c[k])) : '—');
   else if (fmt) display = fmt(c[k] as string | number | undefined);
-  else display = c[k] != null && c[k] !== '' ? String(c[k]) : 'N/A';
+  else display = c[k] != null && c[k] !== '' ? String(c[k]) : '—';
 
   return (
     <div>
-      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>{label}</label>
-      {ed ? (
-        options ? (
-          <select value={(raw as string) || ''} onChange={ev => on(k, ev.target.value)} className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={inputStyle}>
-            <option value="">Select</option>
-            {options.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
-          </select>
+      <dt className="text-sm mb-1.5" style={{ color: 'var(--rm-text-muted)' }}>
+        {ed ? (
+          <label htmlFor={id}>
+            {label}
+            {isRequired && (
+              <>
+                <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+                  {' '}
+                  *
+                </span>
+                <span className="sr-only"> (required)</span>
+              </>
+            )}
+          </label>
         ) : (
-          <input
-            type={type}
-            value={(raw as string | number) ?? ''}
-            onChange={ev => on(k, type === 'number' ? (ev.target.value === '' ? null : parseFloat(ev.target.value)) : ev.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-            style={inputStyle}
-          />
-        )
-      ) : (
-        <p className="text-sm" style={{ color: 'var(--rm-text)' }}>{display}</p>
-      )}
+          label
+        )}
+      </dt>
+      <dd>
+        {ed ? (
+          <>
+            {options ? (
+              <select
+                id={id}
+                value={(raw as string) || ''}
+                onChange={ev => on(k, ev.target.value)}
+                required={isRequired}
+                aria-required={isRequired || undefined}
+                aria-invalid={message ? true : undefined}
+                aria-describedby={message ? errorId : undefined}
+                className="w-full rounded-xl px-4 py-2.5 text-sm"
+                style={inputStyle}
+              >
+                <option value="">Select</option>
+                {options.map(o => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={id}
+                type={type}
+                value={(raw as string | number) ?? ''}
+                onChange={ev =>
+                  on(
+                    k,
+                    type === 'number'
+                      ? ev.target.value === ''
+                        ? null
+                        : parseFloat(ev.target.value)
+                      : ev.target.value
+                  )
+                }
+                required={isRequired}
+                aria-required={isRequired || undefined}
+                aria-invalid={message ? true : undefined}
+                aria-describedby={message ? errorId : undefined}
+                className="w-full rounded-xl px-4 py-2.5 text-sm"
+                style={inputStyle}
+              />
+            )}
+            {message && (
+              <p id={errorId} role="alert" className="text-xs mt-1.5 text-red-700 dark:text-red-300">
+                {message}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-base" style={{ color: 'var(--rm-text)' }}>
+            {display}
+          </p>
+        )}
+      </dd>
     </div>
   );
 }
 
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--rm-text-muted)' }}>{label}</label>
-      <p className="text-sm" style={{ color: 'var(--rm-text)' }}>{value}</p>
-    </div>
-  );
-}
+/** Accessible modal: labelled, escape-to-close, focus moved in on open. */
+function Dialog({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = `dialog-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(2,6,23,0.55)' }}
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-md rounded-2xl p-6"
-        style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="w-full max-w-md rounded-3xl p-7"
+        style={{ backgroundColor: 'var(--rm-card)' }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="mb-4 text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>{title}</h2>
+        <h2
+          id={titleId}
+          className="mb-4 text-xl font-semibold tracking-tight"
+          style={{ color: 'var(--rm-text)' }}
+        >
+          {title}
+        </h2>
         {children}
       </div>
     </div>
   );
 }
 
-function HealthDonut({ score, color }: { score: number; color: string }) {
-  const size = 96;
-  const stroke = 10;
-  const radius = (size - stroke) / 2;
-  const circ = 2 * Math.PI * radius;
-  const filled = (Math.min(100, score) / 100) * circ;
+// ============================================================================
+// Icons (decorative)
+// ============================================================================
+
+function MailIcon() {
   return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--rm-card-hover)" strokeWidth={stroke} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={stroke}
-          strokeDasharray={`${filled} ${circ - filled}`}
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold tabular-nums" style={{ color: 'var(--rm-text)' }}>{score}</span>
-        <span className="text-[10px]" style={{ color }}>/ 100</span>
-      </div>
-    </div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 7-10 5L2 7" />
+    </svg>
   );
 }
-
-// ============================================================================
-// Icons
-// ============================================================================
-
-function VaultIcon() {
-  return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="12" cy="12" r="3" /><path d="M12 9v-1M12 16v-1M15 12h1M8 12H7" /></svg>);
-}
-function CoinsIcon() {
-  return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="8" r="6" /><path d="M18.09 10.37A6 6 0 1 1 10.34 18M7 6h1v4M16.71 13.88l.7.71-2.82 2.82" /></svg>);
-}
-function GridIcon() {
-  return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>);
-}
-function DocIcon() {
-  return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></svg>);
-}
-function ChartIcon() {
-  return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18" /><path d="m7 14 3-3 3 3 5-5" /></svg>);
-}
-function ShieldIcon() {
-  return (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>);
-}
-function SparkIcon() {
-  return (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /><path d="M12 8a4 4 0 0 0 4 4 4 4 0 0 0-4 4 4 4 0 0 0-4-4 4 4 0 0 0 4-4z" /></svg>);
-}
-function MailIcon() {
-  return (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 5L2 7" /></svg>);
-}
 function PhoneIcon() {
-  return (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" /></svg>);
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
 }
 function PinIcon() {
-  return (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></svg>);
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
 }

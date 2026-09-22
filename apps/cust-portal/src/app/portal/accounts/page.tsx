@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   ACCOUNTS,
@@ -10,10 +10,18 @@ import {
   type BankAccount,
   type Transaction,
 } from '@/lib/banking-data';
-import { Sparkline, BalanceAmount } from '@/components/banking/BankCard';
+import { Sparkline } from '@/components/banking/BankCard';
 
 function fmt(n: number, cur = 'EUR') {
-  return new Intl.NumberFormat('en-IE', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('en-IE', {
+    style: 'currency',
+    currency: cur,
+    minimumFractionDigits: 2,
+  }).format(n);
+}
+
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 const TYPE_LABEL: Record<BankAccount['type'], string> = {
@@ -23,318 +31,478 @@ const TYPE_LABEL: Record<BankAccount['type'], string> = {
   VAULT: 'Vault',
 };
 
-const SAVINGS_GOALS = [
-  { name: 'Winter Holiday', icon: '🏖️', saved: 2400, target: 4000, color: '#7f2b7b' },
-  { name: 'New Car', icon: '🚗', saved: 7850, target: 15000, color: '#ae3fa9' },
-  { name: 'Home Renovation', icon: '🏠', saved: 3260, target: 10000, color: '#ec4899' },
-];
+/* Stable fallbacks so derived memos don't recompute while data is loading. */
+const NO_ACCOUNTS: BankAccount[] = [];
 
-const LINKED_ACCOUNTS = [
-  { name: 'PayPal', sub: 'sarah.mitchell@email.com', balance: 2143.75, icon: '💳' },
-  { name: 'Monzo Bank', sub: '04-00-04  |  98765432', balance: 1246.34, icon: '🏦' },
-  { name: 'Interactive Investor', sub: 'GIA  |  12X45678', balance: 18732.10, icon: '📈' },
-];
+/* ──────────────────────────────────────────────────────────────────
+ * Data resolution
+ *
+ * Every figure on this page is derived from the banking dataset — nothing is
+ * asserted that the data cannot back up. The dataset is resolved through an
+ * effect so the loading skeleton and the failure/retry path are real states
+ * rather than decoration.
+ * ────────────────────────────────────────────────────────────────── */
+
+type LoadState = 'loading' | 'ready' | 'error';
+
+interface AccountsData {
+  accounts: BankAccount[];
+  transactions: Transaction[];
+  total: number;
+  available: number;
+  goal: ReturnType<typeof savingsGoal>;
+}
+
+function resolveAccounts(): AccountsData {
+  const accounts = ACCOUNTS;
+  if (!accounts.length) throw new Error('No accounts returned');
+  return {
+    accounts,
+    transactions: TRANSACTIONS,
+    total: totalBalanceEUR(),
+    available: accounts.reduce((sum, a) => sum + a.available, 0),
+    goal: savingsGoal(),
+  };
+}
+
+function useAccountsData() {
+  const [data, setData] = useState<AccountsData | null>(null);
+  const [state, setState] = useState<LoadState>('loading');
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setState('loading');
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+      try {
+        setData(resolveAccounts());
+        setState('ready');
+      } catch {
+        setData(null);
+        setState('error');
+      }
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [attempt]);
+
+  const retry = useCallback(() => setAttempt(a => a + 1), []);
+  return { data, state, retry };
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * Shared states
+ * ────────────────────────────────────────────────────────────────── */
+
+function ListSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="divide-token">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-5 py-4">
+          <div className="skeleton h-11 w-11 shrink-0 rounded-xl" />
+          <div className="flex-1 space-y-2">
+            <div className="skeleton h-4 w-1/3" />
+            <div className="skeleton h-3.5 w-1/2" />
+          </div>
+          <div className="skeleton h-4 w-20 shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LoadError({ onRetry, what }: { onRetry: () => void; what: string }) {
+  return (
+    <div className="p-5">
+      <div className="empty-state">
+        <div className="empty-state-icon">
+          <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        </div>
+        <p className="empty-state-title">We couldn&apos;t load {what}</p>
+        <p className="empty-state-text">Something went wrong while reading your account data. Nothing has been changed.</p>
+        <button type="button" onClick={onRetry} className="btn btn-primary btn-sm mt-4">
+          <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
 
 export default function AccountsPage() {
-  const [hide, setHide] = useState(false);
-  const [selectedId, setSelectedId] = useState(ACCOUNTS[0].id);
-  const total = useMemo(() => totalBalanceEUR(), []);
+  const [hideBalances, setHideBalances] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { data, state, retry } = useAccountsData();
 
-  const selected = ACCOUNTS.find(a => a.id === selectedId) ?? ACCOUNTS[0];
-  const recentTxns = useMemo(
-    () =>
-      TRANSACTIONS.filter(t => t.accountId === selectedId)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 6),
-    [selectedId]
+  const accounts = data?.accounts ?? NO_ACCOUNTS;
+  const selected = useMemo(
+    () => accounts.find(a => a.id === selectedId) ?? accounts[0],
+    [accounts, selectedId]
   );
 
-  function txDateShort(iso: string) {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' }).toUpperCase();
+  const recentTxns = useMemo(() => {
+    if (!data || !selected) return [];
+    return data.transactions
+      .filter(t => t.accountId === selected.id)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 6);
+  }, [data, selected]);
+
+  const goal = data?.goal;
+  const goalPct = goal && goal.target > 0 ? Math.round((goal.saved / goal.target) * 100) : 0;
+  const mask = (value: string) => (hideBalances ? '••••••' : value);
+
+  /* A single, page-level failure state — one honest message and one retry,
+     rather than the same error repeated inside every panel. */
+  if (state === 'error') {
+    return (
+      <div className="space-y-6">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">My accounts</h1>
+            <p className="page-subtitle">
+              Balances, recent activity and payment details for every account you hold with us.
+            </p>
+          </div>
+        </div>
+        <div className="panel">
+          <LoadError onRetry={retry} what="your accounts" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>My Accounts</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Last login: Today, 07:32 AM</p>
+          <h1 className="page-title">My accounts</h1>
+          <p className="page-subtitle">
+            Balances, recent activity and payment details for every account you hold with us.
+          </p>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-xl bg-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#5e1f5b]">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+        <Link href="/portal/products" className="btn btn-primary shrink-0">
+          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          Open new account
-        </button>
+          Open a new account
+        </Link>
       </div>
 
-      {/* ── Stats row ── */}
+      {/* ── Summary tiles ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {[
-          {
-            label: 'Total deposits',
-            value: fmt(total),
-            sub: <span className="text-emerald-500 font-semibold text-xs">▲ €2,735.40 (1.96%) vs last month</span>,
-          },
-          {
-            label: 'Available cash',
-            value: fmt(ACCOUNTS.reduce((s, a) => a.type !== 'VAULT' ? s + a.balance : s, 0)),
-            sub: <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Across all current accounts</span>,
-          },
-          {
-            label: 'Linked accounts',
-            value: '5',
-            sub: <span className="text-xs" style={{ color: 'var(--text-muted)' }}>3 external · 2 internal</span>,
-          },
-        ].map(stat => (
-          <div
-            key={stat.label}
-            className="rounded-2xl p-5"
-            style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}
-          >
-            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{stat.label}</p>
-            <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{hide ? '••••••' : stat.value}</p>
-            <div className="mt-1">{stat.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Two-column layout ── */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
-
-        {/* Left: account list */}
-        <div className="xl:col-span-2 rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-          <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Your accounts</h2>
-            <button
-              onClick={() => setHide(v => !v)}
-              className="p-1.5 rounded-lg transition-colors"
-              style={{ color: 'var(--text-muted)', backgroundColor: 'var(--surface-input)' }}
-              aria-label="Toggle balance"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                {hide
-                  ? <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" />
-                  : <>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </>
-                }
-              </svg>
-            </button>
-          </div>
-
-          <div className="divide-y" style={{ '--tw-divide-color': 'var(--surface-border)' } as React.CSSProperties}>
-            {ACCOUNTS.map(acc => {
-              const isSelected = acc.id === selectedId;
-              return (
-                <button
-                  key={acc.id}
-                  onClick={() => setSelectedId(acc.id)}
-                  className="w-full text-left px-5 py-4 transition-all duration-200 relative"
-                  style={{
-                    backgroundColor: isSelected ? 'rgba(127,43,123,0.08)' : undefined,
-                    borderLeft: isSelected ? '3px solid #7f2b7b' : '3px solid transparent',
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white text-lg shadow"
-                      style={{ background: acc.gradient }}
-                    >
-                      {acc.glyph}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{acc.name}</p>
-                        <p className={`text-sm font-bold ml-2 shrink-0 ${acc.type === 'VAULT' ? 'text-amber-500' : ''}`}
-                          style={acc.type !== 'VAULT' ? { color: 'var(--text-primary)' } : undefined}>
-                          {hide ? '••••' : fmt(acc.balance, acc.currency)}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <p className="text-xs font-mono truncate" style={{ color: 'var(--text-muted)' }}>
-                          {acc.sortCode} | {acc.accountNumber}
-                        </p>
-                        <div className="ml-2 shrink-0">
-                          <Sparkline data={acc.spark} width={60} height={18} strokeWidth={1.5} fill={false} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {acc.spark && acc.spark[acc.spark.length - 1] > acc.spark[0] && (
-                    <span className="absolute top-2 right-3 text-[9px] font-bold text-emerald-500">▲ {((acc.spark[acc.spark.length-1] - acc.spark[0]) / acc.spark[0] * 100).toFixed(2)}%</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="p-4" style={{ borderTop: '1px solid var(--surface-border)' }}>
-            <button
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-colors"
-              style={{ color: 'var(--text-secondary)', border: '1px dashed var(--surface-border)' }}
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Add account
-            </button>
-          </div>
+        <div className="stat-tile">
+          <p className="stat-label">Total balance</p>
+          {state === 'loading' ? (
+            <div className="skeleton mt-2 h-7 w-32" />
+          ) : !data ? (
+            <p className="stat-value">—</p>
+          ) : (
+            <>
+              <p className="stat-value">{mask(fmt(data.total))}</p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                Across {data.accounts.length} accounts
+              </p>
+            </>
+          )}
         </div>
 
-        {/* Right: account detail */}
-        <div className="xl:col-span-3 space-y-4">
-          {/* Account header */}
-          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl text-white text-lg" style={{ background: selected.gradient }}>
-                  {selected.glyph}
-                </span>
-                <div>
-                  <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{selected.name}</h2>
-                  <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
-                    {selected.sortCode} | {selected.accountNumber}
-                  </p>
-                </div>
+        <div className="stat-tile">
+          <p className="stat-label">Available to spend</p>
+          {state === 'loading' ? (
+            <div className="skeleton mt-2 h-7 w-32" />
+          ) : !data ? (
+            <p className="stat-value">—</p>
+          ) : (
+            <>
+              <p className="stat-value">{mask(fmt(data.available))}</p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                After pending holds
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="stat-tile">
+          <p className="stat-label">{goal?.label ?? 'Savings'} goal</p>
+          {state === 'loading' ? (
+            <div className="skeleton mt-2 h-7 w-24" />
+          ) : !goal ? (
+            <p className="stat-value">—</p>
+          ) : (
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={goal.target}
+              aria-valuenow={goal.saved}
+              aria-label={`${goal.label}: ${mask(fmt(goal.saved))} saved of ${mask(fmt(goal.target))}`}
+            >
+              <p className="stat-value">{goalPct}%</p>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--surface-input)' }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${Math.min(100, goalPct)}%`, backgroundColor: 'var(--brand)' }}
+                />
               </div>
-              <div className="flex items-center gap-2">
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white bg-[#7f2b7b] hover:bg-[#6b2468] transition-colors">
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                  </svg>
-                  Move money
-                </button>
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors" style={{ color: 'var(--text-secondary)', border: '1px solid var(--surface-border)' }}>
-                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v1a3 3 0 003 3h0a3 3 0 003-3v-1m-6 0h6M9 17H7a2 2 0 01-2-2V5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2h-2m-6 0v-4a1 1 0 011-1h4a1 1 0 011 1v4" />
-                  </svg>
-                  View statement
-                </button>
-                <button className="p-2 rounded-xl transition-colors" style={{ color: 'var(--text-secondary)', border: '1px solid var(--surface-border)' }}>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                  </svg>
-                </button>
-              </div>
+              <p className="mt-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                {mask(fmt(goal.saved, goal.currency))} of {mask(fmt(goal.target, goal.currency))} saved
+              </p>
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Screen-reader announcement for the balance visibility toggle */}
+      <p className="sr-only" aria-live="polite">
+        {hideBalances ? 'Balances hidden' : 'Balances shown'}
+      </p>
+
+      {/* ── Two-column layout ── */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+        {/* Left: account list */}
+        <div className="panel xl:col-span-2">
+          <div className="panel-header">
+            <h2 className="panel-title">Your accounts</h2>
+            <button
+              type="button"
+              onClick={() => setHideBalances(v => !v)}
+              className="icon-btn"
+              aria-pressed={hideBalances}
+              aria-label={hideBalances ? 'Show balances' : 'Hide balances'}
+            >
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                {hideBalances ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" />
+                ) : (
+                  <>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </>
+                )}
+              </svg>
+            </button>
           </div>
 
-          {/* Recent activity */}
-          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Recent account activity</h3>
-              <Link href="/portal/transactions" className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">View all →</Link>
-            </div>
-            <div className="divide-y" style={{ '--tw-divide-color': 'var(--surface-border)' } as React.CSSProperties}>
-              {recentTxns.length > 0 ? recentTxns.map((t: Transaction) => (
-                <div key={t.id} className="flex items-center gap-3 px-5 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors">
-                  <div className="flex flex-col items-center w-8 shrink-0">
-                    <span className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>
-                      {txDateShort(t.date).split(' ')[1]}
-                    </span>
-                    <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
-                      {txDateShort(t.date).split(' ')[0]}
-                    </span>
-                  </div>
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm" style={{ backgroundColor: 'var(--surface-input)' }}>
-                    {t.glyph}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{t.merchant}</p>
-                    <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{t.category}</p>
-                  </div>
-                  <p className={`text-sm font-bold shrink-0 ${t.direction === 'IN' ? 'text-emerald-500' : ''}`}
-                    style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}>
-                    {t.direction === 'IN' ? '+' : '−'}{fmt(t.amount)}
-                  </p>
+          {state === 'loading' ? (
+            <ListSkeleton rows={4} />
+          ) : accounts.length === 0 ? (
+            <div className="p-5">
+              <div className="empty-state">
+                <div className="empty-state-icon">
+                  <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+                  </svg>
                 </div>
-              )) : (
-                <div className="py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                  No transactions for this account yet
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Savings goals + Linked accounts side by side */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Savings goals */}
-            <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Savings goals</h3>
-                <button className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">View all →</button>
+                <p className="empty-state-title">No accounts yet</p>
+                <p className="empty-state-text">Once you open an account it will appear here with its balance and recent activity.</p>
+                <Link href="/portal/products" className="btn btn-primary btn-sm mt-4">Open a new account</Link>
               </div>
-              <div className="space-y-4">
-                {SAVINGS_GOALS.map(g => {
-                  const pct = Math.round((g.saved / g.target) * 100);
-                  return (
-                    <div key={g.name}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">{g.icon}</span>
-                          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{g.name}</span>
+            </div>
+          ) : (
+            <div className="divide-token">
+              {accounts.map(acc => {
+                const isSelected = selected?.id === acc.id;
+                return (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => setSelectedId(acc.id)}
+                    aria-pressed={isSelected}
+                    className="w-full px-5 py-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                    style={{
+                      backgroundColor: isSelected ? 'var(--brand-soft)' : undefined,
+                      borderLeft: `3px solid ${isSelected ? 'var(--brand)' : 'transparent'}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg text-white"
+                        style={{ background: acc.gradient }}
+                      >
+                        {acc.glyph}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                            {acc.name}
+                          </p>
+                          <p className="shrink-0 text-base font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                            {mask(fmt(acc.balance, acc.currency))}
+                          </p>
                         </div>
-                        <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{pct}%</span>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                            {TYPE_LABEL[acc.type]} · {acc.sortCode} · {acc.accountNumber}
+                          </p>
+                          <span aria-hidden="true" className="shrink-0">
+                            <Sparkline data={acc.spark} width={56} height={18} strokeWidth={1.5} fill={false} color="var(--brand)" />
+                          </span>
+                        </div>
                       </div>
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--surface-input)' }}>
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: g.color }} />
-                      </div>
-                      <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
-                        {fmt(g.saved)} of {fmt(g.target)}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right: selected account */}
+        <div className="space-y-6 xl:col-span-3">
+          {state === 'loading' ? (
+            <div className="panel">
+              <div className="panel-body space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="skeleton h-12 w-12 rounded-2xl" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-4 w-40" />
+                    <div className="skeleton h-3.5 w-28" />
+                  </div>
+                </div>
+                <div className="skeleton h-4 w-full" />
+                <div className="skeleton h-9 w-full" />
+              </div>
+            </div>
+          ) : selected ? (
+            <div className="panel">
+              <div className="panel-body space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl text-xl text-white"
+                      style={{ background: selected.gradient }}
+                    >
+                      {selected.glyph}
+                    </span>
+                    <div>
+                      <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {selected.name}
+                      </h2>
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {TYPE_LABEL[selected.type]}
                       </p>
                     </div>
-                  );
-                })}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Available</p>
+                    <p className="text-base font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                      {mask(fmt(selected.available, selected.currency))}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>IBAN</p>
+                  <p className="break-all font-mono text-base" style={{ color: 'var(--text-primary)' }}>
+                    {selected.iban}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 border-t pt-4" style={{ borderColor: 'var(--surface-border)' }}>
+                  <Link href="/portal/payments" className="btn btn-secondary btn-sm">
+                    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                    </svg>
+                    Move money
+                  </Link>
+                  <Link href={`/portal/accounts/${selected.id}`} className="btn btn-secondary btn-sm">
+                    View full account
+                  </Link>
+                  <Link href="/portal/documents" className="btn btn-ghost btn-sm">
+                    Statements
+                  </Link>
+                </div>
               </div>
-              <button className="mt-4 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold transition-colors" style={{ border: '1px dashed var(--surface-border)', color: 'var(--text-muted)' }}>
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Create a new goal
-              </button>
+            </div>
+          ) : null}
+
+          {/* Recent activity */}
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Recent activity</h2>
+              <Link href="/portal/transactions" className="link-arrow">
+                View all <span data-arrow aria-hidden="true">→</span>
+              </Link>
             </div>
 
-            {/* Linked accounts */}
-            <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Linked &amp; external</h3>
-                <button className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">Manage →</button>
+            {state === 'loading' ? (
+              <ListSkeleton rows={4} />
+            ) : recentTxns.length === 0 ? (
+              <div className="p-5">
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <p className="empty-state-title">No activity on this account</p>
+                  <p className="empty-state-text">
+                    Transactions will appear here as soon as money moves in or out of {selected?.name}.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-3">
-                {LINKED_ACCOUNTS.map(la => (
-                  <div key={la.name} className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base" style={{ backgroundColor: 'var(--surface-input)' }}>
-                      {la.icon}
+            ) : (
+              <div className="divide-token">
+                {recentTxns.map((t: Transaction) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base"
+                      style={{ backgroundColor: 'var(--surface-input)' }}
+                    >
+                      {t.glyph || '✨'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {t.merchant}
+                      </p>
+                      <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {t.category} · {shortDate(t.date)}
+                      </p>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{la.name}</p>
-                      <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{la.sub}</p>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={`text-base font-bold tabular-nums ${t.direction === 'IN' ? 'text-emerald-500' : ''}`}
+                        style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
+                      >
+                        {t.direction === 'IN' ? '+' : '−'}{mask(fmt(t.amount, t.currency))}
+                      </p>
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {t.direction === 'IN' ? 'Money in' : 'Money out'}
+                        {t.status === 'PENDING' ? ' · Pending' : ''}
+                      </p>
                     </div>
-                    <p className="text-xs font-bold shrink-0" style={{ color: 'var(--text-primary)' }}>{fmt(la.balance)}</p>
                   </div>
                 ))}
               </div>
-              <button className="mt-4 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold transition-colors" style={{ border: '1px dashed var(--surface-border)', color: 'var(--text-muted)' }}>
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Link an external account
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* FSCS notice */}
-      <div className="flex items-center gap-2 text-xs py-3 px-4 rounded-xl" style={{ color: 'var(--text-muted)', backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-        <svg className="h-4 w-4 shrink-0 text-[#7f2b7b]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <div className="panel flex items-start gap-3 p-4">
+        <svg aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" style={{ color: 'var(--brand-on-soft)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
         </svg>
-        Your deposits are protected by the Financial Services Compensation Scheme (FSCS).
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Your eligible deposits are protected by the Financial Services Compensation Scheme (FSCS).
+        </p>
       </div>
     </div>
   );

@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
+/* Public page — intentionally light themed; it renders outside the dashboard shell. */
+
 interface EnquiryForm {
   fullName: string;
   email: string;
@@ -15,7 +17,6 @@ interface EnquiryForm {
 }
 
 const COMPANY_SIZES = [
-  'Select company size',
   '1–50 employees',
   '51–200 employees',
   '201–1,000 employees',
@@ -24,318 +25,383 @@ const COMPANY_SIZES = [
 ];
 
 const INTERESTS = [
-  'Select area of interest',
-  'Loan Origination',
-  'Risk Analytics & Underwriting',
-  'KYC / AML Compliance',
-  'Product Management',
-  'Account Management',
-  'Full Platform Demo',
-  'API & Integration',
-  'Other',
+  'Loan origination',
+  'Risk analytics and underwriting',
+  'KYC / AML compliance',
+  'Product management',
+  'Account management',
+  'Full platform demo',
+  'API and integration',
+  'Something else',
+];
+
+const EMPTY_FORM: EnquiryForm = {
+  fullName: '',
+  email: '',
+  phone: '',
+  companyName: '',
+  jobTitle: '',
+  companySize: '',
+  interest: '',
+  message: '',
+};
+
+const BRAND_LOGO_PATH = 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6';
+
+const inputClass =
+  'w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-base text-slate-900 placeholder:text-slate-400';
+
+const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700';
+
+const HIGHLIGHTS = [
+  {
+    title: 'Guided walkthrough',
+    body: 'Tailored to your institution’s processes and priorities.',
+    path: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    title: 'No commitment',
+    body: 'Explore the platform with no obligation to proceed.',
+    path: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+  },
+  {
+    title: 'Product specialists',
+    body: 'Speak directly with the people who build the platform.',
+    path: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
+  },
 ];
 
 export default function EnquiryPage() {
-  const [form, setForm] = useState<EnquiryForm>({
-    fullName: '',
-    email: '',
-    phone: '',
-    companyName: '',
-    jobTitle: '',
-    companySize: '',
-    interest: '',
-    message: '',
-  });
+  const [form, setForm] = useState<EnquiryForm>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const updateField = (field: keyof EnquiryForm, value: string) => {
+    if (error) setError(null);
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
 
-    if (!form.fullName || !form.email || !form.companyName) {
-      setError('Please fill in all required fields.');
+    const missing = [
+      !form.fullName.trim() && 'full name',
+      !form.email.trim() && 'work email',
+      !form.companyName.trim() && 'company or institution',
+    ].filter(Boolean) as string[];
+
+    if (missing.length > 0) {
+      setError(`Add your ${missing.join(' and ')} so we know how to reach you.`);
       return;
     }
 
     try {
       setSubmitting(true);
-      // TODO: Wire to backend API when available
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      /* TODO: POST to the enquiry endpoint once it exists. This demo portal has no
+         submission backend yet, so the confirmation below says exactly that. */
+      await new Promise(resolve => setTimeout(resolve, 600));
       setSubmitted(true);
     } catch {
-      setError('Something went wrong. Please try again.');
+      setError('The enquiry could not be captured. Check your details and try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (submitted) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6">
-            <svg
-              className="w-8 h-8 text-emerald-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
+  const requiredMark = (
+    <>
+      <span className="text-red-500" aria-hidden="true">
+        {' '}
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
+
+  const siteHeader = (
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+      <nav aria-label="Main" className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <Link href="/" className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a3a7a]" aria-hidden="true">
+            <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d={BRAND_LOGO_PATH} />
             </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">
-            Thank you, {form.fullName.split(' ')[0]}!
-          </h1>
-          <p className="text-slate-600 mb-8">
-            We&apos;ve received your enquiry and our team will get back to you within 1 business day
-            to schedule your demo.
-          </p>
+          </span>
+          <span className="text-lg font-semibold tracking-tight text-slate-900">Rayva</span>
+          <span className="sr-only">— home</span>
+        </Link>
+        <div className="flex items-center gap-3">
           <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            href="/login"
+            className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:text-slate-900"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
-            </svg>
-            Back to Home
+            Sign in
+          </Link>
+          <Link
+            href="/register"
+            className="rounded-xl bg-[#1a3a7a] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#15306a]"
+          >
+            Create an account
           </Link>
         </div>
+      </nav>
+    </header>
+  );
+
+  const siteFooter = (
+    <footer className="bg-[#0a1e3d] text-white">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-12 sm:flex-row">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10" aria-hidden="true">
+            <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d={BRAND_LOGO_PATH} />
+            </svg>
+          </span>
+          <span className="text-sm font-semibold">Rayva</span>
+        </div>
+        <p className="text-sm text-slate-300">
+          &copy; {new Date().getFullYear()} Rajat Maheshwari. All rights reserved.
+        </p>
+      </div>
+    </footer>
+  );
+
+  /* Branch 1 — confirmation. Renders instead of the form, so only one <h1> exists at a time. */
+  if (submitted) {
+    const firstName = form.fullName.trim().split(' ')[0];
+    return (
+      <div className="flex min-h-screen flex-col bg-slate-50">
+        <a
+          href="#enquiry-main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-900"
+        >
+          Skip to main content
+        </a>
+        {siteHeader}
+        <main id="enquiry-main" className="flex flex-1 items-center justify-center px-4 pt-24 pb-16">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
+            <span
+              className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100"
+              aria-hidden="true"
+            >
+              <svg className="h-8 w-8 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+              Thanks{firstName ? `, ${firstName}` : ''} — your details are captured
+            </h1>
+            <p className="mt-3 text-base text-slate-600">
+              This demo portal records enquiries in the browser only; the submission endpoint is not
+              connected yet, so nothing has been sent to the Rayva team.
+            </p>
+            <dl className="mt-6 space-y-2 rounded-2xl bg-slate-50 px-5 py-4 text-left text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Company</dt>
+                <dd className="text-right font-medium text-slate-900">{form.companyName || '—'}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Email</dt>
+                <dd className="text-right font-medium text-slate-900">{form.email || '—'}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Interest</dt>
+                <dd className="text-right font-medium text-slate-900">{form.interest || '—'}</dd>
+              </div>
+            </dl>
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmitted(false);
+                  setForm(EMPTY_FORM);
+                }}
+                className="rounded-xl bg-[#1a3a7a] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#15306a]"
+              >
+                Submit another enquiry
+              </button>
+              <Link
+                href="/"
+                className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Back to the Rayva overview
+              </Link>
+            </div>
+          </div>
+        </main>
+        {siteFooter}
       </div>
     );
   }
 
+  /* Branch 2 — the enquiry form. */
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* ──── Nav ──── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/60">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#1a3a7a] to-[#3b82f6] flex items-center justify-center">
-              <svg
-                className="w-4 h-4 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                />
-              </svg>
-            </div>
-            <span className="text-lg font-bold text-slate-900 tracking-tight">Rayva</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-3 py-2"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/register"
-              className="text-sm font-semibold text-white bg-gradient-to-r from-[#1a3a7a] to-[#2563eb] px-5 py-2 rounded-xl hover:from-[#15306a] hover:to-[#1d4ed8] transition-all shadow-sm"
-            >
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="flex min-h-screen flex-col bg-slate-50">
+      <a
+        href="#enquiry-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-900"
+      >
+        Skip to main content
+      </a>
+      {siteHeader}
 
-      <div className="pt-16">
-        <div className="max-w-5xl mx-auto px-6 py-16 lg:py-24">
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 lg:gap-16">
-            {/* ──── Left: Info ──── */}
+      <main id="enquiry-main" className="flex-1 pt-16">
+        <div className="mx-auto max-w-5xl px-6 py-16 lg:py-24">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-5 lg:gap-16">
+            {/* ──── Context ──── */}
             <div className="lg:col-span-2">
               <Link
                 href="/"
-                className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors mb-8"
+                className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-600 transition-colors hover:text-slate-900"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                  />
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to Home
+                Back to the Rayva overview
               </Link>
-              <h1 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-4">
-                Schedule a Demo
+              <h1 className="mb-4 text-3xl font-semibold tracking-tight text-slate-900 lg:text-4xl">
+                Schedule a demo
               </h1>
-              <p className="text-lg text-slate-500 leading-relaxed mb-10">
-                See how Rayva can streamline your credit management operations. Our team will walk
-                you through a personalised demo.
+              <p className="mb-10 text-lg leading-relaxed text-slate-600">
+                See how Rayva handles loan origination, underwriting and portfolio management. Tell
+                us what you need and we&apos;ll prepare a walkthrough around it.
               </p>
 
-              <div className="space-y-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.8}
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">30-Minute Walkthrough</p>
-                    <p className="text-sm text-slate-500">
-                      Tailored to your institution&apos;s needs and priorities.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.8}
-                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">No Commitment</p>
-                    <p className="text-sm text-slate-500">
-                      Explore the platform with zero obligations.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.8}
-                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Expert Team</p>
-                    <p className="text-sm text-slate-500">
-                      Speak directly with our product specialists.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <ul className="space-y-6">
+                {HIGHLIGHTS.map(highlight => (
+                  <li key={highlight.title} className="flex items-start gap-4">
+                    <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700" aria-hidden="true">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d={highlight.path} />
+                      </svg>
+                    </span>
+                    <div>
+                      <p className="text-base font-semibold text-slate-900">{highlight.title}</p>
+                      <p className="mt-0.5 text-sm text-slate-600">{highlight.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
 
-            {/* ──── Right: Form ──── */}
+            {/* ──── Form ──── */}
             <div className="lg:col-span-3">
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-8">
-                <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+                <form onSubmit={handleSubmit} className="space-y-5" aria-describedby={error ? 'enquiry-error' : undefined}>
                   {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+                    <div
+                      id="enquiry-error"
+                      role="alert"
+                      className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                    >
                       {error}
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Full Name <span className="text-red-400">*</span>
+                      <label htmlFor="fullName" className={labelClass}>
+                        Full name{requiredMark}
                       </label>
                       <input
+                        id="fullName"
+                        name="fullName"
                         type="text"
-                        value={form.fullName}
-                        onChange={e => updateField('fullName', e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="John Smith"
                         required
+                        aria-required="true"
+                        autoComplete="name"
+                        value={form.fullName}
+                        onChange={event => updateField('fullName', event.target.value)}
+                        className={inputClass}
+                        placeholder="Jane Smith"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Work Email <span className="text-red-400">*</span>
+                      <label htmlFor="email" className={labelClass}>
+                        Work email{requiredMark}
                       </label>
                       <input
+                        id="email"
+                        name="email"
                         type="email"
-                        value={form.email}
-                        onChange={e => updateField('email', e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="john@company.com"
                         required
+                        aria-required="true"
+                        autoComplete="email"
+                        value={form.email}
+                        onChange={event => updateField('email', event.target.value)}
+                        className={inputClass}
+                        placeholder="jane@company.com"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Phone Number
+                      <label htmlFor="phone" className={labelClass}>
+                        Phone number <span className="font-normal text-slate-500">(optional)</span>
                       </label>
                       <input
+                        id="phone"
+                        name="phone"
                         type="tel"
+                        autoComplete="tel"
                         value={form.phone}
-                        onChange={e => updateField('phone', e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        onChange={event => updateField('phone', event.target.value)}
+                        className={inputClass}
                         placeholder="+353 1 234 5678"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Job Title
+                      <label htmlFor="jobTitle" className={labelClass}>
+                        Job title <span className="font-normal text-slate-500">(optional)</span>
                       </label>
                       <input
+                        id="jobTitle"
+                        name="jobTitle"
                         type="text"
+                        autoComplete="organization-title"
                         value={form.jobTitle}
-                        onChange={e => updateField('jobTitle', e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="Head of Credit"
+                        onChange={event => updateField('jobTitle', event.target.value)}
+                        className={inputClass}
+                        placeholder="Head of credit"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Company / Institution <span className="text-red-400">*</span>
+                      <label htmlFor="companyName" className={labelClass}>
+                        Company or institution{requiredMark}
                       </label>
                       <input
+                        id="companyName"
+                        name="companyName"
                         type="text"
-                        value={form.companyName}
-                        onChange={e => updateField('companyName', e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="Acme Bank"
                         required
+                        aria-required="true"
+                        autoComplete="organization"
+                        value={form.companyName}
+                        onChange={event => updateField('companyName', event.target.value)}
+                        className={inputClass}
+                        placeholder="Acme Bank"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                        Company Size
+                      <label htmlFor="companySize" className={labelClass}>
+                        Company size <span className="font-normal text-slate-500">(optional)</span>
                       </label>
                       <select
+                        id="companySize"
+                        name="companySize"
                         value={form.companySize}
-                        onChange={e => updateField('companySize', e.target.value)}
-                        className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-slate-700"
+                        onChange={event => updateField('companySize', event.target.value)}
+                        className={inputClass}
                       >
-                        {COMPANY_SIZES.map((size, i) => (
-                          <option key={size} value={i === 0 ? '' : size} disabled={i === 0}>
+                        <option value="">Select company size</option>
+                        {COMPANY_SIZES.map(size => (
+                          <option key={size} value={size}>
                             {size}
                           </option>
                         ))}
@@ -344,16 +410,19 @@ export default function EnquiryPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                      Area of Interest
+                    <label htmlFor="interest" className={labelClass}>
+                      Area of interest <span className="font-normal text-slate-500">(optional)</span>
                     </label>
                     <select
+                      id="interest"
+                      name="interest"
                       value={form.interest}
-                      onChange={e => updateField('interest', e.target.value)}
-                      className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-slate-700"
+                      onChange={event => updateField('interest', event.target.value)}
+                      className={inputClass}
                     >
-                      {INTERESTS.map((item, i) => (
-                        <option key={item} value={i === 0 ? '' : item} disabled={i === 0}>
+                      <option value="">Select an area of interest</option>
+                      {INTERESTS.map(item => (
+                        <option key={item} value={item}>
                           {item}
                         </option>
                       ))}
@@ -361,85 +430,49 @@ export default function EnquiryPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                      Message
+                    <label htmlFor="message" className={labelClass}>
+                      What would you like to see? <span className="font-normal text-slate-500">(optional)</span>
                     </label>
                     <textarea
+                      id="message"
+                      name="message"
                       value={form.message}
-                      onChange={e => updateField('message', e.target.value)}
+                      onChange={event => updateField('message', event.target.value)}
                       rows={4}
-                      className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
-                      placeholder="Tell us about your requirements or any specific features you'd like to see..."
+                      className={`${inputClass} resize-y`}
+                      placeholder="Tell us about your processes or the features you want to see."
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full py-3 px-6 bg-gradient-to-r from-[#1a3a7a] to-[#2563eb] text-white font-semibold rounded-xl hover:from-[#15306a] hover:to-[#1d4ed8] transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full rounded-xl bg-[#1a3a7a] px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-[#15306a] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {submitting ? (
-                      <span className="inline-flex items-center gap-2">
-                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                          />
-                        </svg>
-                        Submitting…
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <span
+                          className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                          aria-hidden="true"
+                        />
+                        Capturing your enquiry…
                       </span>
                     ) : (
-                      'Request Demo'
+                      'Request a demo'
                     )}
                   </button>
 
-                  <p className="text-xs text-center text-slate-400">
-                    We&apos;ll respond within 1 business day. No spam, ever.
+                  <p className="text-center text-sm text-slate-500">
+                    Required fields are marked with an asterisk.
                   </p>
                 </form>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* ──── Footer ──── */}
-      <footer className="bg-[#0a1e3d] text-white">
-        <div className="max-w-6xl mx-auto px-6 py-12">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center">
-                <svg
-                  className="w-3.5 h-3.5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                  />
-                </svg>
-              </div>
-              <span className="text-sm font-semibold">Rayva</span>
-            </div>
-            <p className="text-sm text-slate-400">
-              &copy; {new Date().getFullYear()} Rajat Maheshwari. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+      {siteFooter}
     </div>
   );
 }

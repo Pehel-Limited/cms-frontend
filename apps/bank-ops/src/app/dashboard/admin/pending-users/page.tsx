@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { useCallback, useEffect, useState } from 'react';
 import apiClient from '@/lib/api-client';
 
 interface User {
@@ -24,6 +23,45 @@ interface PageResponse {
   number: number;
 }
 
+const PAGE_SIZE = 10;
+
+function errorOf(err: unknown, fallback: string): string {
+  const e = err as { response?: { data?: { message?: string } } };
+  return e?.response?.data?.message || fallback;
+}
+
+function fullName(user: User): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  return name || user.username || 'this user';
+}
+
+function initialsOf(user: User): string {
+  const first = user.firstName?.[0] ?? '';
+  const last = user.lastName?.[0] ?? '';
+  return (first + last).toUpperCase() || (user.username ?? '?').charAt(0).toUpperCase();
+}
+
+function formatDate(dateString?: string): string {
+  if (!dateString) return '—';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function humanise(value?: string): string {
+  if (!value) return '—';
+  return value
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/^\w/, c => c.toUpperCase());
+}
+
 export default function PendingUsersPage() {
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,422 +70,450 @@ export default function PendingUsersPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  /* Scoped per-row failure — the list and any open confirmation stay on screen. */
+  const [actionError, setActionError] = useState<{ userId: string; message: string } | null>(null);
+  const [confirmingReject, setConfirmingReject] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const fetchPendingUsers = async () => {
-    try {
-      setLoading(true);
+  const fetchPendingUsers = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!options?.silent) setLoading(true);
       setError(null);
-
-      console.log('=== FETCHING PENDING USERS ===');
-      console.log('API Base URL:', 'http://localhost:8081');
-      console.log('Endpoint:', '/api/v1/admin/users/pending');
-      console.log('With params:', { page, size: 10, sort: 'createdAt,desc' });
-
-      const response = await apiClient.get<PageResponse>('/api/v1/admin/users/pending', {
-        params: {
-          page,
-          size: 10,
-          sort: 'createdAt,desc',
-        },
-      });
-
-      console.log('=== RESPONSE RECEIVED ===');
-      console.log('Status:', response.status);
-      console.log('Data:', response.data);
-
-      setPendingUsers(response.data.content);
-      setTotalPages(response.data.totalPages);
-      setTotalElements(response.data.totalElements);
-    } catch (err) {
-      console.error('=== ERROR FETCHING PENDING USERS ===');
-      console.error('Full error:', err);
-      const error = err as { response?: { data?: { message?: string }; status?: number } };
-      console.error('Response status:', error.response?.status);
-      console.error('Response data:', error.response?.data);
-      const errorMessage =
-        error.response?.data?.message ||
-        `Failed to fetch pending users (Status: ${error.response?.status || 'Unknown'})`;
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
+      try {
+        const response = await apiClient.get<PageResponse>('/api/v1/admin/users/pending', {
+          params: { page, size: PAGE_SIZE, sort: 'createdAt,desc' },
+        });
+        const content = Array.isArray(response.data?.content) ? response.data.content : [];
+        setPendingUsers(content);
+        setTotalPages(response.data?.totalPages ?? 0);
+        setTotalElements(response.data?.totalElements ?? content.length);
+        /* Last item on a non-first page was actioned — step back a page. */
+        if (content.length === 0 && page > 0) setPage(p => Math.max(0, p - 1));
+      } catch (err) {
+        console.error('Failed to load pending users:', err);
+        setError(errorOf(err, 'Pending activations could not be loaded.'));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [page]
+  );
 
   useEffect(() => {
-    console.log('=== PAGE MOUNTED - useEffect triggered ===');
-    console.log('Current page:', page);
     fetchPendingUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [fetchPendingUsers]);
 
-  const handleActivateUser = async (userId: string, username: string) => {
-    if (!confirm(`Are you sure you want to activate user "${username}"?`)) {
-      return;
-    }
-
+  const runAction = async (user: User, kind: 'activate' | 'reject') => {
+    setActionLoading(user.userId);
+    setActionError(null);
+    setNotice(null);
     try {
-      setActionLoading(userId);
-      await apiClient.put(`/api/v1/admin/users/${userId}/activate`);
-
-      // Show success message
-      toast.success(`User "${username}" has been activated successfully!`);
-
-      // Refresh the list
-      await fetchPendingUsers();
+      await apiClient.put(
+        `/api/v1/admin/users/${user.userId}/${kind === 'activate' ? 'activate' : 'deactivate'}`
+      );
+      setConfirmingReject(null);
+      setNotice(
+        kind === 'activate'
+          ? `${fullName(user)} was activated and can now sign in.`
+          : `${fullName(user)} was rejected and their account was deactivated.`
+      );
+      await fetchPendingUsers({ silent: true });
     } catch (err) {
-      console.error('Error activating user:', err);
-      const error = err as { response?: { data?: { message?: string } } };
-      const errorMessage = error.response?.data?.message || 'Failed to activate user';
-      toast.error(errorMessage);
+      console.error(`Failed to ${kind} user:`, err);
+      setActionError({
+        userId: user.userId,
+        message: errorOf(err, `Could not ${kind} ${fullName(user)}.`),
+      });
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleRejectUser = async (userId: string, username: string) => {
-    if (
-      !confirm(
-        `Are you sure you want to reject user "${username}"? This will deactivate their account.`
-      )
-    ) {
-      return;
-    }
-
-    try {
-      setActionLoading(userId);
-      await apiClient.put(`/api/v1/admin/users/${userId}/deactivate`);
-
-      // Show success message
-      toast.warning(`User "${username}" has been rejected.`);
-
-      // Refresh the list
-      await fetchPendingUsers();
-    } catch (err) {
-      console.error('Error rejecting user:', err);
-      const error = err as { response?: { data?: { message?: string } } };
-      const errorMessage = error.response?.data?.message || 'Failed to reject user';
-      toast.error(errorMessage);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  if (loading && pendingUsers.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
+  const pendingLabel =
+    totalElements === 1 ? '1 account waiting for review' : `${totalElements} accounts waiting for review`;
 
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Pending User Activations</h1>
-        <p className="mt-2 text-sm text-gray-700">
-          Review and activate customer accounts awaiting approval.
-        </p>
-      </div>
-
-      {/* Stats Card */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600">Pending Activations</p>
-            <p className="text-3xl font-bold text-yellow-600 mt-2">{totalElements}</p>
-          </div>
-          <div className="bg-yellow-100 rounded-full p-3">
-            <svg
-              className="w-8 h-8 text-yellow-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-              />
-            </svg>
-          </div>
+    <div className="space-y-8" style={{ color: 'var(--rm-text)' }}>
+      {/* ══ Header ══ */}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">Pending activations</h1>
+          <p className="mt-1.5 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
+            Review registration requests, then activate or reject each account.
+          </p>
         </div>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
-          <div className="flex">
-            <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <p className="ml-3 text-sm text-red-700">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Users Table */}
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-        {pendingUsers.length === 0 ? (
-          <div className="text-center py-12">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No pending users</h3>
-            <p className="mt-1 text-sm text-gray-500">All user activations have been processed.</p>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Registered
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {pendingUsers.map(user => (
-                    <tr key={user.userId} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 bg-primary-100 rounded-full flex items-center justify-center">
-                            <span className="text-primary-700 font-medium text-sm">
-                              {user.firstName[0]}
-                              {user.lastName[0]}
-                            </span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">
-                              {user.firstName} {user.lastName}
-                            </div>
-                            <div className="text-sm text-gray-500">@{user.username}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{user.email}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                          {user.userType}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(user.createdAt)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
-                          <button
-                            onClick={() => handleActivateUser(user.userId, user.username)}
-                            disabled={actionLoading === user.userId}
-                            className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {actionLoading === user.userId ? (
-                              <>
-                                <svg
-                                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <circle
-                                    className="opacity-25"
-                                    cx="12"
-                                    cy="12"
-                                    r="10"
-                                    stroke="currentColor"
-                                    strokeWidth="4"
-                                  ></circle>
-                                  <path
-                                    className="opacity-75"
-                                    fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                  ></path>
-                                </svg>
-                                Processing...
-                              </>
-                            ) : (
-                              <>
-                                <svg
-                                  className="-ml-0.5 mr-2 h-4 w-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M5 13l4 4L19 7"
-                                  />
-                                </svg>
-                                Activate
-                              </>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleRejectUser(user.userId, user.username)}
-                            disabled={actionLoading === user.userId}
-                            className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <svg
-                              className="-ml-0.5 mr-2 h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M6 18L18 6M6 6l12 12"
-                              />
-                            </svg>
-                            Reject
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-                <div className="flex-1 flex justify-between sm:hidden">
-                  <button
-                    onClick={() => setPage(p => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                    disabled={page === totalPages - 1}
-                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </div>
-                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm text-gray-700">
-                      Showing page <span className="font-medium">{page + 1}</span> of{' '}
-                      <span className="font-medium">{totalPages}</span> ({totalElements} total
-                      users)
-                    </p>
-                  </div>
-                  <div>
-                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                      <button
-                        onClick={() => setPage(p => Math.max(0, p - 1))}
-                        disabled={page === 0}
-                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="sr-only">Previous</span>
-                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path
-                            fillRule="evenodd"
-                            d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                        disabled={page === totalPages - 1}
-                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="sr-only">Next</span>
-                        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path
-                            fillRule="evenodd"
-                            d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </button>
-                    </nav>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Refresh Button */}
-      <div className="mt-4 flex justify-end">
         <button
-          onClick={fetchPendingUsers}
+          type="button"
+          onClick={() => fetchPendingUsers()}
           disabled={loading}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text-secondary)' }}
         >
           <svg
-            className="-ml-1 mr-2 h-5 w-5 text-gray-500"
+            className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            strokeWidth={1.8}
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={2}
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
             />
           </svg>
-          Refresh
+          <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
         </button>
-      </div>
+      </header>
+
+      {/* ══ Outcome of the last action ══ */}
+      {notice && (
+        <p
+          role="status"
+          className="rounded-2xl px-5 py-4 text-sm"
+          style={{ backgroundColor: 'rgba(16,185,129,0.12)', color: '#059669' }}
+        >
+          {notice}
+        </p>
+      )}
+
+      {/* ══ List ══ */}
+      <section className="space-y-5" aria-labelledby="pending-users-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2
+            id="pending-users-heading"
+            className="text-xl font-semibold tracking-tight"
+            style={{ color: 'var(--rm-text)' }}
+          >
+            Registration requests
+          </h2>
+          <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+            {loading ? 'Loading requests…' : pendingLabel} · newest first
+          </p>
+        </div>
+
+        <div className="overflow-hidden rounded-3xl" style={{ backgroundColor: 'var(--rm-card)' }}>
+          {error ? (
+            <div className="px-6 py-12 text-center sm:px-7">
+              <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                Requests could not be loaded
+              </p>
+              <p
+                role="alert"
+                className="mx-auto mt-1.5 max-w-md text-sm"
+                style={{ color: 'var(--rm-text-muted)' }}
+              >
+                {error}
+              </p>
+              <button
+                type="button"
+                onClick={() => fetchPendingUsers()}
+                className="mt-5 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                Try again
+              </button>
+            </div>
+          ) : loading && pendingUsers.length === 0 ? (
+            <div className="px-5 py-5" aria-hidden="true">
+              <div className="space-y-4">
+                {[0, 1, 2, 3].map(row => (
+                  <div key={row} className="flex items-center gap-4">
+                    <div
+                      className="h-10 w-10 shrink-0 rounded-full animate-pulse"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                    />
+                    <div className="flex-1 space-y-2">
+                      <div
+                        className="h-3.5 w-40 rounded-full animate-pulse"
+                        style={{ backgroundColor: 'var(--rm-input)' }}
+                      />
+                      <div
+                        className="h-3 w-56 max-w-full rounded-full animate-pulse"
+                        style={{ backgroundColor: 'var(--rm-input)' }}
+                      />
+                    </div>
+                    <div
+                      className="h-9 w-28 rounded-full animate-pulse"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : pendingUsers.length === 0 ? (
+            <div className="px-6 py-16 text-center sm:px-7">
+              <div
+                className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+                style={{ backgroundColor: 'rgba(16,185,129,0.14)' }}
+              >
+                <svg
+                  className="h-7 w-7"
+                  style={{ color: '#10b981' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.8}
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                Nothing waiting for review
+              </p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                Every registration request has been actioned.
+              </p>
+            </div>
+          ) : (
+            <div
+              className="overflow-x-auto"
+              role="region"
+              aria-label="Registration requests, scrollable horizontally"
+              tabIndex={0}
+            >
+              <table className="w-full" aria-label="Pending user activations">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                    <th
+                      scope="col"
+                      className="px-5 py-3.5 text-left text-sm font-medium"
+                      style={{ color: 'var(--rm-text-muted)' }}
+                    >
+                      User
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-5 py-3.5 text-left text-sm font-medium"
+                      style={{ color: 'var(--rm-text-muted)' }}
+                    >
+                      Email
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-5 py-3.5 text-left text-sm font-medium"
+                      style={{ color: 'var(--rm-text-muted)' }}
+                    >
+                      Type
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-5 py-3.5 text-left text-sm font-medium"
+                      style={{ color: 'var(--rm-text-muted)' }}
+                    >
+                      Status
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-5 py-3.5 text-left text-sm font-medium"
+                      style={{ color: 'var(--rm-text-muted)' }}
+                    >
+                      Registered
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-5 py-3.5 text-right text-sm font-medium"
+                      style={{ color: 'var(--rm-text-muted)' }}
+                    >
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUsers.map(user => {
+                    const busy = actionLoading === user.userId;
+                    const rowError = actionError?.userId === user.userId ? actionError.message : null;
+                    const confirming = confirmingReject === user.userId;
+                    return (
+                      <tr
+                        key={user.userId}
+                        className="align-top hover:bg-slate-50"
+                        style={{ borderBottom: '1px solid var(--rm-border)' }}
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                              style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}
+                              aria-hidden="true"
+                            >
+                              {initialsOf(user)}
+                            </div>
+                            <div className="min-w-0">
+                              <p
+                                className="truncate text-base font-medium"
+                                style={{ color: 'var(--rm-text)' }}
+                              >
+                                {fullName(user)}
+                              </p>
+                              <p className="truncate text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                                @{user.username}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                            {user.email || 'No email provided'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                            {humanise(user.userType)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span
+                            className="inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1 text-sm font-medium"
+                            style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706' }}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full"
+                              style={{ backgroundColor: '#f59e0b' }}
+                            />
+                            {humanise(user.status)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <span className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                            {formatDate(user.createdAt)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          {confirming ? (
+                            <div
+                              className="flex flex-wrap items-center justify-end gap-2"
+                              role="group"
+                              aria-label={`Confirm rejection for ${fullName(user)}`}
+                            >
+                              <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                                Reject @{user.username}? Their account will be deactivated.
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => runAction(user, 'reject')}
+                                disabled={busy}
+                                className="rounded-full px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{ backgroundColor: '#ef4444' }}
+                              >
+                                {busy ? 'Rejecting…' : 'Confirm reject'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmingReject(null)}
+                                disabled={busy}
+                                className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{
+                                  backgroundColor: 'var(--rm-input)',
+                                  color: 'var(--rm-text-secondary)',
+                                  border: '1px solid var(--rm-border)',
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => runAction(user, 'activate')}
+                                disabled={busy}
+                                aria-label={`Activate ${fullName(user)}, @${user.username}`}
+                                className="rounded-full px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{ backgroundColor: 'var(--rm-accent)' }}
+                              >
+                                {busy ? 'Working…' : 'Activate'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActionError(null);
+                                  setConfirmingReject(user.userId);
+                                }}
+                                disabled={busy}
+                                aria-label={`Reject ${fullName(user)}, @${user.username}`}
+                                className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{
+                                  backgroundColor: 'rgba(239,68,68,0.12)',
+                                  color: '#dc2626',
+                                }}
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                          {rowError && (
+                            <p
+                              role="alert"
+                              className="mt-2 text-right text-sm"
+                              style={{ color: '#dc2626' }}
+                            >
+                              {rowError}
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ══ Pagination ══ */}
+          {!error && totalPages > 1 && (
+            <nav
+              aria-label="Pending activations pagination"
+              className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+              style={{ borderTop: '1px solid var(--rm-border)' }}
+            >
+              <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                Page {page + 1} of {totalPages} · {totalElements} total
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{
+                    backgroundColor: 'var(--rm-input)',
+                    color: 'var(--rm-text-secondary)',
+                    border: '1px solid var(--rm-border)',
+                  }}
+                >
+                  Previous page
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{
+                    backgroundColor: 'var(--rm-input)',
+                    color: 'var(--rm-text-secondary)',
+                    border: '1px solid var(--rm-border)',
+                  }}
+                >
+                  Next page
+                </button>
+              </div>
+            </nav>
+          )}
+        </div>
+      </section>
+
+      {loading && pendingUsers.length > 0 && (
+        <p className="sr-only" role="status">
+          Refreshing pending activations
+        </p>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   monthlyInOut,
   totalBalanceEUR,
   balanceTrend,
+  savingsGoal,
   groupTransactionsByDay,
   type Transaction,
 } from '@/lib/banking-data';
@@ -50,6 +51,49 @@ function txTime(iso: string): string {
 
 function signedEUR(n: number): string {
   return `${n >= 0 ? '+' : '−'}${fmtEUR(Math.abs(n))}`;
+}
+
+/* Quiet, informational progress: where an application actually sits in the
+   lifecycle. Shown as a plain step line, not as a score or reward. */
+const JOURNEY_STEPS = ['Applied', 'Identity & KYC', 'Documents', 'Credit review', 'Offer', 'Signing & funding'];
+const JOURNEY_MATCH: string[][] = [
+  ['DRAFT', 'SUBMITTED', 'RETURNED'],
+  ['PENDING_KYC', 'KYC_APPROVED', 'KYC_REJECTED'],
+  ['PENDING_DOCUMENTS', 'DOCUMENTS_RECEIVED'],
+  [
+    'PENDING_CREDIT_CHECK',
+    'CREDIT_APPROVED',
+    'PENDING_UNDERWRITING',
+    'IN_UNDERWRITING',
+    'REFERRED_TO_SENIOR',
+    'REFERRED_TO_UNDERWRITER',
+    'PENDING_DECISION',
+    'UNDERWRITING_APPROVED',
+  ],
+  [
+    'APPROVED',
+    'OFFER_GENERATED',
+    'OFFER_SENT',
+    'OFFER_ACCEPTED',
+    'OFFER_COUNTERED',
+    'PENDING_CONDITIONS',
+    'CONDITIONS_MET',
+    'PENDING_ESIGN',
+    'ESIGN_IN_PROGRESS',
+    'ESIGN_COMPLETED',
+  ],
+  [
+    'PENDING_BOOKING',
+    'BOOKING_IN_PROGRESS',
+    'BOOKED',
+    'PENDING_DISBURSEMENT',
+    'DISBURSEMENT_IN_PROGRESS',
+    'DISBURSED',
+  ],
+];
+
+function journeyStep(status: string): number {
+  return JOURNEY_MATCH.findIndex(m => m.includes(status));
 }
 
 function MiniChart({ data }: { data: number[] }) {
@@ -135,7 +179,7 @@ function QuickAction({ href, icon, label }: { href: string; icon: React.ReactNod
       >
         {icon}
       </span>
-      <span className="text-[11px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+      <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
         {label}
       </span>
     </Link>
@@ -153,6 +197,16 @@ export default function PortalDashboard() {
   const { income, spending } = useMemo(() => monthlyInOut(), []);
   const total = useMemo(() => totalBalanceEUR(), []);
   const trend = useMemo(() => balanceTrend(), []);
+  const goal = useMemo(() => savingsGoal(), []);
+  /* Derived from the balance series — the hero chip must never assert a change
+     the underlying data does not actually show. */
+  const trendChange = useMemo(() => {
+    if (trend.length < 2) return null;
+    const first = trend[0];
+    const last = trend[trend.length - 1];
+    if (first <= 0) return null;
+    return { abs: last - first, pct: ((last - first) / first) * 100 };
+  }, [trend]);
   const topSpend = spend.slice(0, 5);
   const scheduledPayments = SCHEDULED_PAYMENTS;
 
@@ -271,7 +325,7 @@ export default function PortalDashboard() {
           <div className="relative z-10 flex h-full flex-col p-6 md:p-7">
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-white/55">Total balance</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-white/70">Total balance</p>
                 <p className="mt-1 text-sm font-medium text-white/75">Across {accounts.length} accounts</p>
               </div>
               <button
@@ -292,7 +346,7 @@ export default function PortalDashboard() {
                 )}
               </button>
             </div>
-            <h1 className="text-4xl font-extrabold tracking-tight md:text-5xl">
+            <h2 className="text-4xl font-extrabold tracking-tight md:text-5xl">
               <BalanceAmount
                 amount={total}
                 currency="EUR"
@@ -300,24 +354,40 @@ export default function PortalDashboard() {
                 symbolClassName="text-xl md:text-2xl font-bold mr-0.5"
                 centsClassName="text-lg md:text-xl font-bold text-white/65"
               />
-            </h1>
-            <div className="mt-3 flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/25 px-2.5 py-1 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-300/30">
-                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l6-6 4 4 8-8m0 0v5m0-5h-5" />
-                </svg>
-                +€2,735 · 1.96%
-              </span>
-              <span className="text-xs text-white/60">vs last month</span>
-            </div>
+            </h2>
+            {trendChange && (
+              <div className="mt-3 flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${
+                    trendChange.abs >= 0
+                      ? 'bg-emerald-400/25 text-emerald-100 ring-emerald-300/30'
+                      : 'bg-red-400/25 text-red-100 ring-red-300/30'
+                  }`}
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d={
+                        trendChange.abs >= 0
+                          ? 'M3 17l6-6 4 4 8-8m0 0v5m0-5h-5'
+                          : 'M3 7l6 6 4-4 8 8m0 0v-5m0 5h-5'
+                      }
+                    />
+                  </svg>
+                  {signedEUR(trendChange.abs)} · {Math.abs(trendChange.pct).toFixed(2)}%
+                </span>
+                <span className="text-xs text-white/60">balance trend</span>
+              </div>
+            )}
 
             <div className="mt-auto grid grid-cols-2 gap-3 border-t border-white/15 pt-4">
               <div>
-                <p className="text-[10px] text-white/50 uppercase tracking-wider">Income</p>
+                <p className="text-xs text-white/70 uppercase tracking-wider">Income</p>
                 <p className="text-base font-bold text-white">{mask(fmtEUR(income))}</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] text-white/50 uppercase tracking-wider">Spent</p>
+                <p className="text-xs text-white/70 uppercase tracking-wider">Spent</p>
                 <p className="text-base font-bold text-white">{mask(fmtEUR(spending))}</p>
               </div>
             </div>
@@ -330,7 +400,12 @@ export default function PortalDashboard() {
             <h2 className="section-title">Accounts</h2>
             <PillLink href="/portal/accounts">View all</PillLink>
           </div>
-          <div className="flex flex-1 snap-x gap-4 overflow-x-auto no-scrollbar">
+          <div
+            className="flex flex-1 snap-x gap-4 overflow-x-auto no-scrollbar rounded-2xl"
+            role="region"
+            aria-label="Your accounts — scroll horizontally to see more"
+            tabIndex={0}
+          >
             {accounts.map(acc => (
               <Link
                 key={acc.id}
@@ -344,7 +419,7 @@ export default function PortalDashboard() {
                     {acc.glyph}
                   </span>
                   {acc.primary && (
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide backdrop-blur-sm">
+                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wide backdrop-blur-sm">
                       Primary
                     </span>
                   )}
@@ -360,9 +435,30 @@ export default function PortalDashboard() {
                       centsClassName="text-sm text-white/65"
                     />
                   </p>
+                  {acc.type === 'SAVINGS' && goal.target > 0 && (
+                    <div
+                      className="mt-3"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={goal.target}
+                      aria-valuenow={goal.saved}
+                      aria-label={`Savings goal: ${Math.round((goal.saved / goal.target) * 100)}% of target`}
+                    >
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">
+                        <div
+                          className="h-full rounded-full bg-white/85"
+                          style={{ width: `${Math.min(100, (goal.saved / goal.target) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 text-xs text-white/70">
+                        {Math.round((goal.saved / goal.target) * 100)}% of{' '}
+                        {hideBalance ? '••••••' : fmtEUR(goal.target)} goal
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="relative z-10 flex items-end justify-between">
-                  <span className="font-mono text-[10px] text-white/55">{acc.accountNumber}</span>
+                  <span className="font-mono text-xs text-white/70">{acc.accountNumber}</span>
                   <div className="h-6 w-14 opacity-80">
                     <Sparkline data={acc.spark} width={56} height={20} strokeWidth={1.2} fill={false} />
                   </div>
@@ -379,7 +475,7 @@ export default function PortalDashboard() {
         {/* Recent transactions — grouped by day, Revolut style */}
         <div className="panel xl:col-span-7">
           <div className="panel-header">
-            <h3 className="panel-title">Recent transactions</h3>
+            <h3 className="panel-title !text-base">Recent transactions</h3>
             <PillLink href="/portal/transactions">View all</PillLink>
           </div>
           <div className="pb-3">
@@ -388,34 +484,34 @@ export default function PortalDashboard() {
               return (
                 <div key={group.label}>
                   <div className="flex items-center justify-between px-5 pb-1 pt-4">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>
                       {group.label}
                     </span>
-                    <span className="text-[11px] font-medium tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                    <span className="text-sm font-medium tabular-nums" style={{ color: 'var(--text-muted)' }}>
                       {mask(signedEUR(net))}
                     </span>
                   </div>
                   {group.items.map((t: Transaction) => (
                     <div
                       key={t.id}
-                      className="flex items-center gap-3 px-5 py-2.5 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                     >
                       <div
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg"
                         style={{ backgroundColor: `${CATEGORY_META[t.category].color}1f` }}
                       >
                         {t.glyph || '✨'}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                           {t.merchant}
                         </p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                           {t.category} · {txTime(t.date)}
                         </p>
                       </div>
                       <p
-                        className={`shrink-0 text-sm font-bold tabular-nums ${t.direction === 'IN' ? 'text-emerald-500' : ''}`}
+                        className={`shrink-0 text-base font-bold tabular-nums ${t.direction === 'IN' ? 'text-emerald-500' : ''}`}
                         style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
                       >
                         {t.direction === 'IN' ? '+' : '−'}{mask(fmtEUR(t.amount))}
@@ -432,7 +528,7 @@ export default function PortalDashboard() {
         <div className="flex flex-col gap-5 xl:col-span-5">
           <div className="panel flex flex-1 flex-col">
             <div className="panel-header">
-              <h3 className="panel-title">Spending</h3>
+              <h3 className="panel-title !text-base">Spending</h3>
               <span className="chip">This month</span>
             </div>
             <div className="flex flex-1 items-center gap-5 px-5 py-4">
@@ -443,14 +539,14 @@ export default function PortalDashboard() {
                 segments={topSpend.map(s => ({ value: s.total, color: s.color }))}
                 trackColor="var(--surface-input)"
               >
-                <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Total</span>
-                <span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Total</span>
+                <span className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>
                   {mask(fmtEUR(spending))}
                 </span>
               </RadialProgress>
-              <div className="flex-1 space-y-2.5">
+              <div className="flex-1 space-y-3">
                 {topSpend.map(s => (
-                  <div key={s.category} className="flex items-center gap-2 text-xs">
+                  <div key={s.category} className="flex items-center gap-2 text-sm">
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} />
                     <span className="truncate" style={{ color: 'var(--text-secondary)' }}>{s.category}</span>
                     <span className="ml-auto font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
@@ -467,7 +563,7 @@ export default function PortalDashboard() {
 
           <div className="panel flex flex-col">
             <div className="panel-header">
-              <h3 className="panel-title">Upcoming payments</h3>
+              <h3 className="panel-title !text-base">Upcoming payments</h3>
               <PillLink href="/portal/payments">View all</PillLink>
             </div>
             <div className="flex-1">
@@ -476,19 +572,19 @@ export default function PortalDashboard() {
                 const day = d.getDate().toString().padStart(2, '0');
                 const mon = d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
                 return (
-                  <div key={i} className="flex items-center gap-3 px-5 py-3">
+                  <div key={i} className="flex items-center gap-3 px-5 py-3.5">
                     <div
-                      className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl"
+                      className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl"
                       style={{ backgroundColor: 'var(--surface-input)' }}
                     >
-                      <span className="text-[9px] font-bold leading-none" style={{ color: 'var(--text-muted)' }}>{mon}</span>
-                      <span className="text-sm font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{day}</span>
+                      <span className="text-xs font-bold leading-none" style={{ color: 'var(--text-muted)' }}>{mon}</span>
+                      <span className="text-base font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{day}</span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.payee}</p>
-                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{p.frequency}</p>
+                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>{p.payee}</p>
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{p.frequency}</p>
                     </div>
-                    <span className="shrink-0 text-sm font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                    <span className="shrink-0 text-base font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
                       {mask(fmtEUR(p.amount))}
                     </span>
                   </div>
@@ -498,7 +594,7 @@ export default function PortalDashboard() {
             <div className="px-5 py-3" style={{ borderTop: '1px solid var(--surface-border)' }}>
               <Link
                 href="/portal/payments"
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/20"
                 style={{ color: 'var(--brand-on-soft)' }}
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -532,7 +628,6 @@ export default function PortalDashboard() {
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-xs" style={{ borderColor: 'var(--surface-border)' }}>
           <span className="chip">Monthly surplus: {mask(fmtEUR(Math.abs(monthlySurplus)))}</span>
-          <span className="chip">Active applications: {appLoading ? '—' : activeApps.length}</span>
           <span className="chip">Open tasks: {taskCount}</span>
           {!signalsLoading &&
             realSignals.slice(0, 3).map((sig, idx) => (
@@ -542,7 +637,7 @@ export default function PortalDashboard() {
               >
                 {formatSignalType(sig.signalType)}
                 {typeof sig.evidence?.applicationNumber === 'string' && (
-                  <span className="font-mono text-[10px] opacity-80">{sig.evidence.applicationNumber}</span>
+                  <span className="font-mono text-xs opacity-80">{sig.evidence.applicationNumber}</span>
                 )}
               </span>
             ))}
@@ -562,7 +657,7 @@ export default function PortalDashboard() {
         <div className="panel xl:col-span-8">
           <div className="panel-header">
             <div className="flex items-center gap-2">
-              <h3 className="panel-title">Loans &amp; applications</h3>
+              <h3 className="panel-title !text-base">Loans &amp; applications</h3>
               {taskCount > 0 && <span className="badge badge-warning">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>}
             </div>
             <PillLink href="/portal/applications">View all</PillLink>
@@ -591,10 +686,10 @@ export default function PortalDashboard() {
                   <Link
                     key={app.applicationId}
                     href={`/portal/applications/${app.applicationId}`}
-                    className="group flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                    className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                   >
                     <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
                       style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
                     >
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -603,16 +698,36 @@ export default function PortalDashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                           {app.product?.productName || LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose}
                         </p>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[app.status] || 'bg-slate-100 text-slate-700'}`}>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-sm font-semibold ${STATUS_COLORS[app.status] || 'bg-slate-100 text-slate-700'}`}>
                           {STATUS_LABELS[app.status] || app.status}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
                         {app.applicationNumber} · {formatCurrency(app.requestedAmount)}
                       </p>
+                      {!terminal.has(app.status) && journeyStep(app.status) >= 0 && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div
+                            className="h-1 w-24 overflow-hidden rounded-full"
+                            style={{ backgroundColor: 'var(--surface-input)' }}
+                          >
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${((journeyStep(app.status) + 1) / JOURNEY_STEPS.length) * 100}%`,
+                                backgroundColor: 'var(--brand)',
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            Step {journeyStep(app.status) + 1} of {JOURNEY_STEPS.length} ·{' '}
+                            {JOURNEY_STEPS[journeyStep(app.status)]}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <svg
                       className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5"
@@ -625,7 +740,7 @@ export default function PortalDashboard() {
                 ))}
               </div>
               <div
-                className="flex items-center justify-between px-5 py-3 text-xs"
+                className="flex items-center justify-between px-5 py-3.5 text-sm"
                 style={{ borderTop: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}
               >
                 <span>{activeApps.length} active · {apps.length} total</span>
@@ -645,9 +760,9 @@ export default function PortalDashboard() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>James Carter</p>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Relationship manager</p>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Relationship manager</p>
             </div>
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               Online
             </span>

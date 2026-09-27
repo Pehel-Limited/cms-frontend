@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { AIPreferencesPanel } from '@/components/intelligence/AIPreferences';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store';
 import {
@@ -250,6 +251,7 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
+      <AIPreferencesPanel />
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>

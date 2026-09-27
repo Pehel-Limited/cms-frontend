@@ -51,10 +51,15 @@ export type LomsApplicationStatus =
   | 'PENDING_DISBURSEMENT'
   | 'DISBURSEMENT_IN_PROGRESS'
   | 'DISBURSED'
+  // Return for corrections
+  | 'RETURNED'
   // Terminal States
   | 'CANCELLED'
   | 'WITHDRAWN'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  // Post-Disbursement
+  | 'ACTIVE'
+  | 'CLOSED';
 
 /**
  * Workflow phases for progress display
@@ -72,7 +77,8 @@ export type WorkflowPhase =
  * Status metadata for display
  */
 export interface StatusInfo {
-  status: LomsApplicationStatus;
+  // The backend serialises this as `currentStatus` (WorkflowController.StatusResponse).
+  currentStatus: LomsApplicationStatus;
   displayName: string;
   description: string;
   phase: WorkflowPhase;
@@ -678,6 +684,30 @@ export const STATUS_CONFIG: Record<
     borderColor: 'border-emerald-300',
     icon: '🎉',
   },
+  RETURNED: {
+    label: 'Returned',
+    description: 'Returned for corrections',
+    color: 'text-orange-700 dark:text-orange-300',
+    bgColor: 'bg-orange-100 dark:bg-orange-500/15',
+    borderColor: 'border-orange-300',
+    icon: '↩️',
+  },
+  ACTIVE: {
+    label: 'Active',
+    description: 'Loan is active and performing',
+    color: 'text-green-700 dark:text-green-300',
+    bgColor: 'bg-green-100 dark:bg-green-500/15',
+    borderColor: 'border-green-300',
+    icon: '📈',
+  },
+  CLOSED: {
+    label: 'Closed',
+    description: 'Loan fully repaid and closed',
+    color: 'text-gray-700 dark:text-gray-300',
+    bgColor: 'bg-gray-100 dark:bg-white/10',
+    borderColor: 'border-gray-300',
+    icon: '🏁',
+  },
 };
 
 /**
@@ -804,6 +834,9 @@ export function calculateProgress(status: LomsApplicationStatus): number {
     PENDING_DISBURSEMENT: 97,
     DISBURSEMENT_IN_PROGRESS: 98,
     DISBURSED: 100,
+    RETURNED: 15,
+    ACTIVE: 100,
+    CLOSED: 100,
     CANCELLED: 100,
     WITHDRAWN: 100,
     EXPIRED: 100,
@@ -827,6 +860,7 @@ export function isTerminalStatus(status: LomsApplicationStatus): boolean {
     'CANCELLED',
     'WITHDRAWN',
     'EXPIRED',
+    'CLOSED',
   ].includes(status);
 }
 

@@ -2,16 +2,17 @@
 'use client';
 
 import React from 'react';
-import { LomsApplicationStatus, STATUS_CONFIG, getProductLabel } from '@/types/loms';
+import { LomsApplicationStatus, STATUS_CONFIG, getProductLabel, isTerminalStatus } from '@/types/loms';
 
 interface WorkflowActionsProps {
   currentStatus: LomsApplicationStatus;
   validTransitions: LomsApplicationStatus[];
   isAssignedReviewer: boolean;
   isApplicationCreator: boolean;
+  canAssign: boolean;
   canCancel: boolean;
   canWithdraw: boolean;
-  onAction: (action: WorkflowAction) => void;
+  onAction: (action: WorkflowAction, targetStatus?: LomsApplicationStatus) => void;
   loading?: boolean;
   kycVerified?: boolean;
   productName?: string;
@@ -19,17 +20,16 @@ interface WorkflowActionsProps {
 
 export type WorkflowAction =
   | 'SUBMIT'
-  | 'SUBMIT_FOR_DECISIONING'
+  | 'ASSIGN'
+  | 'ADVANCE'
   | 'APPROVE'
   | 'DECLINE'
-  | 'REFER_TO_UNDERWRITER'
   | 'GENERATE_OFFER'
   | 'ACCEPT_OFFER'
   | 'SEND_FOR_SIGNATURE'
   | 'INITIATE_BOOKING'
   | 'CANCEL'
   | 'WITHDRAW'
-  | 'OVERRIDE_DECISION'
   | 'VIEW_OFFER'
   | 'VIEW_DOCUMENTS'
   | 'VIEW_AUDIT'
@@ -44,7 +44,67 @@ interface ActionConfig {
   variant: 'primary' | 'secondary' | 'success' | 'danger' | 'warning';
   requiresReviewer?: boolean;
   requiresCreator?: boolean;
+  /** Set on ADVANCE so the caller knows which status to move to. */
+  targetStatus?: LomsApplicationStatus;
+  /** Statuses this action already reaches, so no duplicate ADVANCE button is offered. */
+  covers?: LomsApplicationStatus[];
 }
+
+/**
+ * Labels for moving straight to a status via the generic workflow transition endpoint.
+ * Keyed by *target* status, because the backend state machine — not this file — decides
+ * which targets are reachable from where we are.
+ */
+const ADVANCE_PRESENTATION: Record<
+  LomsApplicationStatus,
+  { label: string; description: string; icon: string; variant: ActionConfig['variant'] }
+> = {
+  DRAFT: { label: 'Reopen as draft', description: 'Return to draft', icon: '📝', variant: 'secondary' },
+  SUBMITTED: { label: 'Resubmit application', description: 'Submit the corrected application', icon: '📤', variant: 'primary' },
+  PENDING_KYC: { label: 'Start KYC verification', description: 'Move the application into KYC', icon: '🔍', variant: 'primary' },
+  KYC_APPROVED: { label: 'Approve KYC', description: 'Record that KYC passed', icon: '✅', variant: 'success' },
+  KYC_REJECTED: { label: 'Reject KYC', description: 'KYC verification failed', icon: '❌', variant: 'danger' },
+  PENDING_DOCUMENTS: { label: 'Request documents', description: 'Ask the customer for outstanding documents', icon: '📎', variant: 'primary' },
+  DOCUMENTS_RECEIVED: { label: 'Confirm documents received', description: 'Mark document collection complete', icon: '📥', variant: 'primary' },
+  PENDING_CREDIT_CHECK: { label: 'Start credit check', description: 'Run the credit bureau assessment', icon: '⚙️', variant: 'primary' },
+  CREDIT_APPROVED: { label: 'Record credit approval', description: 'Credit check passed', icon: '✅', variant: 'success' },
+  CREDIT_DECLINED: { label: 'Record credit decline', description: 'Credit check failed', icon: '❌', variant: 'danger' },
+  PENDING_UNDERWRITING: { label: 'Send to underwriting', description: 'Queue for underwriting review', icon: '🗂️', variant: 'primary' },
+  IN_UNDERWRITING: { label: 'Start underwriting', description: 'Begin the underwriting review', icon: '🔬', variant: 'primary' },
+  UNDERWRITING_APPROVED: { label: 'Approve underwriting', description: 'Underwriting signed off', icon: '✅', variant: 'success' },
+  UNDERWRITING_DECLINED: { label: 'Decline underwriting', description: 'Underwriting declined the application', icon: '❌', variant: 'danger' },
+  REFERRED_TO_SENIOR: { label: 'Escalate to senior reviewer', description: 'Refer for senior review', icon: '👤', variant: 'warning' },
+  REFERRED_TO_UNDERWRITER: { label: 'Refer to underwriter', description: 'Assign to an underwriter', icon: '🔎', variant: 'primary' },
+  PENDING_DECISION: { label: 'Send for final decision', description: 'Await the credit decision', icon: '⚖️', variant: 'primary' },
+  APPROVED: { label: 'Approve application', description: 'Record approval', icon: '✅', variant: 'success' },
+  DECLINED: { label: 'Decline application', description: 'Record decline', icon: '❌', variant: 'danger' },
+  OFFER_GENERATED: { label: 'Mark offer generated', description: 'Offer created', icon: '📋', variant: 'primary' },
+  OFFER_SENT: { label: 'Mark offer sent', description: 'Offer sent to the customer', icon: '📩', variant: 'primary' },
+  OFFER_ACCEPTED: { label: 'Record offer acceptance', description: 'Customer accepted', icon: '✓', variant: 'success' },
+  OFFER_REJECTED: { label: 'Record offer rejection', description: 'Customer rejected', icon: '❌', variant: 'danger' },
+  OFFER_EXPIRED: { label: 'Expire offer', description: 'Offer validity lapsed', icon: '⌛', variant: 'danger' },
+  OFFER_COUNTERED: { label: 'Record counter-offer', description: 'Customer requested changes', icon: '💬', variant: 'warning' },
+  PENDING_CONDITIONS: { label: 'Track conditions', description: 'Move to conditions precedent', icon: '📃', variant: 'primary' },
+  CONDITIONS_MET: { label: 'Mark conditions met', description: 'All conditions satisfied', icon: '✅', variant: 'success' },
+  PENDING_ESIGN: { label: 'Send for signature', description: 'Await electronic signature', icon: '✍️', variant: 'primary' },
+  ESIGN_IN_PROGRESS: { label: 'Mark signing in progress', description: 'Documents being signed', icon: '✍️', variant: 'primary' },
+  ESIGN_COMPLETED: { label: 'Confirm signatures complete', description: 'All signatures collected', icon: '✅', variant: 'success' },
+  PENDING_BOOKING: { label: 'Send for booking', description: 'Ready for core banking', icon: '📚', variant: 'primary' },
+  BOOKING_IN_PROGRESS: { label: 'Start booking', description: 'Booking into the core system', icon: '🏧', variant: 'primary' },
+  BOOKED: { label: 'Confirm booking', description: 'Loan account created', icon: '✅', variant: 'success' },
+  PENDING_DISBURSEMENT: { label: 'Queue disbursement', description: 'Awaiting payout', icon: '💰', variant: 'primary' },
+  DISBURSEMENT_IN_PROGRESS: { label: 'Start disbursement', description: 'Payout processing', icon: '💸', variant: 'primary' },
+  DISBURSED: { label: 'Confirm disbursement', description: 'Amount paid out', icon: '🎉', variant: 'success' },
+  RETURNED: { label: 'Return for corrections', description: 'Send back to the customer', icon: '↩️', variant: 'warning' },
+  CANCELLED: { label: 'Cancel', description: 'Cancel the application', icon: '🚫', variant: 'danger' },
+  WITHDRAWN: { label: 'Withdraw', description: 'Withdraw the application', icon: '↩️', variant: 'warning' },
+  EXPIRED: { label: 'Expire application', description: 'Closed for inactivity', icon: '⌛', variant: 'danger' },
+  ACTIVE: { label: 'Mark loan active', description: 'Loan is performing', icon: '📈', variant: 'success' },
+  CLOSED: { label: 'Close application', description: 'Facility fully repaid', icon: '🏁', variant: 'secondary' },
+};
+
+/** Handled by the dedicated Cancel / Withdraw buttons rather than a generic ADVANCE. */
+const TERMINAL_EXIT_STATUSES: LomsApplicationStatus[] = ['CANCELLED', 'WITHDRAWN'];
 
 /**
  * Get available actions for current status
@@ -55,7 +115,8 @@ function getAvailableActions(
   isAssignedReviewer: boolean,
   isApplicationCreator: boolean,
   kycVerified: boolean = true,
-  productName?: string
+  productName?: string,
+  canAssign: boolean = false
 ): ActionConfig[] {
   const label = getProductLabel(productName);
   const actions: ActionConfig[] = [];
@@ -77,6 +138,18 @@ function getAvailableActions(
     });
   }
 
+  if (canAssign) {
+    actions.push({
+      action: 'ASSIGN',
+      label: 'Assign to underwriter',
+      description: 'Route to an underwriter for review',
+      icon: '👤',
+      variant: 'primary',
+      // Assignment is the backend's route into REFERRED_TO_UNDERWRITER (LoanApplication.assignTo).
+      covers: ['REFERRED_TO_UNDERWRITER'],
+    });
+  }
+
   switch (status) {
     case 'DRAFT':
       actions.push({
@@ -86,27 +159,8 @@ function getAvailableActions(
         icon: '📤',
         variant: 'primary',
         requiresCreator: true,
+        covers: ['SUBMITTED'],
       });
-      break;
-
-    case 'SUBMITTED':
-      if (validTransitions.includes('PENDING_CREDIT_CHECK')) {
-        actions.push({
-          action: 'SUBMIT_FOR_DECISIONING',
-          label: 'Start Decisioning',
-          description: 'Submit for credit decision',
-          icon: '⚙️',
-          variant: 'primary',
-        });
-      }
-      break;
-
-    case 'PENDING_KYC':
-      // Waiting for KYC completion - show info only
-      break;
-
-    case 'PENDING_CREDIT_CHECK':
-      // Automated decisioning in progress
       break;
 
     case 'REFERRED_TO_SENIOR':
@@ -119,6 +173,7 @@ function getAvailableActions(
           icon: '✅',
           variant: 'success',
           requiresReviewer: true,
+          covers: ['APPROVED', 'UNDERWRITING_APPROVED'],
         });
         actions.push({
           action: 'DECLINE',
@@ -127,6 +182,7 @@ function getAvailableActions(
           icon: '❌',
           variant: 'danger',
           requiresReviewer: true,
+          covers: ['DECLINED', 'UNDERWRITING_DECLINED'],
         });
       }
       break;
@@ -138,6 +194,7 @@ function getAvailableActions(
         description: `Create ${label.toLowerCase()} offer`,
         icon: '📋',
         variant: 'primary',
+        covers: ['OFFER_GENERATED'],
       });
       break;
 
@@ -155,6 +212,7 @@ function getAvailableActions(
         description: 'Accept and proceed',
         icon: '✓',
         variant: 'success',
+        covers: ['OFFER_ACCEPTED'],
       });
       actions.push({
         action: 'SEND_FOR_SIGNATURE',
@@ -162,6 +220,7 @@ function getAvailableActions(
         description: 'Send documents for e-sign',
         icon: '✍️',
         variant: 'primary',
+        covers: ['PENDING_ESIGN'],
       });
       break;
 
@@ -172,6 +231,7 @@ function getAvailableActions(
         description: 'Manually confirm customer has signed',
         icon: '✅',
         variant: 'success',
+        covers: ['ESIGN_COMPLETED'],
       });
       actions.push({
         action: 'VIEW_DOCUMENTS',
@@ -183,22 +243,14 @@ function getAvailableActions(
       break;
 
     case 'ESIGN_COMPLETED':
-      actions.push({
-        action: 'INITIATE_BOOKING',
-        label: `Book ${label}`,
-        description: 'Book in core banking',
-        icon: '📚',
-        variant: 'primary',
-      });
-      break;
-
     case 'PENDING_BOOKING':
       actions.push({
         action: 'INITIATE_BOOKING',
-        label: 'Complete Booking',
+        label: status === 'ESIGN_COMPLETED' ? `Book ${label}` : 'Complete Booking',
         description: 'Configure disbursement accounts',
-        icon: '💰',
-        variant: 'success',
+        icon: '📚',
+        variant: status === 'ESIGN_COMPLETED' ? 'primary' : 'success',
+        covers: ['BOOKED', 'PENDING_BOOKING'],
       });
       break;
 
@@ -213,6 +265,21 @@ function getAvailableActions(
       break;
   }
 
+  // Everything the backend state machine legally allows from here, and that no action
+  // above already performs, becomes a button. This keeps the panel in step with the
+  // server's transition map instead of a hand-maintained copy of it.
+  const coveredTargets = new Set(actions.flatMap(action => action.covers ?? []));
+  for (const target of validTransitions) {
+    if (TERMINAL_EXIT_STATUSES.includes(target) || coveredTargets.has(target)) continue;
+    const presentation = ADVANCE_PRESENTATION[target];
+    if (!presentation) continue;
+    actions.push({
+      action: 'ADVANCE',
+      targetStatus: target,
+      ...presentation,
+    });
+  }
+
   return actions;
 }
 
@@ -225,6 +292,7 @@ export function WorkflowActions({
   validTransitions,
   isAssignedReviewer,
   isApplicationCreator,
+  canAssign,
   canCancel,
   canWithdraw,
   onAction,
@@ -238,7 +306,8 @@ export function WorkflowActions({
     isAssignedReviewer,
     isApplicationCreator,
     kycVerified,
-    productName
+    productName,
+    canAssign
   );
 
   // Filter actions based on user role
@@ -248,9 +317,11 @@ export function WorkflowActions({
     return true;
   });
 
-  // Add cancel/withdraw actions if available
+  // Add cancel/withdraw actions if available. Legality is the backend's call via
+  // canCancel/canWithdraw — gating these on the creator left customer-originated
+  // applications with no bank-side exit path.
   const supplementaryActions: ActionConfig[] = [];
-  if (canWithdraw && isApplicationCreator) {
+  if (canWithdraw) {
     supplementaryActions.push({
       action: 'WITHDRAW',
       label: 'Withdraw',
@@ -259,7 +330,7 @@ export function WorkflowActions({
       variant: 'warning',
     });
   }
-  if (canCancel && isApplicationCreator) {
+  if (canCancel) {
     supplementaryActions.push({
       action: 'CANCEL',
       label: 'Cancel',
@@ -291,26 +362,31 @@ export function WorkflowActions({
   const statusConfig = STATUS_CONFIG[currentStatus];
 
   if (filteredActions.length === 0 && supplementaryActions.length === 0) {
+    const waitingMessage: Partial<Record<LomsApplicationStatus, string>> = {
+      PENDING_CREDIT_CHECK: 'Credit decisioning in progress...',
+      PENDING_KYC: 'Waiting for KYC verification...',
+      PENDING_BOOKING: 'Booking in progress...',
+      PENDING_ESIGN: 'Waiting for customer signature...',
+    };
+    const isReviewStage =
+      currentStatus === 'REFERRED_TO_UNDERWRITER' || currentStatus === 'REFERRED_TO_SENIOR';
+
     return (
       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">{statusConfig.icon}</span>
+          <span className="text-2xl">{statusConfig?.icon}</span>
           <div>
             <p className="text-sm font-medium text-gray-700">
-              {currentStatus === 'PENDING_CREDIT_CHECK'
-                ? 'Credit decisioning in progress...'
-                : currentStatus === 'PENDING_KYC'
-                  ? 'Waiting for KYC verification...'
-                  : currentStatus === 'PENDING_BOOKING'
-                    ? 'Booking in progress...'
-                    : currentStatus === 'PENDING_ESIGN'
-                      ? 'Waiting for customer signature...'
-                      : currentStatus === 'REFERRED_TO_UNDERWRITER' ||
-                          currentStatus === 'REFERRED_TO_SENIOR'
-                        ? isApplicationCreator
-                          ? 'You cannot review your own application — segregation of duties. Another reviewer must approve or decline.'
-                          : 'Awaiting underwriter decision — only the assigned reviewer can approve or decline.'
-                        : 'No actions available at this stage'}
+              {waitingMessage[currentStatus] ??
+                (isReviewStage
+                  ? isAssignedReviewer
+                    ? 'Ready for your decision.'
+                    : isApplicationCreator
+                      ? 'You cannot review your own application — segregation of duties. Another reviewer must approve or decline.'
+                      : 'Awaiting underwriter decision — only the assigned reviewer can approve or decline.'
+                  : isTerminalStatus(currentStatus)
+                    ? `This application is ${statusConfig?.label.toLowerCase() ?? 'closed'} — no further actions.`
+                    : `Nothing to action here — ${statusConfig?.description ?? 'the application is waiting on another step'}.`)}
             </p>
             {['PENDING_CREDIT_CHECK', 'PENDING_KYC', 'PENDING_BOOKING'].includes(currentStatus) && (
               <div className="flex items-center gap-2 mt-2">
@@ -333,8 +409,8 @@ export function WorkflowActions({
           <div className="flex flex-wrap gap-3">
             {filteredActions.map(action => (
               <button
-                key={action.action}
-                onClick={() => onAction(action.action)}
+                key={action.targetStatus ?? action.action}
+                onClick={() => onAction(action.action, action.targetStatus)}
                 disabled={loading}
                 className={getButtonClasses(action.variant)}
                 title={action.description}
@@ -353,8 +429,8 @@ export function WorkflowActions({
           <div className="flex flex-wrap gap-3">
             {supplementaryActions.map(action => (
               <button
-                key={action.action}
-                onClick={() => onAction(action.action)}
+                key={action.targetStatus ?? action.action}
+                onClick={() => onAction(action.action, action.targetStatus)}
                 disabled={loading}
                 className={getButtonClasses(action.variant)}
                 title={action.description}

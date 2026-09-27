@@ -2,25 +2,22 @@
 
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { PayAgain } from '@/components/intelligence/PayAgain';
+import { useAIPreferences } from '@/lib/ai-preferences';
 import { formatCurrency } from '@/lib/format';
 import {
   ACCOUNTS,
   CATEGORY_META,
   SCHEDULED_PAYMENTS,
+  TRANSACTIONS,
   recentTransactions,
   spendByCategory,
-  monthlyInOut,
   totalBalanceEUR,
-  balanceTrend,
   savingsGoal,
   groupTransactionsByDay,
   type Transaction,
 } from '@/lib/banking-data';
-import {
-  Sparkline,
-  BalanceAmount,
-  RadialProgress,
-} from '@/components/banking/BankCard';
+import { BalanceAmount } from '@/components/banking/BankCard';
 import {
   taskService,
   type TaskCountResponse,
@@ -96,30 +93,6 @@ function journeyStep(status: string): number {
   return JOURNEY_MATCH.findIndex(m => m.includes(status));
 }
 
-function MiniChart({ data }: { data: number[] }) {
-  const w = 120;
-  const h = 48;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const step = w / (data.length - 1);
-  const pts = data.map((v, i) => [i * step, h - ((v - min) / range) * (h - 4)] as const);
-  const line = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const area = `${line} L${w},${h} L0,${h} Z`;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
-      <defs>
-        <linearGradient id="heroFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.25)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#heroFill)" />
-      <path d={line} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`skeleton ${className}`} />;
 }
@@ -141,20 +114,6 @@ function formatSignalType(signalType: string): string {
     .join(' ');
 }
 
-const SIGNAL_SEVERITY_TONE: Record<string, string> = {
-  HIGH: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300',
-  MEDIUM: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300',
-  LOW: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300',
-};
-
-const GUIDANCE_ICON_BG: Record<string, string> = {
-  emerald: 'linear-gradient(135deg, #059669, #34d399)',
-  purple: 'linear-gradient(135deg, #7f2b7b, #ae3fa9)',
-  amber: 'linear-gradient(135deg, #d97706, #fbbf24)',
-};
-
-/* ─── small building blocks ──────────────────────────────────── */
-
 function PillLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
@@ -172,14 +131,11 @@ function PillLink({ href, children }: { href: string; children: React.ReactNode 
 
 function QuickAction({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
   return (
-    <Link href={href} className="group flex flex-col items-center gap-2 rounded-2xl px-1 py-3 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
-      <span
-        className="flex h-11 w-11 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-105"
-        style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
-      >
+    <Link href={href} className="group flex flex-col items-center gap-2.5 rounded-2xl px-1 py-4 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
+      <span className="dash-icon h-12 w-12 transition-transform duration-200 group-hover:scale-105">
         {icon}
       </span>
-      <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+      <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
         {label}
       </span>
     </Link>
@@ -189,32 +145,43 @@ function QuickAction({ href, icon, label }: { href: string; icon: React.ReactNod
 /* ─── main component ─────────────────────────────────────────── */
 export default function PortalDashboard() {
   const [hideBalance, setHideBalance] = useState(false);
+  const { preferences, ready } = useAIPreferences();
 
   const accounts = ACCOUNTS;
   const txns = useMemo(() => recentTransactions(8), []);
   const txnGroups = useMemo(() => groupTransactionsByDay(txns), [txns]);
   const spend = useMemo(() => spendByCategory(), []);
-  const { income, spending } = useMemo(() => monthlyInOut(), []);
-  const total = useMemo(() => totalBalanceEUR(), []);
-  const trend = useMemo(() => balanceTrend(), []);
-  const goal = useMemo(() => savingsGoal(), []);
-  /* Derived from the balance series — the hero chip must never assert a change
-     the underlying data does not actually show. */
-  const trendChange = useMemo(() => {
-    if (trend.length < 2) return null;
-    const first = trend[0];
-    const last = trend[trend.length - 1];
-    if (first <= 0) return null;
-    return { abs: last - first, pct: ((last - first) / first) * 100 };
-  }, [trend]);
   const topSpend = spend.slice(0, 5);
+  /* The donut's centre must equal the sum of its own slices, so it is built from
+     the category totals rather than a separate money-out figure that also counts
+     transfers and would disagree with the chart drawn around it. */
+  const spendTotal = useMemo(() => spend.reduce((sum, c) => sum + c.total, 0), [spend]);
+  /* Settled rows only. The category split beside these figures excludes
+     transfers, so the two measure different things and say so. */
+  const cashFlow = useMemo(() => {
+    const settled = TRANSACTIONS.filter(t => t.status === 'COMPLETED');
+    return {
+      income: settled.filter(t => t.direction === 'IN').reduce((sum, t) => sum + t.amount, 0),
+      spending: settled.filter(t => t.direction === 'OUT').reduce((sum, t) => sum + t.amount, 0),
+    };
+  }, []);
+  /* The actual span of the history, so the panel never claims "this month" for a
+     window that is not a month. */
+  const spendWindow = useMemo(() => {
+    const times = TRANSACTIONS.map(t => new Date(t.date).getTime());
+    if (times.length === 0) return null;
+    const day = (ms: number) =>
+      new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return `${day(Math.min(...times))} – ${day(Math.max(...times))}`;
+  }, []);
+  const total = useMemo(() => totalBalanceEUR(), []);
+  const goal = useMemo(() => savingsGoal(), []);
   const scheduledPayments = SCHEDULED_PAYMENTS;
 
   const [apps, setApps] = useState<LoanApplication[]>([]);
   const [appLoading, setAppLoading] = useState(true);
   const [taskCount, setTaskCount] = useState(0);
   const [realSignals, setRealSignals] = useState<CustomerSignal[]>([]);
-  const [signalsLoading, setSignalsLoading] = useState(true);
 
   useEffect(() => {
     applicationService
@@ -226,13 +193,32 @@ export default function PortalDashboard() {
       .countPending()
       .then((r: TaskCountResponse) => setTaskCount(r.pendingCount))
       .catch(() => setTaskCount(0));
-    // Loaded independently — a degraded/unavailable AI service never blocks the dashboard.
-    aiSignalsService
-      .getSignals()
-      .then(s => setRealSignals(s.activeSignals || []))
-      .catch(() => setRealSignals([]))
-      .finally(() => setSignalsLoading(false));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRealSignals([]);
+    if (!ready || !preferences.insights) return;
+    aiSignalsService.getSignals()
+      .then(s => { if (!cancelled) setRealSignals(s.activeSignals || []); })
+      .catch(() => { if (!cancelled) setRealSignals([]); });
+    return () => { cancelled = true; };
+  }, [ready, preferences.insights]);
+
+  /* Updates are folded into the application rows rather than shown as their own
+     band: the same status repeated in a separate strip and again on each row
+     read as noise. The detail lives in the application's own review. */
+  const signalsByApp = useMemo(() => {
+    const map = new Map<string, CustomerSignal[]>();
+    realSignals.forEach(sig => {
+      const id = typeof sig.evidence?.applicationId === 'string' ? sig.evidence.applicationId : null;
+      if (!id) return;
+      const bucket = map.get(id);
+      if (bucket) bucket.push(sig);
+      else map.set(id, [sig]);
+    });
+    return map;
+  }, [realSignals]);
 
   const terminal = useMemo(
     () => new Set(['COMPLETED','WITHDRAWN','CANCELLED','DECLINED','EXPIRED','UNDERWRITING_DECLINED','CREDIT_DECLINED','KYC_REJECTED','OFFER_REJECTED','OFFER_EXPIRED','CLOSED']),
@@ -244,45 +230,174 @@ export default function PortalDashboard() {
     [apps]
   );
   const mask = useCallback((s: string) => (hideBalance ? '••••••' : s), [hideBalance]);
-  const monthlySurplus = income - spending;
-  const guidance = useMemo(() => {
-    if (activeApps.length === 0) {
-      return {
-        title: 'Opportunity check',
-        summary: `Your current cash-flow shows a monthly surplus of ${mask(fmtEUR(Math.abs(monthlySurplus)))}. This is a solid starting point to explore products or set a savings goal.`,
-        action: 'Explore products',
-        href: '/portal/products',
-        accent: 'emerald',
-      };
-    }
-
-    const nextApp = [...activeApps].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-    const statusText = STATUS_LABELS[nextApp.status] || nextApp.status;
-
-    if (monthlySurplus >= 0) {
-      return {
-        title: 'Ready to move forward',
-        summary: `${statusText} is the current focus on your active loan. Your recent cash-flow indicates you remain in a stable position to keep progressing with this application.`,
-        action: 'Review application',
-        href: `/portal/applications/${nextApp.applicationId}`,
-        accent: 'purple',
-      };
-    }
-
-    return {
-      title: 'Monitoring cash flow',
-      summary: `${statusText} is still in progress, and your recent spend is slightly above income. A short review of your budget or upcoming payments may help keep momentum steady.`,
-      action: 'Ask Rayva AI',
-      href: '/portal/ai-assistant',
-      accent: 'amber',
-    };
-  }, [activeApps, monthlySurplus, mask]);
 
   return (
     <div className="stagger space-y-5">
+      {/* The top bar renders the page name as a <p> so each page owns its single
+          <h1>; this page's heading is not part of the visual design. */}
+      <h1 className="sr-only">Overview</h1>
 
-      {/* ══ Quick actions — the six things people actually come here to do ══ */}
-      <div className="panel grid grid-cols-3 gap-1 p-2 sm:grid-cols-6">
+      {/* ══ Hero — one dominant figure, with the cash flow and the composition
+             that explain it. This is the only place spending appears. ══ */}
+      <section className="dash-hero" aria-label="Balance overview">
+        <div className="relative z-10 grid gap-9 lg:grid-cols-[1.3fr_1fr]">
+          <div className="flex flex-col">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <p className="dash-hero-label">Total balance</p>
+                <span className="dash-hero-chip">Sample data</span>
+              </div>
+              <button
+                onClick={() => setHideBalance(v => !v)}
+                className="rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+                aria-label={hideBalance ? 'Show balances' : 'Hide balances'}
+                aria-pressed={hideBalance}
+              >
+                {hideBalance ? (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+
+            <p className="mt-7 text-5xl font-extrabold tracking-tight sm:text-6xl">
+              <BalanceAmount
+                amount={total}
+                currency="EUR"
+                hidden={hideBalance}
+                symbolClassName="text-2xl font-bold mr-1"
+                centsClassName="text-2xl font-bold text-white/60"
+              />
+            </p>
+            <p className="dash-hero-label mt-3">Across {accounts.length} accounts</p>
+
+            <div className="mt-auto flex flex-wrap items-end gap-x-9 gap-y-4 pt-9">
+              <div>
+                <p className="dash-hero-label">Money in</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums">{mask(fmtEUR(cashFlow.income))}</p>
+              </div>
+              <div>
+                <p className="dash-hero-label">Money out</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums">{mask(fmtEUR(cashFlow.spending))}</p>
+              </div>
+              <Link
+                href="/portal/insights"
+                className="dash-hero-link ml-auto inline-flex items-center gap-1"
+              >
+                Spending insights <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+          </div>
+
+          <div className="dash-hero-inset self-center">
+            <p className="dash-hero-label">Where the money went</p>
+            <div className="mt-4 flex h-2.5 gap-1 overflow-hidden rounded-full" aria-hidden="true">
+              {topSpend.map(c => (
+                <span key={c.category} style={{ width: `${c.pct}%`, background: c.color }} />
+              ))}
+            </div>
+            <ul className="mt-5 space-y-3">
+              {topSpend.slice(0, 4).map(c => (
+                <li key={c.category} className="flex items-center gap-2.5 text-sm">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: c.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-white/80">{c.category}</span>
+                  <span className="shrink-0 tabular-nums text-white/55">{Math.round(c.pct)}%</span>
+                  <span className="w-24 shrink-0 text-right font-semibold tabular-nums">
+                    {mask(fmtEUR(c.total))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-5 border-t border-white/10 pt-3.5 text-sm text-white/55">
+              {mask(fmtEUR(spendTotal))} across {spend.length} categories
+              {spendWindow ? ` · ${spendWindow}` : ''} · settled only · excludes transfers
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ Accounts ══ */}
+      <section>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="dash-card-title">Accounts</h2>
+          <PillLink href="/portal/accounts">View all</PillLink>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {accounts.map(acc => (
+            <Link
+              key={acc.id}
+              href={`/portal/accounts/${acc.id}`}
+              className="group relative flex min-h-[184px] flex-col overflow-hidden rounded-3xl p-5 text-white shadow-md transition-transform duration-200 hover:-translate-y-1"
+              style={{ background: acc.gradient }}
+            >
+              <div
+                className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/15 blur-lg"
+                aria-hidden="true"
+              />
+              <div className="relative z-10 flex items-start justify-between gap-2">
+                <span
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-base backdrop-blur-sm"
+                  aria-hidden="true"
+                >
+                  {acc.glyph}
+                </span>
+                {acc.primary && (
+                  <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold backdrop-blur-sm">
+                    Primary
+                  </span>
+                )}
+              </div>
+              <div className="relative z-10 mt-auto pt-6">
+                <p className="text-sm text-white/75">{acc.name}</p>
+                <p className="mt-1 text-2xl font-bold tracking-tight">
+                  <BalanceAmount
+                    amount={acc.balance}
+                    currency={acc.currency}
+                    hidden={hideBalance}
+                    symbolClassName="text-sm font-semibold mr-0.5"
+                    centsClassName="text-sm text-white/65"
+                  />
+                </p>
+                {acc.type === 'SAVINGS' && goal.target > 0 && (
+                  <div
+                    className="mt-3"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={goal.target}
+                    aria-valuenow={goal.saved}
+                    aria-label={`Savings goal: ${Math.round((goal.saved / goal.target) * 100)}% of target`}
+                  >
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">
+                      <div
+                        className="h-full rounded-full bg-white/85"
+                        style={{ width: `${Math.min(100, (goal.saved / goal.target) * 100)}%` }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-sm text-white/70">
+                      {Math.round((goal.saved / goal.target) * 100)}% of{' '}
+                      {hideBalance ? '••••••' : fmtEUR(goal.target)} goal
+                    </p>
+                  </div>
+                )}
+              </div>
+              <p className="relative z-10 mt-4 font-mono text-sm text-white/65">{acc.accountNumber}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* ══ Quick actions ══ */}
+      <div className="dash-card grid grid-cols-3 gap-1 p-2 sm:grid-cols-6">
         <QuickAction href="/portal/payments" label="Make a payment" icon={
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
@@ -315,167 +430,13 @@ export default function PortalDashboard() {
         } />
       </div>
 
-      {/* ══ Balance hero + accounts carousel ══ */}
+      {/* ══ Activity: transactions | repeat shortcuts + upcoming payments ══ */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
 
-        {/* Balance card */}
-        <div className="mesh-hero aurora relative overflow-hidden rounded-3xl text-white shadow-float xl:col-span-5">
-          <MiniChart data={trend} />
-          <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
-          <div className="relative z-10 flex h-full flex-col p-6 md:p-7">
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.16em] text-white/70">Total balance</p>
-                <p className="mt-1 text-sm font-medium text-white/75">Across {accounts.length} accounts</p>
-              </div>
-              <button
-                onClick={() => setHideBalance(v => !v)}
-                className="mt-1 rounded-lg bg-white/10 p-1.5 transition-colors hover:bg-white/20"
-                aria-label={hideBalance ? 'Show balances' : 'Hide balances'}
-                aria-pressed={hideBalance}
-              >
-                {hideBalance ? (
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-            <h2 className="text-4xl font-extrabold tracking-tight md:text-5xl">
-              <BalanceAmount
-                amount={total}
-                currency="EUR"
-                hidden={hideBalance}
-                symbolClassName="text-xl md:text-2xl font-bold mr-0.5"
-                centsClassName="text-lg md:text-xl font-bold text-white/65"
-              />
-            </h2>
-            {trendChange && (
-              <div className="mt-3 flex items-center gap-2">
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${
-                    trendChange.abs >= 0
-                      ? 'bg-emerald-400/25 text-emerald-100 ring-emerald-300/30'
-                      : 'bg-red-400/25 text-red-100 ring-red-300/30'
-                  }`}
-                >
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d={
-                        trendChange.abs >= 0
-                          ? 'M3 17l6-6 4 4 8-8m0 0v5m0-5h-5'
-                          : 'M3 7l6 6 4-4 8 8m0 0v-5m0 5h-5'
-                      }
-                    />
-                  </svg>
-                  {signedEUR(trendChange.abs)} · {Math.abs(trendChange.pct).toFixed(2)}%
-                </span>
-                <span className="text-xs text-white/60">balance trend</span>
-              </div>
-            )}
-
-            <div className="mt-auto grid grid-cols-2 gap-3 border-t border-white/15 pt-4">
-              <div>
-                <p className="text-xs text-white/70 uppercase tracking-wider">Income</p>
-                <p className="text-base font-bold text-white">{mask(fmtEUR(income))}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-white/70 uppercase tracking-wider">Spent</p>
-                <p className="text-base font-bold text-white">{mask(fmtEUR(spending))}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Accounts carousel */}
-        <div className="flex flex-col xl:col-span-7">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="section-title">Accounts</h2>
-            <PillLink href="/portal/accounts">View all</PillLink>
-          </div>
-          <div
-            className="flex flex-1 snap-x gap-4 overflow-x-auto no-scrollbar rounded-2xl"
-            role="region"
-            aria-label="Your accounts — scroll horizontally to see more"
-            tabIndex={0}
-          >
-            {accounts.map(acc => (
-              <Link
-                key={acc.id}
-                href={`/portal/accounts/${acc.id}`}
-                className="group relative flex min-h-[210px] min-w-[215px] flex-1 snap-start flex-col justify-between overflow-hidden rounded-3xl p-5 text-white shadow-md transition-transform duration-200 hover:-translate-y-1"
-                style={{ background: acc.gradient }}
-              >
-                <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/15 blur-lg" />
-                <div className="relative z-10 flex items-start justify-between">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-base backdrop-blur-sm">
-                    {acc.glyph}
-                  </span>
-                  {acc.primary && (
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wide backdrop-blur-sm">
-                      Primary
-                    </span>
-                  )}
-                </div>
-                <div className="relative z-10">
-                  <p className="text-xs text-white/70">{acc.name}</p>
-                  <p className="mt-1 text-2xl font-bold tracking-tight">
-                    <BalanceAmount
-                      amount={acc.balance}
-                      currency={acc.currency}
-                      hidden={hideBalance}
-                      symbolClassName="text-sm font-semibold mr-0.5"
-                      centsClassName="text-sm text-white/65"
-                    />
-                  </p>
-                  {acc.type === 'SAVINGS' && goal.target > 0 && (
-                    <div
-                      className="mt-3"
-                      role="progressbar"
-                      aria-valuemin={0}
-                      aria-valuemax={goal.target}
-                      aria-valuenow={goal.saved}
-                      aria-label={`Savings goal: ${Math.round((goal.saved / goal.target) * 100)}% of target`}
-                    >
-                      <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">
-                        <div
-                          className="h-full rounded-full bg-white/85"
-                          style={{ width: `${Math.min(100, (goal.saved / goal.target) * 100)}%` }}
-                        />
-                      </div>
-                      <p className="mt-1.5 text-xs text-white/70">
-                        {Math.round((goal.saved / goal.target) * 100)}% of{' '}
-                        {hideBalance ? '••••••' : fmtEUR(goal.target)} goal
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div className="relative z-10 flex items-end justify-between">
-                  <span className="font-mono text-xs text-white/70">{acc.accountNumber}</span>
-                  <div className="h-6 w-14 opacity-80">
-                    <Sparkline data={acc.spark} width={56} height={20} strokeWidth={1.2} fill={false} />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ══ Activity: transactions | spending + upcoming ══ */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-
-        {/* Recent transactions — grouped by day, Revolut style */}
-        <div className="panel xl:col-span-7">
-          <div className="panel-header">
-            <h3 className="panel-title !text-base">Recent transactions</h3>
+        {/* Recent transactions — grouped by day */}
+        <div className="dash-card xl:col-span-7">
+          <div className="dash-card-head">
+            <h3 className="dash-card-title">Recent transactions</h3>
             <PillLink href="/portal/transactions">View all</PillLink>
           </div>
           <div className="pb-3">
@@ -483,22 +444,18 @@ export default function PortalDashboard() {
               const net = group.items.reduce((s, t) => s + (t.direction === 'IN' ? t.amount : -t.amount), 0);
               return (
                 <div key={group.label}>
-                  <div className="flex items-center justify-between px-5 pb-1 pt-4">
-                    <span className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>
-                      {group.label}
-                    </span>
+                  <div className="flex items-center justify-between px-6 pb-1.5 pt-5">
+                    <span className="dash-day">{group.label}</span>
                     <span className="text-sm font-medium tabular-nums" style={{ color: 'var(--text-muted)' }}>
                       {mask(signedEUR(net))}
                     </span>
                   </div>
                   {group.items.map((t: Transaction) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-                    >
+                    <div key={t.id} className="dash-row">
                       <div
                         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg"
-                        style={{ backgroundColor: `${CATEGORY_META[t.category].color}1f` }}
+                        style={{ backgroundColor: `${CATEGORY_META[t.category].color}33` }}
+                        aria-hidden="true"
                       >
                         {t.glyph || '✨'}
                       </div>
@@ -524,61 +481,29 @@ export default function PortalDashboard() {
           </div>
         </div>
 
-        {/* Right rail: spending + upcoming payments */}
+        {/* Right rail: repeat shortcuts and upcoming payments. Spending is not
+            repeated here — the hero already owns it. */}
         <div className="flex flex-col gap-5 xl:col-span-5">
-          <div className="panel flex flex-1 flex-col">
-            <div className="panel-header">
-              <h3 className="panel-title !text-base">Spending</h3>
-              <span className="chip">This month</span>
-            </div>
-            <div className="flex flex-1 items-center gap-5 px-5 py-4">
-              <RadialProgress
-                size={124}
-                stroke={12}
-                gap={0.03}
-                segments={topSpend.map(s => ({ value: s.total, color: s.color }))}
-                trackColor="var(--surface-input)"
-              >
-                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Total</span>
-                <span className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>
-                  {mask(fmtEUR(spending))}
-                </span>
-              </RadialProgress>
-              <div className="flex-1 space-y-3">
-                {topSpend.map(s => (
-                  <div key={s.category} className="flex items-center gap-2 text-sm">
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} />
-                    <span className="truncate" style={{ color: 'var(--text-secondary)' }}>{s.category}</span>
-                    <span className="ml-auto font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                      {mask(fmtEUR(s.total))}
-                    </span>
-                    <span className="w-8 text-right tabular-nums" style={{ color: 'var(--text-muted)' }}>
-                      {Math.round(s.pct)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          {ready && preferences.repeats && <PayAgain mask={mask} />}
 
-          <div className="panel flex flex-col">
-            <div className="panel-header">
-              <h3 className="panel-title !text-base">Upcoming payments</h3>
+          <div className="dash-card flex flex-1 flex-col">
+            <div className="dash-card-head">
+              <h3 className="dash-card-title">Upcoming payments</h3>
               <PillLink href="/portal/payments">View all</PillLink>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 pb-1">
               {scheduledPayments.map((p, i) => {
                 const d = new Date(p.nextDate);
                 const day = d.getDate().toString().padStart(2, '0');
-                const mon = d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
+                const mon = d.toLocaleDateString(undefined, { month: 'short' });
                 return (
-                  <div key={i} className="flex items-center gap-3 px-5 py-3.5">
+                  <div key={i} className="dash-row">
                     <div
-                      className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl"
-                      style={{ backgroundColor: 'var(--surface-input)' }}
+                      className="dash-date-tile h-11 w-11 shrink-0"
+                      aria-hidden="true"
                     >
-                      <span className="text-xs font-bold leading-none" style={{ color: 'var(--text-muted)' }}>{mon}</span>
-                      <span className="text-base font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{day}</span>
+                      <span className="text-xs font-semibold leading-none">{mon}</span>
+                      <span className="text-base font-bold leading-tight">{day}</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>{p.payee}</p>
@@ -591,10 +516,10 @@ export default function PortalDashboard() {
                 );
               })}
             </div>
-            <div className="px-5 py-3" style={{ borderTop: '1px solid var(--surface-border)' }}>
+            <div className="px-4 py-3" style={{ borderTop: '1px solid var(--surface-border)' }}>
               <Link
                 href="/portal/payments"
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold transition-colors hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05]"
                 style={{ color: 'var(--brand-on-soft)' }}
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -607,67 +532,22 @@ export default function PortalDashboard() {
         </div>
       </div>
 
-      {/* ══ Guidance — one calm, evidence-based nudge ══ */}
-      <div className="panel p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center">
-          <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
-            style={{ background: GUIDANCE_ICON_BG[guidance.accent] || GUIDANCE_ICON_BG.purple }}
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-            </svg>
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>{guidance.title}</h3>
-            <p className="mt-1 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>{guidance.summary}</p>
-          </div>
-          <Link href={guidance.href} className="btn btn-primary btn-sm shrink-0 self-start md:self-center">
-            {guidance.action}
-          </Link>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4 text-xs" style={{ borderColor: 'var(--surface-border)' }}>
-          <span className="chip">Monthly surplus: {mask(fmtEUR(Math.abs(monthlySurplus)))}</span>
-          <span className="chip">Open tasks: {taskCount}</span>
-          {!signalsLoading &&
-            realSignals.slice(0, 3).map((sig, idx) => (
-              <span
-                key={`${sig.signalType}-${sig.evidence?.applicationId ?? idx}`}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium ${SIGNAL_SEVERITY_TONE[sig.severity || 'MEDIUM'] || 'border-slate-200 bg-slate-50 text-slate-700'}`}
-              >
-                {formatSignalType(sig.signalType)}
-                {typeof sig.evidence?.applicationNumber === 'string' && (
-                  <span className="font-mono text-xs opacity-80">{sig.evidence.applicationNumber}</span>
-                )}
-              </span>
-            ))}
-          {!signalsLoading && realSignals.length > 3 && (
-            <Link
-              href="/portal/applications"
-              className="chip transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-            >
-              +{realSignals.length - 3} more from your applications
-            </Link>
-          )}
-        </div>
-      </div>
-
       {/* ══ Applications + relationship ══ */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="panel xl:col-span-8">
-          <div className="panel-header">
+        <div className="dash-card xl:col-span-8">
+          <div className="dash-card-head">
             <div className="flex items-center gap-2">
-              <h3 className="panel-title !text-base">Loans &amp; applications</h3>
+              <h3 className="dash-card-title">Loans &amp; applications</h3>
               {taskCount > 0 && <span className="badge badge-warning">{taskCount} task{taskCount !== 1 ? 's' : ''}</span>}
             </div>
             <PillLink href="/portal/applications">View all</PillLink>
           </div>
           {appLoading ? (
-            <div className="space-y-3 p-5">
+            <div className="space-y-3 p-6">
               {[1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
           ) : recentApps.length === 0 ? (
-            <div className="p-5">
+            <div className="p-6">
               <div className="empty-state">
                 <div className="empty-state-icon">
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -682,16 +562,15 @@ export default function PortalDashboard() {
           ) : (
             <>
               <div>
-                {recentApps.map(app => (
+                {recentApps.map(app => {
+                  const updates = signalsByApp.get(app.applicationId) ?? [];
+                  return (
                   <Link
                     key={app.applicationId}
                     href={`/portal/applications/${app.applicationId}`}
-                    className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                    className="group dash-row gap-4"
                   >
-                    <div
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
-                    >
+                    <div className="dash-icon dash-icon-sq h-11 w-11 shrink-0">
                       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
@@ -704,6 +583,14 @@ export default function PortalDashboard() {
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-sm font-semibold ${STATUS_COLORS[app.status] || 'bg-slate-100 text-slate-700'}`}>
                           {STATUS_LABELS[app.status] || app.status}
                         </span>
+                        {updates.length > 0 && (
+                          <span
+                            className="dash-update-chip"
+                            title={updates.map(s => formatSignalType(s.signalType)).join(', ')}
+                          >
+                            {updates.length} update{updates.length === 1 ? '' : 's'}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
                         {app.applicationNumber} · {formatCurrency(app.requestedAmount)}
@@ -737,10 +624,11 @@ export default function PortalDashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
                   </Link>
-                ))}
+                  );
+                })}
               </div>
               <div
-                className="flex items-center justify-between px-5 py-3.5 text-sm"
+                className="flex items-center justify-between px-6 py-3.5 text-sm"
                 style={{ borderTop: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}
               >
                 <span>{activeApps.length} active · {apps.length} total</span>
@@ -753,24 +641,24 @@ export default function PortalDashboard() {
         </div>
 
         {/* Relationship manager + support */}
-        <div className="panel flex flex-col p-5 xl:col-span-4">
+        <div className="dash-card flex flex-col p-6 xl:col-span-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-400 to-slate-600 text-sm font-bold text-white">
+            <div
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+              style={{ background: 'linear-gradient(135deg, #4a1747, #7f2b7b)' }}
+              aria-hidden="true"
+            >
               JC
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>James Carter</p>
+              <p className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>James Carter</p>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Relationship manager</p>
             </div>
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Online
-            </span>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-5 grid grid-cols-2 gap-2">
             <Link
               href="/portal/messages"
-              className="btn btn-secondary btn-sm"
+              className="btn btn-primary btn-sm"
             >
               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />

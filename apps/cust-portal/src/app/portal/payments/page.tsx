@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RepeatPayment } from '@/components/intelligence/RepeatPayment';
+import type { Transaction } from '@/lib/banking-data';
 import {
   ACCOUNTS,
   BENEFICIARIES,
@@ -241,7 +243,7 @@ export default function PaymentsPage() {
       status: payDate > todayISO() ? 'Scheduled' : 'Pending',
     };
     setSubmitted(prev => [row, ...prev]);
-    setConfirmation(`${fmt(row.amount, row.currency)} to ${row.payee} submitted from ${row.fromAccount}.`);
+    setConfirmation(`${fmt(row.amount, row.currency)} to ${row.payee} prepared as a demo from ${row.fromAccount}. No money has moved.`);
     setAmount('');
     setReference('');
   }, [canSend, source, payDate, recipientLabel, reference, numericAmount]);
@@ -253,6 +255,16 @@ export default function PaymentsPage() {
     setPayeeText('');
     setPayDate(todayISO());
     setConfirmation('');
+  }, []);
+
+  const prepareRepeat = useCallback((transaction: Transaction) => {
+    const beneficiary = BENEFICIARIES.find(b => b.name === transaction.merchant);
+    setTab(beneficiary ? 'saved' : 'new');
+    setPayeeId(beneficiary?.id ?? '');
+    setPayeeText(transaction.merchant);
+    setAmount(String(transaction.amount));
+    setReference(transaction.note || '');
+    setFromAccount(transaction.accountId);
   }, []);
 
   const pickQuickRecipient = useCallback((b: Beneficiary) => {
@@ -271,6 +283,8 @@ export default function PaymentsPage() {
         </div>
       </div>
 
+      <RepeatPayment onRepeat={prepareRepeat} />
+      <p className="text-xs text-[var(--text-secondary)]">Banking preview · sample accounts and transactions. Payments on this screen are simulated; no money moves.</p>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* Left: form + history */}
         <div className="space-y-6 xl:col-span-2">

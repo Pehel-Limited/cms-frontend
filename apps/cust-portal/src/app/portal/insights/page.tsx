@@ -1,25 +1,52 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   spendByCategory,
   monthlyInOut,
   dailySpendSeries,
+  savingsGoal,
   TRANSACTIONS,
   SCHEDULED_PAYMENTS,
   CATEGORY_META,
 } from '@/lib/banking-data';
+import { useInsightFeedback } from '@/lib/insight-feedback';
+import {
+  categoryOf,
+  detectRecurring,
+  merchantKey,
+  projectSavings,
+  type RecurringConfidence,
+} from '@/lib/spending-insights';
+import { InsightFooter } from '@/components/intelligence/InsightFooter';
 import { RadialProgress } from '@/components/banking/BankCard';
 
-function fmt(n: number) {
+function fmt(n: number, currency = 'EUR') {
   return new Intl.NumberFormat('en-IE', {
     style: 'currency',
-    currency: 'EUR',
+    currency,
     minimumFractionDigits: 2,
   }).format(n);
 }
 
 const WINDOW_DAYS = 30;
+const PROJECTION_ID = 'projection:savings';
+
+/** What each confidence level actually claims — no stronger than the arithmetic. */
+const CONFIDENCE_LABEL: Record<RecurringConfidence, { label: string; note: string }> = {
+  CONFIRMED: {
+    label: 'Regular',
+    note: 'Three or more settled payments, each roughly the same gap apart.',
+  },
+  PROBABLE: {
+    label: 'Likely regular',
+    note: 'Three or more settled payments, but the gap between them varies.',
+  },
+  INSUFFICIENT_HISTORY: {
+    label: 'Not enough history',
+    note: 'Seen twice. Two payments always look regular, so this is not treated as a pattern yet.',
+  },
+};
 
 /** Daily spend as an accessible line chart. Everything drawn is derived from
     the transaction history — no synthetic series. */
@@ -60,19 +87,62 @@ function SpendLineChart({ data, id }: { data: number[]; id: string }) {
 }
 
 export default function InsightsPage() {
-  const spend = useMemo(() => spendByCategory(), []);
+  const {
+    feedback,
+    ready,
+    dismiss,
+    restore,
+    setCategory,
+    resetCategory,
+    clearAll,
+    dismissedCount,
+    correctionCount,
+  } = useInsightFeedback();
+  const overrides = feedback.overrides;
+
+  const spend = useMemo(() => spendByCategory(overrides), [overrides]);
   const { income, spending } = useMemo(() => monthlyInOut(), []);
   const dailySpend = useMemo(() => dailySpendSeries(WINDOW_DAYS), []);
 
+  const isDismissed = useCallback(
+    (id: string) => feedback.dismissed.includes(id),
+    [feedback.dismissed]
+  );
+
+  const recurring = useMemo(() => detectRecurring(TRANSACTIONS, overrides), [overrides]);
+  const goal = useMemo(() => savingsGoal(), []);
+  const projection = useMemo(
+    () => projectSavings(TRANSACTIONS, goal, overrides),
+    [goal, overrides]
+  );
+
+  const visibleRecurring = useMemo(
+    () => recurring.filter(r => !isDismissed(r.id)),
+    [recurring, isDismissed]
+  );
+
+  /** Titles of everything currently hidden, so each can be brought back. */
+  const dismissedItems = useMemo(() => {
+    const items: { id: string; label: string }[] = [];
+    recurring.forEach(r => {
+      if (isDismissed(r.id)) items.push({ id: r.id, label: r.merchant });
+    });
+    if (isDismissed(PROJECTION_ID)) {
+      items.push({ id: PROJECTION_ID, label: `${goal.label} projection` });
+    }
+    return items;
+  }, [recurring, isDismissed, goal.label]);
+
   /* Top merchants, derived from the same transaction history the rest of the
-     page uses — grouped by merchant and summed for outgoing payments. */
+     page uses — grouped by merchant and summed for outgoing payments, and
+     honouring any category the customer has corrected. */
   const topMerchants = useMemo(() => {
     const totals = new Map<string, { total: number; glyph: string; category: string; count: number }>();
     TRANSACTIONS.filter(t => t.direction === 'OUT').forEach(t => {
       const prev = totals.get(t.merchant) ?? {
         total: 0,
         glyph: t.glyph || CATEGORY_META[t.category].glyph,
-        category: t.category,
+        category: categoryOf(t, overrides),
         count: 0,
       };
       prev.total += t.amount;
@@ -83,7 +153,7 @@ export default function InsightsPage() {
       .map(([merchant, v]) => ({ merchant, ...v }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, []);
+  }, [overrides]);
 
   /* Genuine upcoming commitments, taken from the scheduled-payment list. */
   const scheduled = useMemo(() => SCHEDULED_PAYMENTS, []);
@@ -123,14 +193,51 @@ export default function InsightsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
-          Spending insights
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
+            Spending insights
+          </h1>
+          <span className="chip">Calculated on this device</span>
+        </div>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
           {window
-            ? `Based on ${TRANSACTIONS.length} transactions between ${window.from} and ${window.to}.`
+            ? `Based on ${TRANSACTIONS.length} transactions between ${window.from} and ${window.to}. There is no transaction feed behind your live accounts yet, so this history is illustrative.`
             : 'No transactions on record yet.'}
         </p>
+        {!ready ? null : dismissedCount > 0 || correctionCount > 0 ? (
+          <div className="mt-3 space-y-2">
+            {correctionCount > 0 && (
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                {correctionCount} categor{correctionCount === 1 ? 'y' : 'ies'} corrected on this device
+              </p>
+            )}
+            {dismissedItems.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  Dismissed:
+                </span>
+                {dismissedItems.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => restore(item.id)}
+                    className="chip transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+                  >
+                    {item.label} · restore
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-sm font-medium"
+                  style={{ color: 'var(--brand-on-soft)' }}
+                >
+                  Reset all
+                </button>
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* Headline figures — each one computed from the transaction history */}
@@ -158,6 +265,150 @@ export default function InsightsPage() {
           </p>
         </div>
       </div>
+
+      {/* ── Recurring commitments ──────────────────────────────────────────
+          Detected by counting settled payments per merchant. The confidence
+          label states exactly how much history backs the claim, and the cited
+          transactions are one disclosure away. */}
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">Recurring payments we can see</h2>
+          <span className="chip">{visibleRecurring.length} detected</span>
+        </div>
+        {visibleRecurring.length === 0 ? (
+          <div className="p-5">
+            <div className="empty-state">
+              <div className="empty-state-icon">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+              </div>
+              <p className="empty-state-title">
+                {dismissedCount > 0 ? 'All detected payments dismissed' : 'No repeated payments yet'}
+              </p>
+              <p className="empty-state-text">
+                {dismissedCount > 0
+                  ? 'Reset your dismissed insights to see them again.'
+                  : 'A payment needs to appear three times in your history before we will call it a pattern.'}
+              </p>
+              {dismissedCount > 0 && (
+                <button type="button" onClick={clearAll} className="btn btn-secondary btn-sm mt-4">
+                  Reset dismissed insights
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <ul className="divide-token">
+            {visibleRecurring.map(item => {
+              const confidence = CONFIDENCE_LABEL[item.confidence];
+              const key = merchantKey(item.merchant);
+              const corrected = overrides[key] !== undefined;
+              return (
+                <li key={item.id} className="px-5 py-4">
+                  <div className="flex items-start gap-3">
+                    <span
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg"
+                      style={{ backgroundColor: 'var(--surface-input)' }}
+                      aria-hidden="true"
+                    >
+                      {item.glyph || CATEGORY_META[item.category].glyph}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {item.merchant}
+                        </p>
+                        <p className="shrink-0 text-base font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                          {fmt(item.typicalAmount)}
+                          <span className="ml-1 text-sm font-normal" style={{ color: 'var(--text-muted)' }}>
+                            typical
+                          </span>
+                        </p>
+                      </div>
+                      <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {item.category} · seen {item.occurrences} times · {fmt(item.totalInWindow)} in
+                        total
+                        {item.medianGapDays !== null && item.confidence !== 'INSUFFICIENT_HISTORY'
+                          ? ` · about every ${item.medianGapDays} days`
+                          : ''}
+                      </p>
+                      <p className="mt-1.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        <span className="font-medium">{confidence.label}.</span> {confidence.note}
+                      </p>
+                      <InsightFooter
+                        basis={item.evidence.basis}
+                        lines={item.evidence.lines}
+                        onDismiss={() => dismiss(item.id)}
+                        correction={{
+                          merchant: item.merchant,
+                          category: overrides[key] ?? item.category,
+                          corrected,
+                          onChange: category => setCategory(key, category),
+                          onReset: () => resetCategory(key),
+                        }}
+                      />
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* ── Savings projection ──────────────────────────────────────────────
+          A deterministic projection with its assumptions printed beside it,
+          kept visually separate from anything the bank decides. */}
+      {!isDismissed(PROJECTION_ID) && (
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">{goal.label} projection</h2>
+            <span className="chip">Illustration, not an offer</span>
+          </div>
+          <div className="p-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <p className="stat-label">Saved so far</p>
+                <p className="stat-value">{fmt(projection.saved, projection.currency)}</p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  of {fmt(projection.target, projection.currency)}
+                </p>
+              </div>
+              <div>
+                <p className="stat-label">Net per month, observed</p>
+                <p className="stat-value">
+                  {`${projection.monthlyNet >= 0 ? '+' : '−'}${fmt(Math.abs(projection.monthlyNet), projection.currency)}`}
+                </p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  From {projection.windowDays} days of history
+                </p>
+              </div>
+              <div>
+                <p className="stat-label">Remaining</p>
+                <p className="stat-value">{fmt(projection.remaining, projection.currency)}</p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {projection.targetDate
+                    ? `Reached around ${new Date(projection.targetDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })} at this rate`
+                    : 'Not reachable while spending exceeds income'}
+                </p>
+              </div>
+            </div>
+            <ul className="mt-4 space-y-1">
+              {projection.assumptions.map(assumption => (
+                <li key={assumption} className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  · {assumption}
+                </li>
+              ))}
+            </ul>
+            <InsightFooter
+              basis={projection.evidence.basis}
+              lines={projection.evidence.lines}
+              onDismiss={() => dismiss(PROJECTION_ID)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Spend over time + category split */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

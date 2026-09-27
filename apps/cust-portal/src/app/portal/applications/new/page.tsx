@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useAIPreferences } from '@/lib/ai-preferences';
 import {
   applicationService,
   ApplicationContext,
@@ -86,6 +87,7 @@ const VEHICLE_PURPOSES = ['VEHICLE_PURCHASE'];
 
 export default function NewApplicationPage() {
   const router = useRouter();
+  const { preferences, ready } = useAIPreferences();
   const searchParams = useSearchParams();
   const preselectedCode = searchParams.get('product');
   // Carried over from a confirmed Rayva AI Credit Assistant journey — lets us
@@ -542,6 +544,23 @@ export default function NewApplicationPage() {
           </p>
         </div>
       </div>
+
+      <section className="panel mb-6 p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="panel-title">Your application</h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">{STEPS[stepIndex]?.label ?? 'Choose a product'} is your focus now. Review everything before you submit.</p>
+          </div>
+          <span className="rounded-full bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand)]">Step {stepIndex + 1} of {STEPS.length}</span>
+        </div>
+        <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[var(--surface-border)]" role="progressbar" aria-label="Application steps completed" aria-valuemin={0} aria-valuemax={STEPS.length} aria-valuenow={Math.max(0, stepIndex)}><div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${Math.max(0, stepIndex) / STEPS.length * 100}%` }} /></div>
+        {ready && preferences.documents && step === 'product' && <details className="mt-5 rounded-xl bg-[var(--surface-input)] p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-[var(--brand)]">Prefill from a bank statement or payslip</summary>
+          <p className="my-3 text-sm leading-6 text-[var(--text-secondary)]">Upload a document, check the extracted information, then apply the suggested values to your draft. You can edit every field.</p>
+          <div className="grid gap-3 lg:grid-cols-2"><DocumentExtractionUpload documentType="BANK_STATEMENT" onApplyExtracted={applyExtractedFields} /><DocumentExtractionUpload documentType="PAYSLIP" onApplyExtracted={applyExtractedFields} /></div>
+          <p className="text-xs text-[var(--text-secondary)]">Tax document extraction is not available yet. Document reading helps prepare your application; it does not determine eligibility.</p>
+        </details>}
+      </section>
 
       {/* Stepper — plain step position, no scoring */}
       <nav
@@ -1310,6 +1329,54 @@ function humaniseFieldKey(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/* The model echoes figures exactly as they are printed on the page, so an
+   amount regularly arrives as "1,38,283.50" or "₹4,850.20" — a bare Number()
+   of that is NaN, which silently drops the value rather than failing loudly. */
+function parseAmount(value: unknown): number | null {
+  const raw = typeof value === 'number' ? String(value) : typeof value === 'string' ? value : '';
+  const cleaned = raw.replace(/[^0-9.-]/g, '');
+  if (!/^\d/.test(cleaned) && !/^-\d/.test(cleaned)) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+// Parses a date the model echoes verbatim, e.g. "01/04/2026" or "01 Apr 2026".
+// Returns null for anything unparseable so callers fall back gracefully.
+function parseStatementDate(value: unknown): Date | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const s = value.trim();
+  const num = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (num) {
+    const d = new Date(Number(num[3]), Number(num[2]) - 1, Number(num[1]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const t = Date.parse(s);
+  return isNaN(t) ? null : new Date(t);
+}
+
+// Number of calendar months a bank statement's transactions cover. The model
+// reads a statement that can span 1-6+ months, so a monthly-expense figure must
+// be an average, not the raw period total (AI_roadmap §15.1 "produce the figure
+// deterministically"). Prefers the printed statement period; falls back to the
+// distinct months present in the transaction list (always ≥ 1).
+function statementMonthsCovered(fields: Record<string, unknown>): number {
+  const start = parseStatementDate(fields.statementPeriodStart);
+  const end = parseStatementDate(fields.statementPeriodEnd);
+  if (start && end && end.getTime() >= start.getTime()) {
+    return (end.getFullYear() - start.getFullYear()) * 12
+      + (end.getMonth() - start.getMonth()) + 1;
+  }
+  const tx = Array.isArray(fields.transactions) ? fields.transactions : [];
+  const distinct = new Set<number>();
+  for (const txObj of tx) {
+    if (txObj && typeof txObj === 'object') {
+      const d = parseStatementDate((txObj as Record<string, unknown>).date);
+      if (d) distinct.add(d.getFullYear() * 12 + d.getMonth());
+    }
+  }
+  return Math.max(distinct.size, 1);
+}
+
 function extractedFieldPatch(
   documentType: DocumentType,
   fields: Record<string, unknown>
@@ -1317,23 +1384,28 @@ function extractedFieldPatch(
   if (documentType === 'PAYSLIP') {
     const patch: Record<string, string> = {};
     if (typeof fields.employerName === 'string') patch.employerName = fields.employerName;
-    const monthlyIncome = fields.netPay ?? fields.grossPay;
-    if (monthlyIncome != null && !Number.isNaN(Number(monthlyIncome))) {
-      patch.statedMonthlyIncome = String(monthlyIncome);
-    }
+    const monthlyIncome = parseAmount(fields.netPay) ?? parseAmount(fields.grossPay);
+    if (monthlyIncome != null) patch.statedMonthlyIncome = monthlyIncome.toFixed(2);
     return patch;
   }
 
-  // BANK_STATEMENT: estimate monthly expenses from the sum of debit transactions.
+  // BANK_STATEMENT: estimate MONTHLY expenses. Sum the debit transactions, then
+  // divide by how many months the statement covers — a statement routinely
+  // spans 1-6 months, so the raw debit total is NOT a monthly figure. Without
+  // this the applied value was the whole-period total (~19,317) instead of the
+  // monthly average (~3,220), which is what made the fetched amount "grossly
+  // incorrect".
   const transactions = Array.isArray(fields.transactions) ? fields.transactions : [];
   const totalDebits = transactions.reduce((sum: number, tx) => {
     if (!tx || typeof tx !== 'object') return sum;
     const t = tx as Record<string, unknown>;
     if (String(t.type).toUpperCase() !== 'DEBIT') return sum;
-    const amount = Number(t.amount);
-    return Number.isNaN(amount) ? sum : sum + Math.abs(amount);
+    const amount = parseAmount(t.amount);
+    return amount == null ? sum : sum + Math.abs(amount);
   }, 0);
-  return totalDebits > 0 ? { statedMonthlyExpenses: totalDebits.toFixed(2) } : {};
+  if (totalDebits <= 0) return {};
+  const monthlyExpenses = totalDebits / statementMonthsCovered(fields);
+  return { statedMonthlyExpenses: monthlyExpenses.toFixed(2) };
 }
 
 function DocumentExtractionUpload({
@@ -1343,34 +1415,58 @@ function DocumentExtractionUpload({
   documentType: DocumentType;
   onApplyExtracted: (patch: Record<string, string>) => void;
 }) {
+  const { preferences, ready } = useAIPreferences();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DocumentExtractionResult | null>(null);
   const [applied, setApplied] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const label = documentType === 'PAYSLIP' ? 'payslip' : 'bank statement';
+
+  useEffect(() => {
+    if (!uploading) return;
+    const timer = window.setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [uploading]);
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
 
+    if (file.size > 10 * 1024 * 1024 || !['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setUploadError('Choose a PDF, JPG, PNG or WebP file up to 10 MB.');
+      return;
+    }
     setUploading(true);
     setUploadError(null);
     setDraft(null);
     setApplied(false);
+    setElapsedSeconds(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const result = await documentExtractionService.extract(documentType, file);
-      if (result.status === 'FAILED' || result.status === 'AI_PROVIDER_UNAVAILABLE') {
+      const result = await documentExtractionService.extract(documentType, file, controller.signal);
+      if (result.status !== 'DRAFT') {
         setUploadError(result.errorMessage || result.warnings[0] || 'Could not read this document.');
       } else {
         setDraft(result);
       }
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+      // A cancel is an expected outcome at this length, not an error to report.
+      if (!controller.signal.aborted) {
+        setUploadError(err instanceof Error ? err.message : 'Upload failed');
+      }
     } finally {
+      abortRef.current = null;
       setUploading(false);
     }
+  }
+
+  function handleCancel() {
+    abortRef.current?.abort();
   }
 
   function handleApply() {
@@ -1379,9 +1475,11 @@ function DocumentExtractionUpload({
     setApplied(true);
   }
 
+  if (!ready || !preferences.documents) return null;
+
   return (
     <div
-      className="mb-6 rounded-xl border border-dashed p-5"
+      className="mb-6 rounded-xl border border-dashed bg-[var(--brand-soft)] p-5"
       style={{ borderColor: 'var(--surface-border-strong)' }}
     >
       <p className="field-label mb-1">
@@ -1389,18 +1487,49 @@ function DocumentExtractionUpload({
       </p>
       <p className="field-hint mb-3">
         We&apos;ll read it and suggest values below for you to review — nothing is filled in
-        automatically.
+        automatically. PDF, JPG, PNG or WebP, up to 10 MB.
       </p>
       <label className="btn btn-ghost btn-sm inline-block cursor-pointer">
-        {uploading ? 'Reading document…' : `Choose ${label} file`}
+        {uploading ? 'Reading…' : `Choose ${label} file`}
         <input
           type="file"
-          accept="application/pdf,image/*"
+          accept="application/pdf,image/jpeg,image/png,image/webp"
           className="sr-only"
           disabled={uploading}
           onChange={handleFileSelected}
         />
       </label>
+
+      {uploading && (
+        <div
+          className="mt-4 rounded-xl p-4"
+          style={{ backgroundColor: 'var(--surface-input)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <p
+            className="flex items-center gap-2 text-base font-medium"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            <span
+              className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+              aria-hidden="true"
+            />
+            Reading your {label}
+          </p>
+          <p className="field-hint mt-2">
+            We&apos;re pulling the figures out for you to check — this usually takes under a minute.
+          </p>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-sm tabular-nums" style={{ color: 'var(--text-muted)' }}>
+              {elapsedSeconds}s elapsed
+            </span>
+            <button type="button" onClick={handleCancel} className="btn btn-ghost btn-sm">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {uploadError && (
         <p

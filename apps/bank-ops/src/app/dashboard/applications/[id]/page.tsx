@@ -969,6 +969,13 @@ export default function ApplicationDetailPage() {
   // Check if current user is the creator of the application
   const isApplicationCreator = currentUser?.userId === application?.createdByUserId;
 
+  // A customer-originated application (ONLINE_PORTAL / MOBILE_APP) has no bank creator, so
+  // gating bank-side progression on isApplicationCreator left staff with a read-only page.
+  // Segregation of duties is preserved separately: isAssignedReviewer below, and the
+  // underwriter picker still excludes the creator.
+  const isBankStaff = !!currentUser && currentUser.userType !== 'CUSTOMER';
+  const canActOnBehalfOfBank = isApplicationCreator || isBankStaff;
+
   // Get the effective status (lomsStatus takes precedence)
   const effectiveStatus = application?.status || 'DRAFT';
 
@@ -977,7 +984,8 @@ export default function ApplicationDetailPage() {
 
   // Can assign: SUBMITTED status or RETURNED status (to reassign for review after corrections)
   const canAssign =
-    (effectiveStatus === 'SUBMITTED' || effectiveStatus === 'RETURNED') && isApplicationCreator;
+    (effectiveStatus === 'SUBMITTED' || effectiveStatus === 'RETURNED') &&
+    canActOnBehalfOfBank;
 
   // Segregation of duties: even if assigned, the creator cannot review their own application
   const isAssignedReviewer = !!(
@@ -997,7 +1005,6 @@ export default function ApplicationDetailPage() {
   ].includes(effectiveStatus);
 
   const canApprove = isUnderReviewStatus && isAssignedReviewer;
-  const canCancel = effectiveStatus === 'DRAFT' && isApplicationCreator;
 
   const isNotFinalStatus = ![
     'APPROVED',
@@ -1014,7 +1021,10 @@ export default function ApplicationDetailPage() {
     'OFFER_EXPIRED',
     'CLOSED',
   ].includes(effectiveStatus);
-  const canWithdraw = isNotFinalStatus && isApplicationCreator && effectiveStatus !== 'DRAFT';
+
+  // Mirrors the backend rule (ApplicationStateMachine.canCancel): any non-terminal state.
+  const canCancel = isNotFinalStatus && canActOnBehalfOfBank;
+  const canWithdraw = isNotFinalStatus && canActOnBehalfOfBank && effectiveStatus !== 'DRAFT';
 
   const canReviewerReject = isUnderReviewStatus && isAssignedReviewer;
 
@@ -1285,11 +1295,13 @@ export default function ApplicationDetailPage() {
             customerId={application.customerId}
             currentUserId={currentUser?.userId || ''}
             isApplicationCreator={isApplicationCreator}
+            canAssign={canAssign}
             assignedToUserId={application.assignedToUserId}
             approvedAmount={application.approvedAmount || application.requestedAmount || 0}
             kycVerified={application.kycCompleted}
             productName={application.product?.productName}
             onStatusChange={fetchApplication}
+            onRequestAssign={() => openModal('assign', 'Assign application')}
           />
         </div>
       )}

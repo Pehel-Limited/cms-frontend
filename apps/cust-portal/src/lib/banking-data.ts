@@ -30,6 +30,13 @@ export interface BankAccount {
   /** Monthly inflow / outflow used for the mini sparkline */
   spark: number[];
   primary?: boolean;
+  /* Present only for accounts loaded from account-service. The sample set has
+     none of this, so every consumer must treat them as optional. */
+  /** The bank's own product label, e.g. "Notice Savings Account". */
+  typeLabel?: string;
+  statusDisplay?: string;
+  /** When the balance snapshot was taken (ISO). */
+  balanceAsOf?: string;
 }
 
 export type CardType = 'DEBIT' | 'CREDIT';
@@ -393,11 +400,15 @@ export interface CategorySpend {
   pct: number;
 }
 
-/** Spend breakdown by category for OUT transactions in the current window. */
-export function spendByCategory(): CategorySpend[] {
+/** Spend breakdown by category for OUT transactions in the current window.
+    `overrides` lets a customer's own re-categorisations feed the same totals
+    the insight cards use, so the two never disagree. */
+export function spendByCategory(overrides: Record<string, SpendCategory> = {}): CategorySpend[] {
   const totals = new Map<SpendCategory, number>();
   TRANSACTIONS.filter(t => t.direction === 'OUT' && t.category !== 'Transfers').forEach(t => {
-    totals.set(t.category, (totals.get(t.category) ?? 0) + t.amount);
+    const category = overrides[t.merchant.trim().toLowerCase()] ?? t.category;
+    if (category === 'Transfers') return;
+    totals.set(category, (totals.get(category) ?? 0) + t.amount);
   });
   const grand = Array.from(totals.values()).reduce((a, b) => a + b, 0) || 1;
   return Array.from(totals.entries())
@@ -466,13 +477,6 @@ export function savingsGoal(): SavingsGoal {
     target: 40000,
     currency: pot?.currency ?? 'EUR',
   };
-}
-
-/** A 12-point series approximating account balance over time, for the hero chart. */
-export function balanceTrend(): number[] {
-  const base = totalBalanceEUR();
-  const wobble = [0.78, 0.81, 0.79, 0.85, 0.88, 0.84, 0.9, 0.93, 0.91, 0.96, 0.98, 1];
-  return wobble.map(w => Math.round(base * w));
 }
 
 export function groupTransactionsByDay(list: Transaction[]): { label: string; items: Transaction[] }[] {

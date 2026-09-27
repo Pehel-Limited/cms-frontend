@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -9,6 +9,7 @@ import {
   EligibilityCheck,
   PRODUCT_TYPE_LABELS,
 } from '@/services/api/product-service';
+import { estimateRepayment } from '@/lib/loan-estimate';
 import { formatCurrency } from '@/lib/format';
 
 /* ── SVG icon map (decorative — the container is aria-hidden) ── */
@@ -340,6 +341,11 @@ export default function ProductDetailPage() {
         </InfoCard>
       </div>
 
+      {/* Indicative repayment — closed-form arithmetic over the product's own
+          published figures, with its assumptions and validity printed beside it
+          so it can never be mistaken for an offer. */}
+      <RepaymentEstimate product={product} />
+
       {/* Fees & Features */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="panel">
@@ -478,11 +484,52 @@ export default function ProductDetailPage() {
 
 // ─── Sub-Components ──────────────────────────────────────────────
 
+/**
+ * What a SKIPPED criterion actually needs from the customer. Criterion names
+ * must match bff-customer's ProductBffController exactly — an unknown name
+ * simply renders no guidance rather than guessing.
+ */
+const MISSING_EVIDENCE: Record<string, { what: string; action?: string; href?: string }> = {
+  'Customer Profile': {
+    what: 'Your login is not linked to a customer record yet.',
+    action: 'Complete your profile',
+    href: '/portal/profile',
+  },
+  'Customer Type': {
+    what: 'Your customer type is not recorded.',
+    action: 'Complete your profile',
+    href: '/portal/profile',
+  },
+  'Age Requirement': {
+    what: 'Your date of birth is not on file.',
+    action: 'Add your date of birth',
+    href: '/portal/profile',
+  },
+  'Minimum Income': {
+    what: 'Your annual income is not on file. A payslip can supply it during the application.',
+    action: 'Add your income',
+    href: '/portal/profile',
+  },
+  'Credit Score': {
+    what: 'No credit score is held against your profile. The bank retrieves this during assessment — there is nothing for you to upload.',
+  },
+  'Years in Business': {
+    what: 'Your business trading history is not on file.',
+    action: 'Add your business details',
+    href: '/portal/company',
+  },
+  'Business Revenue': {
+    what: 'Your annual revenue is not on file.',
+    action: 'Add your business details',
+    href: '/portal/company',
+  },
+};
+
 function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
   const statusConfig = {
     ELIGIBLE: {
       className: 'alert-success',
-      heading: 'You are eligible',
+      heading: 'You meet the published criteria',
       icon: (
         <svg
           className="h-5 w-5 shrink-0"
@@ -502,7 +549,7 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
     },
     NOT_ELIGIBLE: {
       className: 'alert-error',
-      heading: 'You may not be eligible',
+      heading: 'Some published criteria are not met',
       icon: (
         <svg
           className="h-5 w-5 shrink-0"
@@ -522,7 +569,7 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
     },
     NEEDS_REVIEW: {
       className: 'alert-warning',
-      heading: 'Eligibility needs review',
+      heading: 'Some criteria could not be checked',
       icon: (
         <svg
           className="h-5 w-5 shrink-0"
@@ -594,7 +641,7 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
   const RESULT_LABELS: Record<string, string> = {
     PASS: 'Met',
     FAIL: 'Not met',
-    SKIPPED: 'Not checked',
+    SKIPPED: 'Missing evidence',
   };
 
   return (
@@ -605,25 +652,217 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
         <p className="mt-1 text-sm leading-6">{eligibility.summary}</p>
 
         {eligibility.checks.length > 0 && (
-          <ul className="mt-4 space-y-2">
-            {eligibility.checks.map((check, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <span className="mt-0.5">{checkIcons[check.result] || checkIcons.SKIPPED}</span>
-                <span>
-                  <span className="font-medium">{check.criterion}: </span>
-                  {check.detail}
-                  <span className="ml-1.5 font-medium">
-                    ({RESULT_LABELS[check.result] || check.result})
-                  </span>
-                </span>
-              </li>
-            ))}
+          <ul className="mt-4 space-y-3">
+            {eligibility.checks.map((check, i) => {
+              const missing =
+                check.result === 'SKIPPED' ? MISSING_EVIDENCE[check.criterion] : undefined;
+              return (
+                <li key={i} className="text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5">{checkIcons[check.result] || checkIcons.SKIPPED}</span>
+                    <span>
+                      <span className="font-medium">{check.criterion}: </span>
+                      {check.detail}
+                      <span className="ml-1.5 font-medium">
+                        ({RESULT_LABELS[check.result] || check.result})
+                      </span>
+                    </span>
+                  </div>
+                  {missing && (
+                    <div className="mt-1 pl-6">
+                      <p className="text-sm opacity-80">{missing.what}</p>
+                      {missing.href && missing.action && (
+                        <Link
+                          href={missing.href}
+                          className="mt-1 inline-block text-sm font-semibold underline underline-offset-4"
+                        >
+                          {missing.action}
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
         {eligibility.canApply && eligibility.status !== 'ELIGIBLE' && (
           <p className="mt-3 text-sm italic opacity-80">
             You can still start a draft application — it will be reviewed by our team.
+          </p>
+        )}
+
+        <p className="mt-4 text-sm opacity-80">
+          This is a pre-check against the criteria the bank publishes for this product. It is not a
+          lending decision, a credit assessment, or a guarantee that an offer will be made.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const fmt2 = (n: number) =>
+  new Intl.NumberFormat('en-IE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+  }).format(n);
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Indicative repayment built from the product's own published amount, rate and
+ * term limits. The customer moves the inputs; the arithmetic is closed-form and
+ * the assumptions and validity window are printed with the result, so this
+ * reads as an illustration and never as a decision or an offer.
+ */
+function RepaymentEstimate({ product }: { product: LoanProduct }) {
+  const rate = product.defaultInterestRate ?? product.minInterestRate;
+  const rateIsTypical = product.defaultInterestRate != null;
+
+  const [amountText, setAmountText] = useState(
+    String(product.defaultLoanAmount ?? product.minLoanAmount)
+  );
+  const [termText, setTermText] = useState(
+    String(product.defaultTermMonths ?? product.minTermMonths)
+  );
+
+  const amount = Number(amountText);
+  const termMonths = Number(termText);
+  const amountValid =
+    Number.isFinite(amount) && amount >= product.minLoanAmount && amount <= product.maxLoanAmount;
+  const termValid =
+    Number.isInteger(termMonths) &&
+    termMonths >= product.minTermMonths &&
+    termMonths <= product.maxTermMonths;
+
+  const estimate = useMemo(
+    () =>
+      amountValid && termValid
+        ? estimateRepayment(
+            { amount, annualRatePct: rate, termMonths },
+            { rateLabel: `the ${rateIsTypical ? 'typical' : 'lowest'} published rate of ${rate}%` }
+          )
+        : null,
+    [amountValid, termValid, amount, termMonths, rate, rateIsTypical]
+  );
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Indicative repayment</h2>
+        <span className="chip">Not an offer</span>
+      </div>
+      <div className="space-y-5 p-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="field-label" htmlFor="estimate-amount">
+              Amount you want to borrow
+            </label>
+            <input
+              id="estimate-amount"
+              type="number"
+              className={`input ${amountValid ? '' : 'input-error'}`}
+              min={product.minLoanAmount}
+              max={product.maxLoanAmount}
+              step={500}
+              value={amountText}
+              onChange={event => setAmountText(event.target.value)}
+              onBlur={() =>
+                setAmountText(
+                  String(
+                    clamp(
+                      Number.isFinite(amount) ? amount : product.minLoanAmount,
+                      product.minLoanAmount,
+                      product.maxLoanAmount
+                    )
+                  )
+                )
+              }
+            />
+            <p className="field-hint">
+              This product lends between {formatCurrency(product.minLoanAmount)} and{' '}
+              {formatCurrency(product.maxLoanAmount)}.
+            </p>
+          </div>
+          <div>
+            <label className="field-label" htmlFor="estimate-term">
+              Term in months
+            </label>
+            <input
+              id="estimate-term"
+              type="number"
+              className={`input ${termValid ? '' : 'input-error'}`}
+              min={product.minTermMonths}
+              max={product.maxTermMonths}
+              step={1}
+              value={termText}
+              onChange={event => setTermText(event.target.value)}
+              onBlur={() =>
+                setTermText(
+                  String(
+                    Math.round(
+                      clamp(
+                        Number.isFinite(termMonths) ? termMonths : product.minTermMonths,
+                        product.minTermMonths,
+                        product.maxTermMonths
+                      )
+                    )
+                  )
+                )
+              }
+            />
+            <p className="field-hint">
+              Between {product.minTermMonths} and {product.maxTermMonths} months.
+            </p>
+          </div>
+        </div>
+
+        {estimate ? (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="stat-tile">
+                <p className="stat-label">Monthly payment</p>
+                <p className="stat-value">{fmt2(estimate.monthlyPayment)}</p>
+              </div>
+              <div className="stat-tile">
+                <p className="stat-label">Total interest</p>
+                <p className="stat-value">{fmt2(estimate.totalInterest)}</p>
+              </div>
+              <div className="stat-tile">
+                <p className="stat-label">Total repayable</p>
+                <p className="stat-value">{fmt2(estimate.totalRepayable)}</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                What this assumes
+              </p>
+              <ul className="mt-2 space-y-1">
+                {estimate.assumptions.map(assumption => (
+                  <li key={assumption} className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    · {assumption}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
+                Based on rates published today. This indication expires{' '}
+                {new Date(estimate.validUntil).toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                })}
+                , after which the published rate should be checked again.
+              </p>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Enter an amount and term within this product&apos;s limits to see an indication.
           </p>
         )}
       </div>

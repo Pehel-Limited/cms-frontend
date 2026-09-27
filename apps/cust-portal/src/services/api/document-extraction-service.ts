@@ -34,7 +34,7 @@ function authHeaders(): Record<string, string> {
 }
 
 export const documentExtractionService = {
-  async extract(documentType: DocumentType, file: File): Promise<DocumentExtractionResult> {
+  async extract(documentType: DocumentType, file: File, signal?: AbortSignal): Promise<DocumentExtractionResult> {
     const formData = new FormData();
     formData.append('documentType', documentType);
     formData.append('file', file);
@@ -43,6 +43,7 @@ export const documentExtractionService = {
       method: 'POST',
       headers: authHeaders(),
       body: formData,
+      signal,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: res.statusText }));

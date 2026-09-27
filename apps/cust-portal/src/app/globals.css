@@ -623,3 +623,143 @@
 .stagger > *:nth-child(5) { animation-delay: 0.18s; }
 .stagger > *:nth-child(n + 6) { animation-delay: 0.22s; }
 
+/* ─── Dashboard design standard ───────────────────────────────────────────
+   Borderless rounded cards, one dominant figure, sentence-case labels at 14px
+   or larger, and a single plum hero. Replaces the older bordered .panel chrome
+   and the mesh-gradient hero on the overview screen. */
+.dash-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 32px;
+  color: #fff;
+  background:
+    radial-gradient(ellipse at 88% 0%, #75488a 0%, transparent 58%),
+    linear-gradient(120deg, #21142f, #422249 70%, #533159);
+  box-shadow: 0 14px 40px -24px #45204b;
+}
+.dash-hero::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  width: 430px;
+  height: 430px;
+  right: -160px;
+  bottom: -310px;
+  border: 1px solid #ffffff20;
+  border-radius: 50%;
+  box-shadow: 0 0 0 42px #ffffff05, 0 0 0 84px #ffffff04, 0 0 0 126px #ffffff03;
+}
+.dash-hero-inset {
+  border: 1px solid #ffffff20;
+  background: #ffffff09;
+  border-radius: 20px;
+  padding: 22px;
+}
+.dash-hero-label { font-size: 14px; color: #ffffffb3; }
+.dash-hero-chip {
+  border: 1px solid #ffffff2e;
+  background: #ffffff14;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 13px;
+  color: #ffffffcc;
+}
+.dash-hero-link { font-size: 14px; font-weight: 600; color: #ffffffd9; }
+.dash-hero-link:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+
+.dash-card {
+  background-color: var(--surface-card);
+  border-radius: 24px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.dash-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px 10px;
+}
+.dash-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.dash-card-foot {
+  border-top: 1px solid var(--surface-border);
+  padding: 12px 24px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+/* Brand-tinted card for surfaces that hold something prepared for the customer. */
+.dash-accent {
+  background:
+    radial-gradient(ellipse at right top, var(--brand-soft), transparent 75%),
+    var(--surface-card);
+}
+/* Plum-filled medallion — the hero's gradient family, so the light content below
+   carries the hero's colour instead of pale tints. */
+.dash-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4a1747, #7f2b7b);
+  color: #fff;
+  box-shadow: 0 8px 18px -10px #45204b;
+}
+.dash-icon-sq { border-radius: 14px; }
+.dash-day {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-on-soft);
+}
+.dash-date-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--brand-soft);
+  color: var(--brand-on-soft);
+}
+.dash-update-chip {
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-on-soft);
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dash-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
+  transition: background-color 0.15s ease;
+}
+.dash-row:hover { background-color: rgb(0 0 0 / 0.02); }
+:is(.dark) .dash-row:hover { background-color: rgb(255 255 255 / 0.03); }
+.dash-tile {
+  border-radius: 20px;
+  background-color: var(--surface-input);
+  padding: 18px 20px;
+}
+.dash-tile-label { font-size: 14px; color: var(--text-muted); }
+.dash-tile-value {
+  margin-top: 4px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+@media (max-width: 640px) {
+  .dash-hero { padding: 22px; border-radius: 24px; }
+  .dash-hero-inset { padding: 18px; }
+  .dash-card-head { padding: 18px 18px 8px; }
+  .dash-row { padding: 12px 18px; }
+  .dash-card-foot { padding: 12px 18px; }
+}
+

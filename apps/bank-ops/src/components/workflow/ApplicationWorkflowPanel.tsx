@@ -27,12 +27,14 @@ interface ApplicationWorkflowPanelProps {
   customerId: string;
   currentUserId: string;
   isApplicationCreator: boolean;
+  canAssign?: boolean;
   assignedToUserId?: string;
   approvedAmount?: number;
   currency?: string;
   kycVerified?: boolean;
   productName?: string;
   onStatusChange?: () => void;
+  onRequestAssign?: () => void;
 }
 
 /**
@@ -45,12 +47,14 @@ export function ApplicationWorkflowPanel({
   customerId,
   currentUserId,
   isApplicationCreator,
+  canAssign = false,
   assignedToUserId,
   approvedAmount = 0,
   currency = 'EUR',
   kycVerified = false,
   productName,
   onStatusChange,
+  onRequestAssign,
 }: ApplicationWorkflowPanelProps) {
   const [statusInfo, setStatusInfo] = useState<StatusInfo | null>(null);
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
@@ -71,7 +75,7 @@ export function ApplicationWorkflowPanel({
   const isAssignedReviewer = currentUserId === assignedToUserId && !isApplicationCreator;
 
   // Use the LOMS status directly - we now receive the effective status from the parent
-  const lomsStatus = statusInfo?.status || applicationStatus;
+  const lomsStatus = statusInfo?.currentStatus || applicationStatus;
 
   // Load workflow data
   useEffect(() => {
@@ -146,7 +150,7 @@ export function ApplicationWorkflowPanel({
   }
 
   // Handle workflow actions
-  async function handleAction(action: WorkflowAction) {
+  async function handleAction(action: WorkflowAction, targetStatus?: LomsApplicationStatus) {
     try {
       setLoading(true);
 
@@ -161,10 +165,24 @@ export function ApplicationWorkflowPanel({
           toast.success('Application submitted successfully');
           break;
 
-        case 'SUBMIT_FOR_DECISIONING':
-          await lomsService.submitForDecisioning(applicationId, currentUserId);
-          toast.success('Application submitted for credit decisioning');
+        case 'ADVANCE':
+          if (!targetStatus) {
+            toast.error('This action is missing its target status.');
+            return;
+          }
+          await lomsService.transitionStatus(applicationId, {
+            currentStatus: lomsStatus,
+            targetStatus,
+            actorId: currentUserId,
+            reason: `Advanced to ${targetStatus}`,
+          });
+          toast.success(`Application moved to ${targetStatus.replace(/_/g, ' ').toLowerCase()}`);
           break;
+
+        case 'ASSIGN':
+          // The underwriter picker and its segregation-of-duties filtering live on the page.
+          onRequestAssign?.();
+          return;
 
         case 'APPROVE':
           setShowDecisionModal('approve');
@@ -220,13 +238,13 @@ export function ApplicationWorkflowPanel({
           break;
 
         case 'WITHDRAW':
-          // Use backend status for API call
-          await lomsService.cancelApplication(
-            applicationId,
-            lomsStatus,
-            currentUserId,
-            'Application withdrawn'
-          );
+          // cancelApplication hard-codes CANCELLED — withdraw to its own terminal state.
+          await lomsService.transitionStatus(applicationId, {
+            currentStatus: lomsStatus,
+            targetStatus: 'WITHDRAWN',
+            actorId: currentUserId,
+            reason: 'Application withdrawn',
+          });
           toast.success('Application withdrawn');
           break;
 
@@ -341,6 +359,7 @@ export function ApplicationWorkflowPanel({
               validTransitions={statusInfo.validTransitions || []}
               isAssignedReviewer={isAssignedReviewer}
               isApplicationCreator={isApplicationCreator}
+              canAssign={canAssign}
               canCancel={statusInfo.canCancel}
               canWithdraw={statusInfo.canWithdraw}
               onAction={handleAction}

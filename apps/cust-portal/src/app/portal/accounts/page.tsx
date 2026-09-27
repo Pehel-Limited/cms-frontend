@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ACCOUNTS,
   TRANSACTIONS,
-  totalBalanceEUR,
   savingsGoal,
   type BankAccount,
   type Transaction,
 } from '@/lib/banking-data';
+import {
+  accountService,
+  type AccountSource,
+  type SampleReason,
+} from '@/services/api/account-service';
 import { Sparkline } from '@/components/banking/BankCard';
 
 function fmt(n: number, cur = 'EUR') {
@@ -37,10 +40,13 @@ const NO_ACCOUNTS: BankAccount[] = [];
 /* ──────────────────────────────────────────────────────────────────
  * Data resolution
  *
- * Every figure on this page is derived from the banking dataset — nothing is
- * asserted that the data cannot back up. The dataset is resolved through an
- * effect so the loading skeleton and the failure/retry path are real states
- * rather than decoration.
+ * Accounts come from bff-customer, which serves the customer's own real
+ * accounts and falls back to the sample set when it cannot. The snapshot
+ * always reports which of the two it is, so the page can label its figures
+ * instead of implying money that was never read.
+ *
+ * Transactions have no backend feed yet, so they are only ever shown against
+ * the sample accounts they actually belong to.
  * ────────────────────────────────────────────────────────────────── */
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -49,19 +55,32 @@ interface AccountsData {
   accounts: BankAccount[];
   transactions: Transaction[];
   total: number;
+  /** Null when the accounts do not share one currency — then no single total is honest. */
+  totalCurrency: string | null;
   available: number;
-  goal: ReturnType<typeof savingsGoal>;
+  goal: ReturnType<typeof savingsGoal> | null;
+  source: AccountSource;
+  sampleReason: SampleReason | null;
+  balanceAsOf: string | null;
 }
 
-function resolveAccounts(): AccountsData {
-  const accounts = ACCOUNTS;
-  if (!accounts.length) throw new Error('No accounts returned');
+async function resolveAccounts(): Promise<AccountsData> {
+  const { accounts, source, sampleReason, balanceAsOf } = await accountService.getAccountsSnapshot();
+
+  const currencies = new Set(accounts.map(a => a.currency));
+  const totalCurrency = currencies.size === 1 ? accounts[0]?.currency ?? null : null;
+  const sum = (pick: (a: BankAccount) => number) => accounts.reduce((total, a) => total + pick(a), 0);
+
   return {
     accounts,
-    transactions: TRANSACTIONS,
-    total: totalBalanceEUR(),
-    available: accounts.reduce((sum, a) => sum + a.available, 0),
-    goal: savingsGoal(),
+    transactions: source === 'LIVE' ? [] : TRANSACTIONS,
+    total: totalCurrency ? sum(a => a.balance) : 0,
+    totalCurrency,
+    available: totalCurrency ? sum(a => a.available) : 0,
+    goal: source === 'LIVE' ? null : savingsGoal(),
+    source,
+    sampleReason,
+    balanceAsOf,
   };
 }
 
@@ -73,25 +92,35 @@ function useAccountsData() {
   useEffect(() => {
     let active = true;
     setState('loading');
-    const timer = window.setTimeout(() => {
-      if (!active) return;
-      try {
-        setData(resolveAccounts());
+    resolveAccounts()
+      .then(result => {
+        if (!active) return;
+        setData(result);
         setState('ready');
-      } catch {
+      })
+      .catch(() => {
+        if (!active) return;
         setData(null);
         setState('error');
-      }
-    }, 220);
+      });
     return () => {
       active = false;
-      window.clearTimeout(timer);
     };
   }, [attempt]);
 
   const retry = useCallback(() => setAttempt(a => a + 1), []);
   return { data, state, retry };
 }
+
+const SOURCE_BADGE: Record<AccountSource, { label: string; tone: string }> = {
+  LIVE: { label: 'Live balances', tone: 'var(--success, #10b981)' },
+  SAMPLE: { label: 'Sample data', tone: 'var(--warning, #f59e0b)' },
+};
+
+const SAMPLE_REASON_TEXT: Record<SampleReason, string> = {
+  NO_LIVE_ACCOUNTS: 'No accounts are linked to your profile yet, so these figures are illustrative.',
+  SERVICE_UNAVAILABLE: 'Your account service could not be reached, so these figures are illustrative.',
+};
 
 /* ──────────────────────────────────────────────────────────────────
  * Shared states
@@ -186,10 +215,28 @@ export default function AccountsPage() {
       {/* ── Page header ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">My accounts</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="page-title">My accounts</h1>
+            {data && (
+              <span
+                className="rounded-full border px-2.5 py-1 text-sm font-medium"
+                style={{
+                  color: SOURCE_BADGE[data.source].tone,
+                  borderColor: SOURCE_BADGE[data.source].tone,
+                }}
+              >
+                {SOURCE_BADGE[data.source].label}
+              </span>
+            )}
+          </div>
           <p className="page-subtitle">
             Balances, recent activity and payment details for every account you hold with us.
           </p>
+          {data?.source === 'SAMPLE' && data.sampleReason && (
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+              {SAMPLE_REASON_TEXT[data.sampleReason]}
+            </p>
+          )}
         </div>
         <Link href="/portal/products" className="btn btn-primary shrink-0">
           <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -205,13 +252,21 @@ export default function AccountsPage() {
           <p className="stat-label">Total balance</p>
           {state === 'loading' ? (
             <div className="skeleton mt-2 h-7 w-32" />
-          ) : !data ? (
-            <p className="stat-value">—</p>
+          ) : !data || !data.totalCurrency ? (
+            <>
+              <p className="stat-value">—</p>
+              {data && (
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  Held in more than one currency
+                </p>
+              )}
+            </>
           ) : (
             <>
-              <p className="stat-value">{mask(fmt(data.total))}</p>
+              <p className="stat-value">{mask(fmt(data.total, data.totalCurrency))}</p>
               <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
                 Across {data.accounts.length} accounts
+                {data.balanceAsOf ? ` · as of ${new Date(data.balanceAsOf).toLocaleString()}` : ''}
               </p>
             </>
           )}
@@ -221,11 +276,11 @@ export default function AccountsPage() {
           <p className="stat-label">Available to spend</p>
           {state === 'loading' ? (
             <div className="skeleton mt-2 h-7 w-32" />
-          ) : !data ? (
+          ) : !data || !data.totalCurrency ? (
             <p className="stat-value">—</p>
           ) : (
             <>
-              <p className="stat-value">{mask(fmt(data.available))}</p>
+              <p className="stat-value">{mask(fmt(data.available, data.totalCurrency))}</p>
               <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
                 After pending holds
               </p>
@@ -343,7 +398,9 @@ export default function AccountsPage() {
                         </div>
                         <div className="mt-1 flex items-center justify-between gap-3">
                           <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                            {TYPE_LABEL[acc.type]} · {acc.sortCode} · {acc.accountNumber}
+                            {[acc.typeLabel ?? TYPE_LABEL[acc.type], acc.sortCode, acc.accountNumber]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </p>
                           <span aria-hidden="true" className="shrink-0">
                             <Sparkline data={acc.spark} width={56} height={18} strokeWidth={1.5} fill={false} color="var(--brand)" />
@@ -391,7 +448,9 @@ export default function AccountsPage() {
                         {selected.name}
                       </h2>
                       <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {TYPE_LABEL[selected.type]}
+                        {[selected.typeLabel ?? TYPE_LABEL[selected.type], selected.statusDisplay]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </p>
                     </div>
                   </div>
@@ -417,13 +476,16 @@ export default function AccountsPage() {
                     </svg>
                     Move money
                   </Link>
-                  <Link href={`/portal/accounts/${selected.id}`} className="btn btn-secondary btn-sm">
-                    View full account
-                  </Link>
+                  {/* The detail page is driven by the sample dataset, so it is
+                      only linked while that is what we are showing. */}
+                  {data?.source !== 'LIVE' && (
+                    <Link href={`/portal/accounts/${selected.id}`} className="btn btn-secondary btn-sm">
+                      View full account
+                    </Link>
+                  )}
                   <Link href="/portal/documents" className="btn btn-ghost btn-sm">
                     Statements
-                  </Link>
-                </div>
+                  </Link>                </div>
               </div>
             </div>
           ) : null}
@@ -447,9 +509,13 @@ export default function AccountsPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <p className="empty-state-title">No activity on this account</p>
+                  <p className="empty-state-title">
+                    {data?.source === 'LIVE' ? 'No transaction feed yet' : 'No activity on this account'}
+                  </p>
                   <p className="empty-state-text">
-                    Transactions will appear here as soon as money moves in or out of {selected?.name}.
+                    {data?.source === 'LIVE'
+                      ? `Balances for ${selected?.name} are live, but transaction history is not served for this account yet. Nothing is being hidden.`
+                      : `Transactions will appear here as soon as money moves in or out of ${selected?.name}.`}
                   </p>
                 </div>
               </div>

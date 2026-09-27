@@ -66,6 +66,7 @@ import {
   MILESTONE_STATUS_COLORS,
   isBookingPhaseStatus,
 } from '@/services/api/booking-service';
+import { ApplicationCompanion } from '@/components/applications/ApplicationCompanion';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-IE', {
@@ -499,6 +500,10 @@ export default function ApplicationDetailPage() {
         <StageProgress progress={statusInfo.progress} stage={statusInfo.stage as CustomerStage} />
       )}
 
+      {/* One checklist for the whole application: what is complete, what is
+          missing, why it matters, and whose turn it is. */}
+      <ApplicationCompanion application={app} statusInfo={statusInfo} />
+
       {/* Terminal status message (for old status path, in case statusInfo is missing) */}
       {isTerminal && !statusInfo && (
         <div
@@ -671,6 +676,7 @@ export default function ApplicationDetailPage() {
           <ESignSection
             applicationId={app.applicationId}
             applicationType={app.loanPurpose}
+            applicationStatus={app.lomsStatus || app.status}
             onComplete={() => loadApplication()}
           />
         )}
@@ -1174,6 +1180,9 @@ function OfferSection({
   if (!data?.offer) return null;
 
   const offer = data.offer;
+  // A DRAFT offer has not been issued by the bank yet — the customer must not see terms
+  // (or act on them) before the bank sends the offer.
+  if (offer.status === 'DRAFT') return null;
   const conditions = data.conditions ?? [];
   const isIssued = offer.status === 'ISSUED';
   const isTerminal = ['ACCEPTED', 'REJECTED', 'EXPIRED', 'VOIDED'].includes(offer.status);
@@ -1642,14 +1651,17 @@ function OfferSection({
 function ESignSection({
   applicationId,
   applicationType,
+  applicationStatus,
   onComplete,
 }: {
   applicationId: string;
   applicationType?: string;
+  applicationStatus: string;
   onComplete: () => void;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<EsignStatus | null>(null);
+  const [offer, setOffer] = useState<OfferWithConditions | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [signingUrl, setSigning] = useState<string | null>(null);
@@ -1661,8 +1673,12 @@ function ESignSection({
 
   async function loadStatus() {
     try {
-      const res = await esignService.getStatus(applicationId);
-      setStatus(res);
+      const [esign, latestOffer] = await Promise.all([
+        esignService.getStatus(applicationId),
+        offerService.getLatestOffer(applicationId).catch(() => null),
+      ]);
+      setStatus(esign);
+      setOffer(latestOffer);
     } catch {
       // no e-sign yet
     } finally {
@@ -1672,9 +1688,17 @@ function ESignSection({
 
   if (loading) return null;
 
-  // Don't show if no e-sign has started and status is NOT_STARTED
-  // We still show the section so the customer can initiate signing
+  // Signing only becomes the customer's next step once the bank has issued an offer and
+  // the customer has accepted it (which moves the application into the signature stage).
+  // Before that there is no agreed document to sign, so the section stays hidden.
   const overallStatus = status?.overallStatus ?? 'NOT_STARTED';
+  const signingUnderway = overallStatus !== 'NOT_STARTED';
+  const inEsignStage = ['PENDING_ESIGN', 'ESIGN_IN_PROGRESS', 'ESIGN_COMPLETED'].includes(
+    applicationStatus
+  );
+  const offerAccepted = offer?.offer?.status === 'ACCEPTED';
+  if (!signingUnderway && !inEsignStage && !offerAccepted) return null;
+
   const signers = status?.signers ?? [];
   const completedCount = status?.completedCount ?? 0;
   const totalCount = status?.totalCount ?? 0;

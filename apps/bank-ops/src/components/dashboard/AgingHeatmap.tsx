@@ -46,6 +46,10 @@ function bucketRank(bucket: string): number {
   return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
 }
 
+/* Always render the full aging spectrum so empty (young/old) columns still show
+   as "–" instead of the grid silently collapsing to only the buckets with data. */
+const CANONICAL_BUCKETS = ['0-2', '3-7', '8-14', '15-30', '30+'];
+
 /* Hue follows bucket age (cool → hot); alpha follows application count.
    Text stays on --rm-text so contrast holds in both light and dark mode. */
 const RAMP = ['#0ea5e9', '#f59e0b', '#ef4444'];
@@ -70,9 +74,11 @@ type MergedCell = {
 
 interface Props {
   cells: AgingHeatmapCell[];
+  /** Fired when a cell is selected/deselected (bucket null = cleared). Omit to keep static. */
+  onCellClick?: (stage: string, bucket: string | null) => void;
 }
 
-export default function AgingHeatmap({ cells }: Props) {
+export default function AgingHeatmap({ cells, onCellClick }: Props) {
   const router = useRouter();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -102,7 +108,9 @@ export default function AgingHeatmap({ cells }: Props) {
       const d = stageRank(a) - stageRank(b);
       return d !== 0 ? d : a.localeCompare(b);
     });
-    const bucketSet = [...new Set([...merged.values()].map(c => c.bucket))].sort((a, b) => {
+    const bucketSet = [
+      ...new Set([...CANONICAL_BUCKETS, ...[...merged.values()].map(c => c.bucket)]),
+    ].sort((a, b) => {
       const d = bucketRank(a) - bucketRank(b);
       return d !== 0 ? d : a.localeCompare(b, undefined, { numeric: true });
     });
@@ -183,10 +191,11 @@ export default function AgingHeatmap({ cells }: Props) {
           ))}
 
           {/* rows */}
-          {stages.map(stage => (
+          {stages.map((stage, rowIndex) => (
             <StageRow
               key={stage}
               stage={stage}
+              rowIndex={rowIndex}
               buckets={buckets}
               lastBucketIdx={lastBucketIdx}
               maxCount={maxCount}
@@ -194,6 +203,7 @@ export default function AgingHeatmap({ cells }: Props) {
               stageTotal={stageTotals.get(stage) ?? 0}
               selected={selected}
               onSelect={setSelected}
+              onCellClick={onCellClick}
             />
           ))}
         </div>
@@ -237,6 +247,7 @@ export default function AgingHeatmap({ cells }: Props) {
 
 function StageRow({
   stage,
+  rowIndex,
   buckets,
   lastBucketIdx,
   maxCount,
@@ -244,8 +255,10 @@ function StageRow({
   stageTotal,
   selected,
   onSelect,
+  onCellClick,
 }: {
   stage: string;
+  rowIndex: number;
   buckets: string[];
   lastBucketIdx: number;
   maxCount: number;
@@ -253,6 +266,7 @@ function StageRow({
   stageTotal: number;
   selected: string | null;
   onSelect: (key: string | null) => void;
+  onCellClick?: (stage: string, bucket: string | null) => void;
 }) {
   return (
     <>
@@ -280,7 +294,10 @@ function StageRow({
           <button
             key={key}
             type="button"
-            onClick={() => onSelect(isSelected ? null : key)}
+            onClick={() => {
+              onSelect(isSelected ? null : key);
+              onCellClick?.(stage, isSelected ? null : bucket);
+            }}
             disabled={count === 0}
             title={
               cell
@@ -291,13 +308,14 @@ function StageRow({
             }
             aria-label={`${humanise(stage)}, ${humanise(bucket)} days: ${count} applications`}
             className={[
-              'h-12 rounded-xl text-sm font-semibold tabular-nums transition-all duration-200',
+              'h-12 rounded-xl text-sm font-semibold tabular-nums transition-all duration-200 animate-fade-in',
               count > 0 ? 'cursor-pointer hover:scale-[1.04]' : 'cursor-default',
               isSelected ? 'ring-2 ring-offset-1' : '',
             ].join(' ')}
             style={{
               backgroundColor: count > 0 ? rampColor(w, heat) : 'var(--rm-input)',
               color: count > 0 ? 'var(--rm-text)' : 'var(--rm-text-muted)',
+              animationDelay: `${(rowIndex * buckets.length + i) * 18}ms`,
               ...(isSelected
                 ? { '--tw-ring-color': 'var(--rm-accent)', '--tw-ring-offset-color': 'var(--rm-card)' } as React.CSSProperties
                 : {}),

@@ -82,6 +82,7 @@ export interface ApplicationResponse {
   downPaymentAmount?: number;
 
   assignedToUserId?: string;
+  relationshipManagerId?: string;
   assignedAt?: string;
   submittedAt?: string;
   reviewStartedAt?: string;
@@ -122,6 +123,16 @@ export interface ApplicationResponse {
   };
 
   assignedToUser?: {
+    userId: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    userType?: string;
+    roles?: string[];
+  };
+
+  relationshipManager?: {
     userId: string;
     username: string;
     firstName: string;

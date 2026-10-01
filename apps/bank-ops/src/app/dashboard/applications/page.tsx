@@ -291,7 +291,7 @@ export default function ApplicationsPage() {
       Array.from(
         new Set(
           applications
-            .map(a => (a.assignedToUser ? `${a.assignedToUser.firstName} ${a.assignedToUser.lastName}` : ''))
+            .map(a => (a.relationshipManager ? `${a.relationshipManager.firstName} ${a.relationshipManager.lastName}` : ''))
             .filter(Boolean)
         )
       ).sort(),
@@ -302,7 +302,7 @@ export default function ApplicationsPage() {
     const filtered = applications.filter(a => {
       if (productFilter && a.product?.productName !== productFilter) return false;
       if (rmFilter) {
-        const name = a.assignedToUser ? `${a.assignedToUser.firstName} ${a.assignedToUser.lastName}` : '';
+        const name = a.relationshipManager ? `${a.relationshipManager.firstName} ${a.relationshipManager.lastName}` : '';
         if (name !== rmFilter) return false;
       }
       return true;
@@ -319,7 +319,7 @@ export default function ApplicationsPage() {
       riskText: riskLevel(app).label,
       amount: app.requestedAmount || 0,
       daysInStage: app.daysInCurrentStatus ?? 0,
-      rmName: app.assignedToUser ? `${app.assignedToUser.firstName} ${app.assignedToUser.lastName}` : '',
+      rmName: app.relationshipManager ? `${app.relationshipManager.firstName} ${app.relationshipManager.lastName}` : '',
       nextAction: nextActionFor(app),
       createdAt: app.createdAt,
     }));

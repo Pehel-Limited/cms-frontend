@@ -267,3 +267,120 @@ function zeroProjection(
     evidence: { basis: '', lines: [] },
   };
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ * Spending rhythm & breakdown helpers
+ * ────────────────────────────────────────────────────────────────── */
+
+export interface WeekdayWeekendSplit {
+  weekdayTotal: number;
+  weekendTotal: number;
+  weekdayCount: number;
+  weekendCount: number;
+  weekdayAvg: number;
+  weekendAvg: number;
+  weekdayPct: number;
+  weekendPct: number;
+}
+
+export function weekdayWeekendSplit(
+  transactions: Transaction[]
+): WeekdayWeekendSplit {
+  const settled = settledOutgoing(transactions);
+  let weekdayTotal = 0;
+  let weekendTotal = 0;
+  let weekdayCount = 0;
+  let weekendCount = 0;
+
+  settled.forEach(t => {
+    const day = new Date(t.date).getDay();
+    const isWeekend = day === 0 || day === 6;
+    if (isWeekend) {
+      weekendTotal += t.amount;
+      weekendCount += 1;
+    } else {
+      weekdayTotal += t.amount;
+      weekdayCount += 1;
+    }
+  });
+
+  const total = weekdayTotal + weekendTotal || 1;
+  return {
+    weekdayTotal,
+    weekendTotal,
+    weekdayCount,
+    weekendCount,
+    weekdayAvg: weekdayCount > 0 ? weekdayTotal / 5 : 0,
+    weekendAvg: weekendCount > 0 ? weekendTotal / 2 : 0,
+    weekdayPct: Math.round((weekdayTotal / total) * 100),
+    weekendPct: Math.round((weekendTotal / total) * 100),
+  };
+}
+
+export interface SpendingHighlights {
+  largestOut: Transaction | null;
+  avgPerDay: number;
+  zeroSpendDays: number;
+  activeDaysCount: number;
+  mostFrequentCategory: SpendCategory | null;
+}
+
+export function spendingHighlights(
+  transactions: Transaction[],
+  overrides: CategoryOverrides = {}
+): SpendingHighlights {
+  const settled = settledOutgoing(transactions);
+  if (settled.length === 0) {
+    return {
+      largestOut: null,
+      avgPerDay: 0,
+      zeroSpendDays: 0,
+      activeDaysCount: 0,
+      mostFrequentCategory: null,
+    };
+  }
+
+  // Largest payment
+  const sortedByAmount = [...settled].sort((a, b) => b.amount - a.amount);
+  const largestOut = sortedByAmount[0] ?? null;
+
+  // Window days
+  const times = transactions.map(t => new Date(t.date).getTime());
+  const start = Math.min(...times);
+  const end = Math.max(...times);
+  const windowDays = Math.max(1, Math.round((end - start) / DAY_MS) + 1);
+
+  // Active days with spend
+  const daysWithSpend = new Set(
+    settled.map(t => new Date(t.date).toISOString().slice(0, 10))
+  );
+  const activeDaysCount = daysWithSpend.size;
+  const zeroSpendDays = Math.max(0, windowDays - activeDaysCount);
+
+  const totalSpend = settled.reduce((sum, t) => sum + t.amount, 0);
+  const avgPerDay = totalSpend / windowDays;
+
+  // Category counts
+  const catCounts = new Map<SpendCategory, number>();
+  settled.forEach(t => {
+    const cat = categoryOf(t, overrides);
+    catCounts.set(cat, (catCounts.get(cat) ?? 0) + 1);
+  });
+  let mostFrequentCategory: SpendCategory | null = null;
+  let maxCount = 0;
+  catCounts.forEach((count, cat) => {
+    if (count > maxCount) {
+      maxCount = count;
+      mostFrequentCategory = cat;
+    }
+  });
+
+  return {
+    largestOut,
+    avgPerDay,
+    zeroSpendDays,
+    activeDaysCount,
+    mostFrequentCategory,
+  };
+}
+

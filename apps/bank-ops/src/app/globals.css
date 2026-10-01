@@ -562,6 +562,20 @@
   animation: barGrow 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* ─── Horizontal grow for funnel segments / horizontal bars ─── */
+@keyframes growX {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.animate-grow-x {
+  transform-origin: left center;
+  animation: growX 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ─── Notification badge pulse ─── */
 .notification-pulse::after {
   content: '';

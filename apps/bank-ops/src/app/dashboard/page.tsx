@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/format';
-import { AnimatedCurrency } from '@/components/AnimatedCounter';
+import AnimatedCounter, { AnimatedCurrency } from '@/components/AnimatedCounter';
 import {
   dashboardService,
   DashboardKpis,
@@ -13,6 +13,7 @@ import {
   PerformanceMetrics,
   MissingItem,
   AgingHeatmapCell,
+  TrendPoint,
 } from '@/services/api/dashboard-service';
 import { applicationService } from '@/services/api/applicationService';
 import { aiCustomerIntelligenceService, CustomerSignalSummary } from '@/services/api/aiCustomerIntelligenceService';
@@ -20,6 +21,7 @@ import AttentionStrip from '@/components/dashboard/AttentionStrip';
 import PipelineOverview from '@/components/dashboard/PipelineOverview';
 import AgingHeatmap from '@/components/dashboard/AgingHeatmap';
 import DashboardInsights from '@/components/dashboard/DashboardInsights';
+import TrendChart from '@/components/dashboard/TrendChart';
 import {
   SortableHeader,
   SortConfig,
@@ -28,6 +30,8 @@ import {
 } from '@/components/SortableHeader';
 import config from '@/config';
 import { useAppSelector } from '@/store';
+import { isAdminRole } from '@/lib/roles';
+import AdminOversight from '@/components/dashboard/AdminOversight';
 
 type TimeframeFilter =
   | 'today'
@@ -75,6 +79,10 @@ const DECLINED_STATUSES = new Set([
   'WITHDRAWN',
   'EXPIRED',
 ]);
+
+/* Pipeline funnel stages and aging buckets are mapped in a shared helper so the
+   RM and Admin dashboards drill through identically. */
+import { matchesFocus } from '@/lib/dashboard-filters';
 
 /* Tinted, theme-agnostic status colours — readable on light and dark surfaces. */
 function getStatusStyle(status: string): { bg: string; text: string; dot: string } {
@@ -155,6 +163,12 @@ function greeting(): string {
 }
 
 export default function DashboardPage() {
+  const { user } = useAppSelector(state => state.auth);
+  // Admins get bank-wide cross-RM oversight; RMs (and everyone else) get their own queue.
+  return isAdminRole(user) ? <AdminOversight /> : <RmDashboard />;
+}
+
+function RmDashboard() {
   const router = useRouter();
   const { user } = useAppSelector(state => state.auth);
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
@@ -164,6 +178,7 @@ export default function DashboardPage() {
   const [missingItems, setMissingItems] = useState<MissingItem[]>([]);
   const [signalSummary, setSignalSummary] = useState<CustomerSignalSummary | null>(null);
   const [agingCells, setAgingCells] = useState<AgingHeatmapCell[]>([]);
+  const [trends, setTrends] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<string | undefined>(undefined);
   const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeFilter>('all');
@@ -171,6 +186,9 @@ export default function DashboardPage() {
   const [kycLoadingId, setKycLoadingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'action' | 'completed' | 'all'>('action');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
+  const [ageFilter, setAgeFilter] = useState<{ stage: string; bucket: string } | null>(null);
+  const [riskOnly, setRiskOnly] = useState(false);
 
   const bankId = config.bank.defaultBankId;
 
@@ -239,6 +257,10 @@ export default function DashboardPage() {
       .getAgingHeatmap(bankId)
       .then(data => setAgingCells(Array.isArray(data) ? data : []))
       .catch(() => setAgingCells([]));
+    dashboardService
+      .getTrends(bankId)
+      .then(data => setTrends(Array.isArray(data) ? data : []))
+      .catch(() => setTrends([]));
     aiCustomerIntelligenceService
       .getSignalSummary(bankId)
       .then(setSignalSummary)
@@ -274,10 +296,14 @@ export default function DashboardPage() {
   );
 
   const displayWorklist = useMemo(() => {
-    if (activeTab === 'action') return actionItems;
-    if (activeTab === 'completed') return [...completedItems, ...declinedItems];
-    return worklist;
-  }, [activeTab, actionItems, completedItems, declinedItems, worklist]);
+    const base =
+      activeTab === 'action'
+        ? actionItems
+        : activeTab === 'completed'
+          ? [...completedItems, ...declinedItems]
+          : worklist;
+    return base.filter(item => matchesFocus(item, { stageFilter, ageFilter, riskOnly }));
+  }, [activeTab, actionItems, completedItems, declinedItems, worklist, stageFilter, ageFilter, riskOnly]);
 
   const sortedWorklist = sortData(displayWorklist, sortConfig);
 
@@ -315,7 +341,7 @@ export default function DashboardPage() {
   const headerSortClass = '!px-5 !text-sm !normal-case !tracking-normal !font-medium';
 
   return (
-    <div className="space-y-10 p-1 sm:p-2" style={{ color: 'var(--rm-text)' }}>
+    <div className="space-y-10 p-1 sm:p-2 stagger-children" style={{ color: 'var(--rm-text)' }}>
       {/* ══ HERO ══ */}
       <header className="flex items-start justify-between gap-6 flex-wrap">
         <div className="min-w-0">
@@ -354,14 +380,27 @@ export default function DashboardPage() {
                 style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706' }}
               >
                 Needs action ·{' '}
-                <span className="font-semibold tabular-nums">{kpis.needsActionCount}</span>
+                <span className="font-semibold tabular-nums">
+                  <AnimatedCounter value={kpis.needsActionCount} />
+                </span>
               </button>
-              <span
-                className="rounded-full px-4 py-2 text-sm font-medium"
-                style={{ backgroundColor: 'rgba(239,68,68,0.13)', color: '#dc2626' }}
+              <button
+                onClick={() => setRiskOnly(v => !v)}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-transform hover:-translate-y-0.5 ${riskOnly ? 'ring-2' : ''}`}
+                style={{
+                  backgroundColor: 'rgba(239,68,68,0.13)',
+                  color: '#dc2626',
+                  ...(riskOnly
+                    ? ({ '--tw-ring-color': '#dc2626' } as React.CSSProperties)
+                    : {}),
+                }}
+                title="Toggle at-risk filter"
               >
-                At risk · <span className="font-semibold tabular-nums">{kpis.stuckAtRiskCount}</span>
-              </span>
+                At risk ·{' '}
+                <span className="font-semibold tabular-nums">
+                  <AnimatedCounter value={kpis.stuckAtRiskCount} />
+                </span>
+              </button>
               <span
                 className="rounded-full px-4 py-2 text-sm font-medium"
                 style={{ backgroundColor: 'rgba(16,185,129,0.14)', color: '#059669' }}
@@ -423,6 +462,55 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      {(stageFilter || ageFilter || riskOnly) && (
+        <div className="flex items-center gap-2 flex-wrap animate-fade-in">
+          <span className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            Filtered by
+          </span>
+          {stageFilter && (
+            <button
+              onClick={() => setStageFilter(null)}
+              className="rounded-full px-3 py-1 text-sm font-medium inline-flex items-center gap-1.5"
+              style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+            >
+              {stageFilter.replace(/_/g, ' ')}
+              <span aria-hidden>×</span>
+            </button>
+          )}
+          {ageFilter && (
+            <button
+              onClick={() => setAgeFilter(null)}
+              className="rounded-full px-3 py-1 text-sm font-medium inline-flex items-center gap-1.5"
+              style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+            >
+              {ageFilter.stage.replace(/_/g, ' ')} · {ageFilter.bucket}d
+              <span aria-hidden>×</span>
+            </button>
+          )}
+          {riskOnly && (
+            <button
+              onClick={() => setRiskOnly(false)}
+              className="rounded-full px-3 py-1 text-sm font-medium inline-flex items-center gap-1.5"
+              style={{ backgroundColor: 'rgba(239,68,68,0.13)', color: '#dc2626' }}
+            >
+              At risk
+              <span aria-hidden>×</span>
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setStageFilter(null);
+              setAgeFilter(null);
+              setRiskOnly(false);
+            }}
+            className="text-sm font-medium hover:underline"
+            style={{ color: 'var(--rm-text-secondary)' }}
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
       {/* ══ ATTENTION ══ */}
       <AttentionStrip
         items={actionItems}
@@ -431,10 +519,26 @@ export default function DashboardPage() {
       />
 
       {/* ══ PIPELINE ══ */}
-      <PipelineOverview stages={pipeline} />
+      <PipelineOverview
+        stages={pipeline}
+        selectedStage={stageFilter}
+        onStageSelect={s => {
+          setStageFilter(s);
+          setAgeFilter(null);
+        }}
+      />
+
+      {/* ══ TREND ══ */}
+      <TrendChart points={trends} scopeLabel="your book" />
 
       {/* ══ AGING ══ */}
-      <AgingHeatmap cells={agingCells} />
+      <AgingHeatmap
+        cells={agingCells}
+        onCellClick={(stage, bucket) => {
+          setAgeFilter(bucket ? { stage, bucket } : null);
+          setStageFilter(null);
+        }}
+      />
 
       {/* ══ PERFORMANCE + BLOCKERS ══ */}
       <DashboardInsights performance={performance} missingItems={missingItems} />

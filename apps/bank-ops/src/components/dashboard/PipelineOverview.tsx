@@ -32,9 +32,13 @@ const PENDING = [
 
 interface Props {
   stages: PipelineStage[];
+  /** Currently selected stage (for click-to-filter); null/undefined = none. */
+  selectedStage?: string | null;
+  /** Called with the toggled stage, or null to clear. Omit to keep the chart static. */
+  onStageSelect?: (stage: string | null) => void;
 }
 
-export default function PipelineOverview({ stages }: Props) {
+export default function PipelineOverview({ stages, selectedStage = null, onStageSelect }: Props) {
   const rows = useMemo(
     () =>
       stages
@@ -96,48 +100,79 @@ export default function PipelineOverview({ stages }: Props) {
       >
         {rows
           .filter(r => r.count > 0)
-          .map(r => (
-            <div
-              key={r.stage}
-              title={`${r.name}: ${r.count}`}
-              style={{ flexGrow: r.count, flexBasis: 0, backgroundColor: r.color }}
-            />
-          ))}
+          .map((r, i) => {
+            const dimmed = selectedStage !== null && selectedStage !== r.stage;
+            return (
+              <button
+                key={r.stage}
+                type="button"
+                disabled={!onStageSelect}
+                onClick={() => onStageSelect?.(selectedStage === r.stage ? null : r.stage)}
+                title={`${r.name}: ${r.count}${onStageSelect ? ' — click to filter' : ''}`}
+                aria-label={`${r.name}: ${r.count} applications${onStageSelect ? ', click to filter' : ''}`}
+                className={`animate-grow-x h-full transition-opacity duration-200 ${
+                  onStageSelect ? 'cursor-pointer hover:opacity-80' : 'cursor-default'
+                }`}
+                style={{
+                  flexGrow: r.count,
+                  flexBasis: 0,
+                  backgroundColor: r.color,
+                  animationDelay: `${i * 70}ms`,
+                  opacity: dimmed ? 0.3 : 1,
+                }}
+              />
+            );
+          })}
       </div>
 
       {/* stage detail */}
-      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-8 gap-y-5">
-        {rows.map(r => (
-          <div key={r.stage} className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
-              <span className="text-sm font-medium truncate" style={{ color: 'var(--rm-text)' }}>
-                {r.name}
-              </span>
-              <span className="ml-auto text-sm font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
-                {r.count}
-              </span>
-            </div>
-            <p className="mt-1 text-sm tabular-nums pl-[18px]" style={{ color: 'var(--rm-text-muted)' }}>
-              {r.value > 0 ? compactCurrency(r.value) : '—'}
-              {r.avg > 0 && ` · avg ${r.avg.toFixed(0)}d`}
-              {r.p90 > 0 && ` · p90 ${r.p90.toFixed(0)}d`}
-            </p>
-            {r.pending.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5 pl-[18px]">
-                {r.pending.map(p => (
-                  <span
-                    key={p.key}
-                    className="rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
-                    style={{ backgroundColor: `${p.color}1f`, color: p.color }}
-                  >
-                    {p.label} {p.n}
-                  </span>
-                ))}
+      <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-x-8 gap-y-5 stagger-children">
+        {rows.map(r => {
+          const active = selectedStage === r.stage;
+          return (
+            <button
+              key={r.stage}
+              type="button"
+              disabled={!onStageSelect}
+              onClick={() => onStageSelect?.(selectedStage === r.stage ? null : r.stage)}
+              className={`min-w-0 text-left rounded-2xl px-3 py-2 -mx-3 transition-all duration-200 ${
+                onStageSelect ? 'cursor-pointer hover:-translate-y-0.5' : 'cursor-default'
+              } ${active ? 'ring-2' : ''}`}
+              style={{
+                ...(active ? ({ '--tw-ring-color': 'var(--rm-accent)' } as React.CSSProperties) : {}),
+                backgroundColor: active ? 'var(--rm-card-hover)' : undefined,
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
+                <span className="text-sm font-medium truncate" style={{ color: 'var(--rm-text)' }}>
+                  {r.name}
+                </span>
+                <span className="ml-auto text-sm font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                  {r.count}
+                </span>
               </div>
-            )}
-          </div>
-        ))}
+              <p className="mt-1 text-sm tabular-nums pl-[18px]" style={{ color: 'var(--rm-text-muted)' }}>
+                {r.value > 0 ? compactCurrency(r.value) : '—'}
+                {r.avg > 0 && ` · avg ${r.avg.toFixed(0)}d`}
+                {r.p90 > 0 && ` · p90 ${r.p90.toFixed(0)}d`}
+              </p>
+              {r.pending.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5 pl-[18px]">
+                  {r.pending.map(p => (
+                    <span
+                      key={p.key}
+                      className="rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
+                      style={{ backgroundColor: `${p.color}1f`, color: p.color }}
+                    >
+                      {p.label} {p.n}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {bottleneck && bottleneck.p90 >= bottleneck.avg * 2 && (

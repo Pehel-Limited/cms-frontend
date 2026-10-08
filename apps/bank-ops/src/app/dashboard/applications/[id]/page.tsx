@@ -1505,6 +1505,50 @@ export default function ApplicationDetailPage() {
                   </dd>
                 </div>
               )}
+
+              {/* CCV borrower — the entity actually lent against, which is not always the
+                  customer who applied: a partnership borrower holds every partner. */}
+              {application.borrower && (
+                <div className="sm:col-span-2">
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Borrower (credit record)
+                  </dt>
+                  <dd className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                    {application.borrower.legalName || 'Unnamed borrower'}
+                    <span className="ml-2 text-sm font-normal" style={{ color: 'var(--rm-text-muted)' }}>
+                      {application.borrower.borrowerType?.replace(/_/g, ' ').toLowerCase()}
+                      {application.borrower.members?.length
+                        ? ` · ${application.borrower.members.length} liable part${
+                            application.borrower.members.length === 1 ? 'y' : 'ies'
+                          }`
+                        : ''}
+                    </span>
+                  </dd>
+                  {application.borrower.members && application.borrower.members.length > 1 && (
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {application.borrower.members.map(member => (
+                        <li
+                          key={member.customerId}
+                          className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                          style={{
+                            backgroundColor: 'rgba(127,127,127,0.14)',
+                            color: 'var(--rm-text-secondary)',
+                          }}
+                        >
+                          {member.capacity === 'CO_BORROWER' ? 'Co-borrower' : 'Borrower'}
+                          {member.jointAndSeveral ? ' · jointly & severally liable' : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {application.borrower.status === 'PROVISIONAL' && (
+                    <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Provisional — resolved from the customer&apos;s journey, not yet confirmed by a
+                      submitted application.
+                    </p>
+                  )}
+                </div>
+              )}
             </dl>
 
             {(application.statedAnnualIncome ||

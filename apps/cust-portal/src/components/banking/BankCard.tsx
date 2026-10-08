@@ -4,48 +4,103 @@ import { PaymentCard } from '@/lib/banking-data';
 import { getCurrencySymbol } from '@/lib/format';
 
 /* ──────────────────────────────────────────────────────────────────
- * Sparkline — pure SVG mini line chart with gradient fill
+ * DotMatrix — a series drawn as a matrix of dots
+ *
+ * Each value becomes a column of dots stacked from the baseline, two dots wide.
+ * A dot's opacity is fixed by the ROW it sits in and shared across every column,
+ * so a small value is a short, uniformly pale stack while the peak climbs into
+ * the dark rows. That reads magnitude twice over — by height and by weight —
+ * which is why it survives at 30px tall where a line chart turns to noise.
+ * Zero draws nothing rather than a stub, so an empty period stays empty.
+ *
+ * The chart is always its natural size: `cell` × `rows` × the number of points.
+ * Stretching a dot grid to fill a box turns the dots into ellipses, so callers
+ * pick a pitch that suits the space instead.
  * ────────────────────────────────────────────────────────────────── */
 
-export function Sparkline({
+export function DotMatrix({
   data,
-  color = '#ffffff',
-  width = 120,
-  height = 36,
-  strokeWidth = 2,
-  fill = true,
+  cell = 4,
+  rows = 10,
+  box,
+  stretch = false,
+  color = 'var(--brand)',
+  label,
+  className,
+  format,
 }: {
   data: number[];
+  /** Dot pitch in px. Two dots wide per data point, one per row. */
+  cell?: number;
+  rows?: number;
+  /**
+   * Fit to a box instead of naming a pitch: the pitch is solved so the grid is
+   * as close to `box` as square cells allow. Use this when several matrices sit
+   * side by side carrying different point counts and need to line up.
+   */
+  box?: { width: number; height: number };
+  /**
+   * Fill the parent's width, scaling the whole grid uniformly so dots stay
+   * circular. Pair it with a wrapper sized to `data.length * cell * 2` when
+   * other elements — axis labels, markers — are positioned in percentages of
+   * that same box and have to keep lining up as the chart shrinks.
+   */
+  stretch?: boolean;
   color?: string;
-  width?: number;
-  height?: number;
-  strokeWidth?: number;
-  fill?: boolean;
+  /** Announced to screen readers in place of the picture. */
+  label: string;
+  className?: string;
+  /** Turns a raw value into the hover text for its column. */
+  format?: (value: number, index: number) => string;
 }) {
   if (!data.length) return null;
-  const min = Math.min(...data);
+
+  const pitch = box
+    ? Math.max(2, Math.min(8, Math.round(box.width / (data.length * 2))))
+    : cell;
+  const gridRows = box ? Math.max(3, Math.min(12, Math.round(box.height / pitch))) : rows;
+
   const max = Math.max(...data);
-  const range = max - min || 1;
-  const stepX = width / (data.length - 1 || 1);
-  const points = data.map((v, i) => {
-    const x = i * stepX;
-    const y = height - ((v - min) / range) * (height - strokeWidth * 2) - strokeWidth;
-    return [x, y] as const;
-  });
-  const line = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const area = `${line} L${width},${height} L0,${height} Z`;
-  const gid = `spark-${Math.round(data[0])}-${data.length}`;
+  const width = data.length * pitch * 2;
+  const height = gridRows * pitch;
+  const radius = pitch * 0.3;
+
+  const dots: { x: number; y: number; o: number }[] = [];
+  if (max > 0) {
+    data.forEach((value, c) => {
+      /* Rounded to whole rows, but floored at one for any non-zero value: on a
+         skewed series a €410 flight makes a €5.60 rail fare round to nothing,
+         and an empty-looking column would claim a day with no spending. */
+      const filled = value > 0 ? Math.max(1, Math.round((value / max) * gridRows)) : 0;
+      for (let r = 0; r < filled; r += 1) {
+        // Bottom row stays pale, top row lands near full strength.
+        const o = 0.18 + 0.82 * (r / Math.max(1, gridRows - 1));
+        const y = height - (r + 0.5) * pitch;
+        dots.push({ x: (c * 2 + 0.5) * pitch, y, o });
+        dots.push({ x: (c * 2 + 1.5) * pitch, y, o });
+      }
+    });
+  }
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {fill && <path d={area} fill={`url(#${gid})`} />}
-      <path d={line} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width={stretch ? '100%' : width}
+      height={stretch ? undefined : height}
+      viewBox={`0 0 ${width} ${height}`}
+      className={className}
+      style={stretch ? { display: 'block' } : undefined}
+      role="img"
+      aria-label={label}
+    >
+      {dots.map((d, i) => (
+        <circle key={i} cx={d.x} cy={d.y} r={radius} style={{ fill: color, fillOpacity: d.o }} />
+      ))}
+      {format &&
+        data.map((value, c) => (
+          <rect key={`hit-${c}`} x={c * 2 * pitch} y={0} width={pitch * 2} height={height} fill="transparent">
+            <title>{format(value, c)}</title>
+          </rect>
+        ))}
     </svg>
   );
 }
@@ -193,65 +248,6 @@ export function BalanceAmount({
       {grouped}
       <span className={`align-top ${centsClassName}`}>.{cents}</span>
     </span>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────────
- * RadialProgress — multi-segment savings ring (Quantro savings style)
- * ────────────────────────────────────────────────────────────────── */
-
-export function RadialProgress({
-  segments,
-  size = 200,
-  stroke = 16,
-  gap = 0.04,
-  trackColor = 'rgba(0,0,0,0.06)',
-  children,
-}: {
-  segments: { value: number; color: string }[];
-  size?: number;
-  stroke?: number;
-  gap?: number;
-  trackColor?: string;
-  children?: React.ReactNode;
-}) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
-
-  let offset = 0;
-  const arcs = segments.map((seg, i) => {
-    const frac = seg.value / total;
-    const len = Math.max(0, frac - gap) * c;
-    const dash = `${len} ${c - len}`;
-    const dashOffset = -offset * c;
-    offset += frac;
-    return (
-      <circle
-        key={i}
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke={seg.color}
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        strokeDasharray={dash}
-        strokeDashoffset={dashOffset}
-      />
-    );
-  });
-
-  return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={trackColor} strokeWidth={stroke} />
-        {arcs}
-      </svg>
-      {children && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">{children}</div>
-      )}
-    </div>
   );
 }
 

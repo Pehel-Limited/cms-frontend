@@ -7,8 +7,11 @@ import { useAppSelector, useAppDispatch } from '@/store';
 import { logoutUser } from '@/store/slices/authSlice';
 import { useTheme } from '@/app/providers';
 
-/* ─── RM-specific surface tokens (always dark) ─── */
-// bg: #060d1a  card: #0d1526  border: rgba(255,255,255,0.07)
+/* ─── RM-specific surface tokens (always dark) ───
+   The rail keeps its own always-dark ground, but tinted plum rather than navy so
+   it belongs to the same brand as the content beside it. */
+const BRAND_GRADIENT = 'linear-gradient(135deg,#7f2b7b,#b155ac)';
+const RAIL_GRADIENT = 'linear-gradient(to bottom,#170b18 0%,#22101f 55%,#2d1529 100%)';
 
 const NAV_ITEMS = [
   {
@@ -159,12 +162,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           'group relative flex items-center rounded-xl text-sm font-medium transition-all duration-200',
           sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-3 py-2.5',
           active
-            ? 'bg-cyan-500/15 text-cyan-300'
+            ? 'bg-primary-500/15 text-primary-200'
             : 'text-slate-400 hover:bg-white/5 hover:text-white',
         ].join(' ')}
       >
         {active && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-cyan-400 rounded-r-full" />
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary-400 rounded-r-full" />
         )}
         <span className="shrink-0">{item.icon}</span>
         {!sidebarCollapsed && <span>{item.name}</span>}
@@ -188,9 +191,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ─── Sidebar ─── */}
       <aside
+        style={{ background: RAIL_GRADIENT }}
         className={[
           'fixed md:sticky top-0 left-0 z-50 h-screen flex flex-col transition-all duration-300',
-          'bg-gradient-to-b from-[#0a1628] via-[#0d1e3a] to-[#0f2444]',
           'border-r border-white/[0.06]',
           sidebarCollapsed ? 'w-[70px]' : 'w-[220px]',
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
@@ -199,7 +202,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo */}
         <div className={['flex items-center h-16 shrink-0 border-b border-white/[0.06]', sidebarCollapsed ? 'justify-center' : 'gap-3 px-5'].join(' ')}>
           <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
-            style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+            style={{ background: BRAND_GRADIENT }}>
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
@@ -222,7 +225,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="mx-3 mb-2 rounded-2xl p-3 border border-white/[0.07]" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
             <div className="flex items-center gap-2.5 mb-2">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 shadow"
-                style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+                style={{ background: BRAND_GRADIENT }}>
                 {initials}
               </div>
               <div className="min-w-0">
@@ -231,7 +234,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
             </div>
-            <Link href="/dashboard/rm" className="flex items-center justify-between text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+            <Link href="/dashboard/rm" className="flex items-center justify-between text-[10px] text-primary-300 hover:text-primary-200 font-semibold transition-colors">
               View Profile
               <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -282,7 +285,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               id="rm-search"
               type="text"
               placeholder="Search customers, applications, accounts..."
-              className="w-full pl-9 pr-14 py-2 rounded-xl text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
+              className="w-full pl-9 pr-14 py-2 rounded-xl text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-colors"
               style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
             />
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">⌘K</kbd>
@@ -342,7 +345,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               style={{ borderColor: 'var(--rm-border)' }}
             >
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow"
-                style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+                style={{ background: BRAND_GRADIENT }}>
                 {initials}
               </div>
               <div className="hidden sm:block text-left">
@@ -362,7 +365,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--rm-border)' }}>
                   <p className="text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>{user?.firstName} {user?.lastName}</p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--rm-text-muted)' }}>{user?.email}</p>
-                  <span className="inline-block mt-2 text-[10px] uppercase tracking-wider text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full font-bold">
+                  <span className="inline-block mt-2 text-[10px] uppercase tracking-wider text-primary-300 bg-primary-500/10 border border-primary-500/20 px-2 py-0.5 rounded-full font-bold">
                     {getUserRole()}
                   </span>
                 </div>

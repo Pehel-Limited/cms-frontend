@@ -15,29 +15,20 @@ import {
   MissingItem,
   WorklistItem,
   TrendPoint,
+  ChannelJourney,
 } from '@/services/api/dashboard-service';
 import PipelineOverview from '@/components/dashboard/PipelineOverview';
 import AgingHeatmap from '@/components/dashboard/AgingHeatmap';
 import DashboardInsights from '@/components/dashboard/DashboardInsights';
 import TrendChart from '@/components/dashboard/TrendChart';
+import ChannelJourneys from '@/components/dashboard/ChannelJourneys';
 import { SortableHeader, SortConfig, handleSortToggle, sortData } from '@/components/SortableHeader';
 import config from '@/config';
 import { useAppSelector } from '@/store';
 
-/* Tinted status pill colours that read on both light and dark themes. */
-function statusPill(status: string): { bg: string; text: string } {
-  if (['BOOKED', 'DISBURSED', 'APPROVED', 'UNDERWRITING_APPROVED', 'ESIGN_COMPLETED'].includes(status))
-    return { bg: 'rgba(16,185,129,0.14)', text: '#10b981' };
-  if (['DECLINED', 'CANCELLED', 'WITHDRAWN', 'REJECTED'].includes(status))
-    return { bg: 'rgba(239,68,68,0.13)', text: '#ef4444' };
-  if (['SUBMITTED', 'PENDING_KYC', 'PENDING_DOCUMENTS'].includes(status))
-    return { bg: 'rgba(14,165,233,0.14)', text: '#0ea5e9' };
-  if (['REFERRED_TO_UNDERWRITER', 'IN_UNDERWRITING', 'PENDING_UNDERWRITING', 'REFERRED_TO_SENIOR'].includes(status))
-    return { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b' };
-  if (['OFFER_GENERATED', 'OFFER_SENT', 'OFFER_ACCEPTED', 'PENDING_ESIGN'].includes(status))
-    return { bg: 'rgba(139,92,246,0.15)', text: '#8b5cf6' };
-  return { bg: 'rgba(127,127,127,0.14)', text: 'var(--rm-text-secondary)' };
-}
+/* Status pills come from the shared map, so a status is the same colour here as
+   it is on the RM dashboard and its queue. */
+import { statusTone as statusPill } from '@/lib/statusTone';
 
 function humanise(s: string): string {
   return s
@@ -61,6 +52,7 @@ export default function AdminOversight() {
   const [pipeline, setPipeline] = useState<PipelineStage[]>([]);
   const [agingCells, setAgingCells] = useState<AgingHeatmapCell[]>([]);
   const [trends, setTrends] = useState<TrendPoint[]>([]);
+  const [journeys, setJourneys] = useState<ChannelJourney[]>([]);
   const [performance, setPerformance] = useState<PerformanceMetrics | null>(null);
   const [missingItems, setMissingItems] = useState<MissingItem[]>([]);
 
@@ -140,7 +132,7 @@ export default function AdminOversight() {
     };
   }, [selectedRm, bankId]);
 
-  // Trend follows the same drill-down as the queue: all RMs, or the selected one.
+  // Trend and journeys follow the same drill-down as the queue: all RMs, or the selected one.
   useEffect(() => {
     if (!bankId) return;
     let cancelled = false;
@@ -151,6 +143,14 @@ export default function AdminOversight() {
       })
       .catch(() => {
         if (!cancelled) setTrends([]);
+      });
+    dashboardService
+      .getOversightJourneys(bankId, selectedRm?.rmUserId)
+      .then(data => {
+        if (!cancelled) setJourneys(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setJourneys([]);
       });
     return () => {
       cancelled = true;
@@ -239,7 +239,7 @@ export default function AdminOversight() {
             <div className="mt-7 flex flex-wrap gap-2.5">
               <span
                 className="rounded-full px-4 py-2 text-sm font-medium"
-                style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706' }}
+                style={{ backgroundColor: 'color-mix(in srgb, var(--rm-warn) 15%, transparent)', color: 'var(--rm-warn)' }}
               >
                 Needs action ·{' '}
                 <span className="font-semibold tabular-nums">
@@ -250,9 +250,9 @@ export default function AdminOversight() {
                 onClick={() => setRiskOnly(v => !v)}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition-transform hover:-translate-y-0.5 ${riskOnly ? 'ring-2' : ''}`}
                 style={{
-                  backgroundColor: 'rgba(239,68,68,0.13)',
-                  color: '#dc2626',
-                  ...(riskOnly ? ({ '--tw-ring-color': '#dc2626' } as React.CSSProperties) : {}),
+                  backgroundColor: 'color-mix(in srgb, var(--rm-down) 13%, transparent)',
+                  color: 'var(--rm-down)',
+                  ...(riskOnly ? ({ '--tw-ring-color': 'var(--rm-down)' } as React.CSSProperties) : {}),
                 }}
                 title="Toggle at-risk filter across all RMs"
               >
@@ -263,7 +263,7 @@ export default function AdminOversight() {
               </button>
               <span
                 className="rounded-full px-4 py-2 text-sm font-medium"
-                style={{ backgroundColor: 'rgba(16,185,129,0.14)', color: '#059669' }}
+                style={{ backgroundColor: 'color-mix(in srgb, var(--rm-up) 14%, transparent)', color: 'var(--rm-up)' }}
               >
                 Booked this month ·{' '}
                 <span className="font-semibold tabular-nums">{formatCurrency(kpis.bookedThisMonthValue)}</span>{' '}
@@ -325,7 +325,7 @@ export default function AdminOversight() {
       )}
 
       {/* ══ PER-RM PORTFOLIO TABLE ══ */}
-      <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+      <section className="rm-panel p-6 sm:p-7">
         <div className="flex items-baseline justify-between gap-4 flex-wrap">
           <h2 className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
             Relationship managers
@@ -414,7 +414,7 @@ export default function AdminOversight() {
 
       {/* ══ DRILL-DOWN: selected RM's queue ══ */}
       {selectedRm && (
-        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+        <section className="rm-panel p-6 sm:p-7">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h2 className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
@@ -496,6 +496,17 @@ export default function AdminOversight() {
           )}
         </section>
       )}
+
+      {/* ══ WITH THE CUSTOMER (across all RMs) ══ */}
+      <ChannelJourneys
+        journeys={journeys}
+        title={selectedRm ? `${rmLabel(selectedRm)}’s customers, in progress` : 'In progress with customers'}
+        rmNameById={rmNameById}
+        onSelectRm={rmUserId => {
+          const rm = rmPortfolios.find(p => p.rmUserId === rmUserId) ?? null;
+          setSelectedRm(rm);
+        }}
+      />
 
       {/* ══ BANK-WIDE PIPELINE ══ */}
       <PipelineOverview

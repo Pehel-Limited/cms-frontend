@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { PageHero } from '@/components/ui/PageHero';
+import { glyphFor, GlyphTile } from '@/components/ui/Glyph';
 import {
   TRANSACTIONS,
   ACCOUNTS,
@@ -198,17 +200,17 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Transactions</h1>
-          <p className="page-subtitle">Every payment in and out, in one searchable timeline.</p>
-        </div>
-        {filtersActive && (
-          <button type="button" onClick={resetFilters} className="btn btn-secondary shrink-0">
-            Reset filters
-          </button>
-        )}
-      </div>
+      <PageHero
+        title="Transactions"
+        subtitle="Every payment in and out, in one searchable timeline."
+        actions={
+          filtersActive && (
+            <button type="button" onClick={resetFilters} className="btn btn-secondary shrink-0">
+              Reset filters
+            </button>
+          )
+        }
+      />
 
       {/* Summary tiles */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -405,13 +407,7 @@ export default function TransactionsPage() {
                               className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                               style={{ backgroundColor: isSelected ? 'var(--brand-soft)' : undefined }}
                             >
-                              <span
-                                aria-hidden="true"
-                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg"
-                                style={{ backgroundColor: 'var(--surface-input)' }}
-                              >
-                                {t.glyph || '✨'}
-                              </span>
+                              <GlyphTile name={glyphFor(t.category)} className="h-11 w-11 rounded-xl" tone={isSelected ? 'brand' : 'neutral'} />
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                                   {t.merchant}
@@ -422,7 +418,7 @@ export default function TransactionsPage() {
                               </span>
                               <span className="shrink-0 text-right">
                                 <span
-                                  className={`block text-base font-bold tabular-nums ${t.direction === 'IN' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+                                  className={`num block text-base font-semibold ${t.direction === 'IN' ? 'delta-up' : ''}`}
                                   style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
                                 >
                                   {t.direction === 'IN' ? '+' : '−'}{fmt(t.amount, t.currency)}
@@ -461,16 +457,14 @@ export default function TransactionsPage() {
 
               <div className="panel-body">
                 <div className="flex flex-col items-center py-4 text-center">
-                  <span
-                    aria-hidden="true"
-                    className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl text-3xl"
-                    style={{ backgroundColor: 'var(--surface-input)' }}
-                  >
-                    {selectedTx.glyph || '✨'}
-                  </span>
+                  <GlyphTile
+                    name={glyphFor(selectedTx.category)}
+                    className="mb-3 h-14 w-14 rounded-2xl"
+                    iconClassName="h-7 w-7"
+                  />
                   <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{selectedTx.merchant}</p>
                   <p
-                    className={`mt-1 text-2xl font-extrabold tabular-nums ${selectedTx.direction === 'IN' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+                    className={`num mt-1 text-2xl font-semibold ${selectedTx.direction === 'IN' ? 'delta-up' : ''}`}
                     style={selectedTx.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
                   >
                     {selectedTx.direction === 'IN' ? '+' : '−'}{fmt(selectedTx.amount, selectedTx.currency)}

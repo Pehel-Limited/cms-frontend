@@ -6,8 +6,9 @@ import {
   productService,
   LoanProduct,
   PRODUCT_TYPE_LABELS,
-  PRODUCT_TYPE_ICONS,
+  filterProductsForSegment,
 } from '@/services/api/product-service';
+import { applicationService } from '@/services/api/application-service';
 import { formatCurrency } from '@/lib/format';
 
 export default function ProductsPage() {
@@ -29,8 +30,11 @@ export default function ProductsPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await productService.getProducts();
-      setProducts(data);
+      const [data, ctx] = await Promise.all([
+        productService.getProducts(),
+        applicationService.getContext().catch(() => null),
+      ]);
+      setProducts(filterProductsForSegment(data, ctx?.segment));
     } catch (err: any) {
       setError(err.message || 'Failed to load products');
     } finally {
@@ -76,7 +80,7 @@ export default function ProductsPage() {
     return (
       <div className="space-y-6">
         <div className="mesh-hero rounded-3xl p-6 sm:p-7">
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Loan products</h1>
+          <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">Loan products</h1>
           <div className="mt-3 h-4 w-72 animate-pulse rounded-xl bg-white/10" />
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -98,7 +102,7 @@ export default function ProductsPage() {
     return (
       <div className="space-y-6">
         <div className="mesh-hero rounded-3xl p-6 sm:p-7">
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Loan products</h1>
+          <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">Loan products</h1>
           <p className="mt-1 text-sm text-white/70">
             Browse what&apos;s available and check your eligibility
           </p>
@@ -126,7 +130,7 @@ export default function ProductsPage() {
       <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
         <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
         <div className="relative">
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Loan products</h1>
+          <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">Loan products</h1>
           <p className="mt-1 text-sm text-white/70">
             Browse what&apos;s available and check your eligibility — {products.length} product{products.length === 1 ? '' : 's'} on offer
           </p>

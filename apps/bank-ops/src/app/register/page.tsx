@@ -154,7 +154,7 @@ export default function RegisterPage() {
       <main className="force-light flex flex-1 items-center justify-center bg-slate-50 p-6 sm:p-10">
         <div className="w-full max-w-md">
           <div className="mb-8 flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1a3a7a]" aria-hidden="true">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-700" aria-hidden="true">
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d={BRAND_LOGO_PATH} />
               </svg>
@@ -414,7 +414,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-xl bg-[#1a3a7a] py-3 text-base font-semibold text-white transition-colors hover:bg-[#15306a] disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl bg-primary-700 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">

@@ -226,8 +226,6 @@ export default function CustomerDetailPage() {
 
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
-  const asOf = useMemo(() => formatDate(new Date().toISOString()), []);
-
   const fetchCustomerData = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -1677,7 +1675,8 @@ export default function CustomerDetailPage() {
 
       {/* ══ Footer ══ */}
       <p className="text-sm pb-2" style={{ color: 'var(--rm-text-muted)' }}>
-        Figures are read from the customer, application and account records. Data as at {asOf}.
+        Figures are read from the customer, application and account records. The account summary
+        endpoint does not return a balance as-at time, so no statement date is implied here.
       </p>
 
       {/* ══ Change status dialog ══ */}

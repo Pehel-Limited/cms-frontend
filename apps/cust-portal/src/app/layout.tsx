@@ -1,11 +1,19 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Playfair_Display } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+
+/* Display face for the editorial dashboard chrome. Serif on headings and money
+   figures, Inter everywhere else, so tables and forms stay dense and legible. */
+const display = Playfair_Display({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-display',
+});
 
 export const metadata: Metadata = {
   title: 'Rayva - Customer Portal',
@@ -29,7 +37,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.variable}>
+      <body className={`${inter.variable} ${display.variable}`}>
         <Providers>
           {children}
           <ToastContainer

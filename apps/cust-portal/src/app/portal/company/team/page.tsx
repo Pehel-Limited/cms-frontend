@@ -181,7 +181,7 @@ export default function TeamPage() {
             </span>
           </nav>
           <h1
-            className="text-2xl font-bold tracking-tight sm:text-3xl"
+            className="serif text-[26px] font-medium leading-tight tracking-tight sm:text-[30px]"
             style={{ color: 'var(--text-primary)' }}
           >
             {data.entityName || 'Company'} team

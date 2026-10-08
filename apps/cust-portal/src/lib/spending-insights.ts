@@ -91,7 +91,6 @@ export type RecurringConfidence = 'CONFIRMED' | 'PROBABLE' | 'INSUFFICIENT_HISTO
 export interface RecurringCommitment {
   id: string;
   merchant: string;
-  glyph: string;
   category: SpendCategory;
   currency: string;
   occurrences: number;
@@ -145,7 +144,6 @@ export function detectRecurring(
     results.push({
       id: `recurring:${merchantKey(first.merchant)}`,
       merchant: first.merchant,
-      glyph: first.glyph,
       category: categoryOf(first, overrides),
       currency: first.currency,
       occurrences: group.length,

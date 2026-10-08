@@ -130,8 +130,9 @@ const NAV_BOTTOM = [
 ];
 
 /* ─── Nav grouping ──────────────────────────────────────────
-   Same destinations as before, organised into labelled groups so a
-   9-item list stays scannable instead of reading as one long column. */
+   The destinations are the same as before. They are split by weight rather
+   than by section label: everyday money routes read as tiles, the lower
+   frequency utility routes read as a quiet list under them. */
 
 type NavItem = { name: string; path: string; icon: React.ReactNode };
 
@@ -139,28 +140,66 @@ const ALL_NAV: NavItem[] = [...NAV_MAIN, ...NAV_BOTTOM];
 const byPath = (path: string): NavItem =>
   ALL_NAV.find(i => i.path === path) ?? ALL_NAV[0];
 
-const NAV_SECTIONS: { label?: string; items: NavItem[] }[] = [
-  { items: [byPath('/portal')] },
+const TILE_NAV: NavItem[] = [
+  '/portal', '/portal/accounts', '/portal/ai-assistant', '/portal/payments',
+  '/portal/cards', '/portal/transactions', '/portal/applications', '/portal/insights',
+].map(byPath);
+
+const RAIL_NAV: NavItem[] = ['/portal/documents', '/portal/messages'].map(byPath);
+
+/* Card and account tools. These are deliberately links rather than switches: the
+   freeze toggle, the online/contactless controls and the credit limit all live on
+   the Cards screen, which owns their state. The reference's "View Card PIN" and
+   "Manage Subscriptions" have no counterpart in this portal, so they are not here. */
+const TOOL_NAV: { name: string; path: string; icon: React.ReactNode }[] = [
   {
-    label: 'Banking',
-    items: ['/portal/accounts', '/portal/payments', '/portal/cards', '/portal/transactions'].map(byPath),
+    name: 'Freeze card',
+    path: '/portal/cards',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+          d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
+      </svg>
+    ),
   },
   {
-    label: 'Borrowing',
-    items: ['/portal/applications', '/portal/documents'].map(byPath),
+    name: 'Card controls',
+    path: '/portal/cards',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+          d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+      </svg>
+    ),
   },
   {
-    label: 'Insights & help',
-    items: ['/portal/insights', '/portal/ai-assistant', '/portal/messages'].map(byPath),
+    name: 'Scheduled payments',
+    path: '/portal/payments',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+          d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Security settings',
+    path: '/portal/profile',
+    icon: (
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+          d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+      </svg>
+    ),
   },
 ];
 
-const NAV_FOOTER: NavItem[] = [byPath('/portal/profile')];
+const FOOTER_NAV: NavItem[] = [byPath('/portal/profile')];
 
 /* Primary destinations surfaced as a thumb-reachable bar on small screens */
 const MOBILE_NAV: NavItem[] = ['/portal', '/portal/accounts', '/portal/payments', '/portal/applications'].map(byPath);
 
-/* Longest-prefix match drives the page title shown in the top bar */
+/* Longest-prefix match drives the page name shown in the top bar */
 const PAGE_TITLES: { path: string; title: string; subtitle: string }[] = [
   { path: '/portal/accounts', title: 'Accounts', subtitle: 'Balances and account details' },
   { path: '/portal/ai-assistant', title: 'AI Assistant', subtitle: 'Get instant answers about your finances' },
@@ -175,6 +214,8 @@ const PAGE_TITLES: { path: string; title: string; subtitle: string }[] = [
   { path: '/portal/company', title: 'Company', subtitle: 'Business profile and people' },
   { path: '/portal/profile', title: 'Settings', subtitle: 'Profile, security and preferences' },
 ];
+
+const LONG_DATE = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } as const;
 
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -266,33 +307,46 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     return 'Good evening';
   };
 
+  /* The overview owns its greeting as the page heading, so the bar only carries
+     the name and actions there. Other pages still need their title here. */
+  const isHome = pathname === '/portal';
   const page =
     PAGE_TITLES.filter(p => pathname.startsWith(p.path)).sort((a, b) => b.path.length - a.path.length)[0] ??
-    { title: 'Overview', subtitle: `${getGreeting()}, ${user?.firstName ?? 'there'}` };
+    { title: 'Overview', subtitle: '' };
 
-  function NavLink({ item }: { item: NavItem }) {
+  function NavTile({ item }: { item: NavItem }) {
     const active = isActive(item.path);
     return (
       <Link
         href={item.path}
         onClick={() => setMobileSidebarOpen(false)}
         aria-current={active ? 'page' : undefined}
-        title={sidebarCollapsed ? item.name : undefined}
+        title={item.name}
+        data-active={active || undefined}
+        className={sidebarCollapsed ? 'nav-tile !px-2 !py-3' : 'nav-tile'}
+      >
+        <span className="shrink-0">{item.icon}</span>
+        {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
+      </Link>
+    );
+  }
+
+  function GhostRow({ item }: { item: NavItem }) {
+    const active = isActive(item.path);
+    return (
+      <Link
+        href={item.path}
+        onClick={() => setMobileSidebarOpen(false)}
+        aria-current={active ? 'page' : undefined}
+        title={item.name}
+        data-active={active || undefined}
         className={[
-          'group relative flex items-center gap-3 rounded-xl text-sm font-medium transition-colors duration-200',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70',
-          sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5',
-          active
-            ? 'bg-white/[0.18] text-white'
-            : 'text-purple-100/70 hover:bg-white/10 hover:text-white',
+          'ghost-row',
+          sidebarCollapsed ? 'justify-center !px-2' : '',
+          active ? 'bg-black/[0.04] dark:bg-white/[0.07]' : '',
         ].join(' ')}
       >
-        {active && (
-          <span className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-white" />
-        )}
-        <span className={active ? 'shrink-0' : 'shrink-0 opacity-80 group-hover:opacity-100'}>
-          {item.icon}
-        </span>
+        <span className="ghost-ring">{item.icon}</span>
         {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
       </Link>
     );
@@ -300,112 +354,160 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 
   const sidebarContent = (
     <>
-      {/* Logo */}
+      {/* Logo + the single collapse control */}
       <div
         className={[
-          'flex h-16 shrink-0 items-center border-b border-white/10',
-          sidebarCollapsed ? 'justify-center' : 'gap-3 px-5',
+          'flex shrink-0 items-center',
+          sidebarCollapsed
+            ? 'h-auto flex-col gap-2 px-3 py-4'
+            : 'h-16 gap-3 px-5',
         ].join(' ')}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur">
-          <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+          style={{ background: 'var(--tile-active)' }}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
         </div>
         {!sidebarCollapsed && (
-          <div className="min-w-0">
-            <p className="truncate text-lg font-bold leading-none tracking-tight">Rayva</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-purple-200/70">Personal banking</p>
+          <div className="min-w-0 flex-1">
+            <p className="serif truncate text-xl font-medium leading-none tracking-tight" style={{ color: 'var(--text-primary)' }}>
+              Rayva
+            </p>
+            <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              Personal banking
+            </p>
           </div>
         )}
-      </div>
-
-      {/* Grouped nav */}
-      <nav aria-label="Main" className="sidebar-scrollbar flex-1 overflow-y-auto px-3 py-4">
-        {NAV_SECTIONS.map((section, i) => (
-          <div key={section.label ?? `group-${i}`} className={i === 0 ? '' : 'mt-5'}>
-            {section.label && !sidebarCollapsed && (
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-purple-200/50">
-                {section.label}
-              </p>
-            )}
-            {section.label && sidebarCollapsed && (
-              <div className="mx-auto mb-2 h-px w-6 bg-white/15" />
-            )}
-            <div className="space-y-0.5">
-              {section.items.map(item => (
-                <NavLink key={item.path} item={item} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      {/* Quick Transfer widget */}
-      {!sidebarCollapsed && (
-        <div className="mx-3 mb-3 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
-          <div className="mb-1.5 flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/20">
-              <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-              </svg>
-            </div>
-            <span className="text-xs font-semibold text-white">Quick transfer</span>
-          </div>
-          <p className="mb-2 text-[10px] leading-tight text-purple-200/70">Send money to your saved payees</p>
-          <Link
-            href="/portal/payments"
-            onClick={() => setMobileSidebarOpen(false)}
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-white/20 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/30"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
-            </svg>
-            Send money
-          </Link>
-        </div>
-      )}
-
-      {/* Footer nav + collapse + logout */}
-      <div className="space-y-0.5 border-t border-white/10 px-3 pb-4 pt-3">
-        {NAV_FOOTER.map(item => (
-          <NavLink key={item.path} item={item} />
-        ))}
-
         <button
           onClick={toggleSidebar}
           aria-expanded={!sidebarCollapsed}
-          className={[
-            'hidden w-full items-center rounded-xl text-sm text-purple-200/70 transition-colors hover:bg-white/10 hover:text-white lg:flex',
-            sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
-          ].join(' ')}
+          className="ring-btn hidden !h-8 !w-8 lg:inline-flex"
           title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <svg
-            className={`h-5 w-5 shrink-0 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`}
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
               d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
           </svg>
-          {!sidebarCollapsed && <span>Collapse</span>}
         </button>
+      </div>
+
+      {/* Search */}
+      <div className={sidebarCollapsed ? 'px-3 pb-2' : 'px-4 pb-2'}>
+        <div className="relative">
+          <svg
+            className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2"
+            style={{ color: 'var(--text-muted)' }}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="search"
+            aria-label="Search"
+            placeholder={sidebarCollapsed ? 'Search' : 'Search…'}
+            className="input rounded-full py-2.5 pl-10 text-sm"
+            style={{ background: 'var(--tile-bg)' }}
+          />
+        </div>
+      </div>
+
+      {/* Tile navigation */}
+      <nav aria-label="Main" className="sidebar-scrollbar flex-1 overflow-y-auto px-4 py-2">
+        <div className={sidebarCollapsed ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2.5'}>
+          {TILE_NAV.map(item => (
+            <NavTile key={item.path} item={item} />
+          ))}
+        </div>
+
+        <div className="my-4 h-px" style={{ background: 'var(--hairline)' }} />
+
+        {/* Card and account tools. Deliberately not marked as the current page:
+            several open the same screen, so an active state would be ambiguous. */}
+        <div className="space-y-0.5">
+          {TOOL_NAV.map(item => (
+            <Link
+              key={item.name}
+              href={item.path}
+              onClick={() => setMobileSidebarOpen(false)}
+              title={item.name}
+              className={['ghost-row', sidebarCollapsed ? 'justify-center !px-2' : ''].join(' ')}
+            >
+              <span className="ghost-ring">{item.icon}</span>
+              {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
+            </Link>
+          ))}
+        </div>
+
+        <div className="my-4 h-px" style={{ background: 'var(--hairline)' }} />
+
+        <div className="space-y-1">
+          {RAIL_NAV.map(item => (
+            <GhostRow key={item.path} item={item} />
+          ))}
+        </div>
+
+        {/* Quick transfer — the one promoted action in the rail */}
+        {!sidebarCollapsed && (
+          <div
+            className="mt-4 rounded-2xl p-4 text-white"
+            style={{ background: 'var(--tile-active)', boxShadow: 'var(--tile-active-shadow)' }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
+              </span>
+              <p className="serif text-lg font-medium leading-tight">Quick transfer</p>
+            </div>
+            <p className="mt-1.5 text-xs leading-snug text-white/75">
+              Send money to your saved payees in a couple of taps.
+            </p>
+            <Link
+              href="/portal/payments"
+              onClick={() => setMobileSidebarOpen(false)}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-white/20 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/30"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
+              </svg>
+              Send money
+            </Link>
+          </div>
+        )}
+      </nav>
+
+      {/* Footer nav + collapse + logout */}
+      <div
+        className="space-y-1 px-4 pb-4 pt-3"
+        style={{ borderTop: '1px solid var(--hairline)' }}
+      >
+        {FOOTER_NAV.map(item => (
+          <GhostRow key={item.path} item={item} />
+        ))}
 
         <button
           onClick={handleLogout}
           className={[
-            'flex w-full items-center rounded-xl text-sm text-purple-200/70 transition-colors hover:bg-red-500/15 hover:text-red-200',
-            sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
+            'ghost-row w-full hover:!bg-red-500/10 hover:!text-red-500',
+            sidebarCollapsed ? 'justify-center !px-2' : '',
           ].join(' ')}
           title={sidebarCollapsed ? 'Log out' : undefined}
         >
-          <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
+          <span className="ghost-ring">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </span>
           {!sidebarCollapsed && <span>Log out</span>}
         </button>
       </div>
@@ -413,13 +515,13 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen" style={{ backgroundColor: 'var(--surface-bg)' }}>
+    <div className="shell-wash flex min-h-screen">
       <a href="#main-content" className="skip-link">Skip to main content</a>
 
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -428,11 +530,15 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       {/* ─── Sidebar ─── */}
       <aside
         className={[
-          'mesh-hero fixed left-0 top-0 z-50 flex h-screen flex-col text-white shadow-2xl transition-[width,transform] duration-300 ease-in-out lg:sticky lg:shadow-none',
-          sidebarCollapsed ? 'lg:w-[76px]' : 'lg:w-[248px]',
-          'w-[264px]',
+          'fixed left-0 top-0 z-50 flex h-screen flex-col backdrop-blur-2xl transition-[width,transform] duration-300 ease-in-out lg:sticky',
+          sidebarCollapsed ? 'lg:w-[92px]' : 'lg:w-[280px]',
+          'w-[288px]',
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
+        style={{
+          background: 'var(--glass-bg-strong)',
+          borderRight: '1px solid var(--hairline)',
+        }}
       >
         {sidebarContent}
       </aside>
@@ -441,8 +547,8 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header
-          className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b px-4 backdrop-blur-xl transition-colors duration-200 sm:gap-3 lg:px-6"
-          style={{ backgroundColor: 'var(--topbar-bg)', borderColor: 'var(--topbar-border)' }}
+          className="sticky top-0 z-30 flex min-h-16 items-center gap-2 px-4 py-3 backdrop-blur-xl transition-colors duration-200 sm:gap-3 lg:px-8"
+          style={{ backgroundColor: 'var(--topbar-bg)', borderBottom: '1px solid var(--hairline)' }}
         >
           {/* Mobile hamburger */}
           <button
@@ -456,39 +562,43 @@ function PortalShell({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
 
-          {/* Page title — orients the user without spending a whole extra header row.
-              Kept as a <p>: each page owns the single <h1>. */}
-          <div className="min-w-0 flex-1 lg:flex-none">
-            <p className="truncate text-base font-semibold leading-tight" style={{ color: 'var(--text-primary)' }}>
-              {page.title}
-            </p>
-            <p className="hidden truncate text-sm sm:block" style={{ color: 'var(--text-muted)' }}>
-              {page.subtitle}
-            </p>
+          {/* Greeting on the overview, page name everywhere else.
+              Kept as <p>: each page owns the single <h1>. */}
+          <div className="min-w-0 flex-1">
+            {isHome ? (
+              <>
+                <p className="serif truncate text-2xl font-medium leading-tight sm:text-[27px]" style={{ color: 'var(--text-primary)' }}>
+                  {getGreeting()}, {user?.firstName ?? 'there'}
+                </p>
+                <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {new Date().toLocaleDateString(undefined, LONG_DATE)}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="serif truncate text-xl font-medium leading-tight" style={{ color: 'var(--text-primary)' }}>
+                  {page.title}
+                </p>
+                <p className="hidden truncate text-sm sm:block" style={{ color: 'var(--text-muted)' }}>
+                  {page.subtitle}
+                </p>
+              </>
+            )}
           </div>
 
-          {/* Search */}
-          <div className="relative mx-auto hidden w-full max-w-sm lg:block">
-            <svg
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-              style={{ color: 'var(--text-muted)' }}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="search"
-              aria-label="Search"
-              placeholder="Search anything..."
-              className="input py-2 pl-9 pr-4 text-sm"
-            />
-          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {/* Rayva AI — the one action worth a persistent button */}
+            <Link href="/portal/ai-assistant" className="pill-btn pill-btn-solid hidden sm:inline-flex">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+              </svg>
+              Ask Rayva AI
+            </Link>
 
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}
-              className="icon-btn"
+              className="ring-btn"
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
@@ -506,7 +616,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
             </button>
 
             {/* Messages */}
-            <Link href="/portal/messages" className="icon-btn hidden sm:inline-flex" aria-label="Messages">
+            <Link href="/portal/messages" className="ring-btn hidden sm:inline-flex" aria-label="Messages">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
                   d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -518,13 +628,13 @@ function PortalShell({ children }: { children: React.ReactNode }) {
               <button
                 ref={menuButtonRef}
                 onClick={() => setIsUserMenuOpen(v => !v)}
-                className="flex items-center gap-2 rounded-xl border py-1 pl-1 pr-2 transition-colors sm:pr-3"
-                style={{ borderColor: 'var(--surface-border)' }}
+                className="flex items-center gap-2 rounded-full border py-1 pl-1 pr-1 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.05] sm:pr-3"
+                style={{ borderColor: 'var(--hairline-strong)' }}
                 aria-haspopup="menu"
                 aria-expanded={isUserMenuOpen}
                 aria-label="Account menu"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#7f2b7b] to-[#ae3fa9] text-xs font-bold text-white shadow-sm">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm" style={{ background: 'var(--tile-active)' }}>
                   {initials}
                 </span>
                 <span className="hidden max-w-[9rem] truncate text-sm font-medium sm:block" style={{ color: 'var(--text-primary)' }}>
@@ -545,14 +655,9 @@ function PortalShell({ children }: { children: React.ReactNode }) {
               {isUserMenuOpen && (
                 <div
                   role="menu"
-                  className="animate-fade-in absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border py-2"
-                  style={{
-                    backgroundColor: 'var(--surface-card)',
-                    borderColor: 'var(--surface-border)',
-                    boxShadow: 'var(--shadow-lg)',
-                  }}
+                  className="animate-fade-in glass-panel absolute right-0 z-50 mt-2 w-64 overflow-hidden !rounded-3xl py-2"
                 >
-                  <div className="border-b px-4 py-3" style={{ borderColor: 'var(--surface-border)' }}>
+                  <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--hairline)' }}>
                     <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                       {user?.firstName} {user?.lastName}
                     </p>
@@ -563,30 +668,30 @@ function PortalShell({ children }: { children: React.ReactNode }) {
                   </div>
                   <div className="py-1">
                     {[
-                    { href: '/portal/profile', label: 'My Profile' },
-                    { href: '/portal/documents', label: 'Documents' },
-                    { href: '/portal/messages', label: 'Messages' },
-                  ].map(item => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      role="menuitem"
-                      className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-                      style={{ color: 'var(--text-secondary)' }}
-                      onClick={() => setIsUserMenuOpen(false)}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
+                      { href: '/portal/profile', label: 'My Profile' },
+                      { href: '/portal/documents', label: 'Documents' },
+                      { href: '/portal/messages', label: 'Messages' },
+                    ].map(item => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        role="menuitem"
+                        className="flex items-center gap-3 px-5 py-2.5 text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                        style={{ color: 'var(--text-secondary)' }}
+                        onClick={() => setIsUserMenuOpen(false)}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
                   </div>
-                  <div className="border-t py-1" style={{ borderColor: 'var(--surface-border)' }}>
+                  <div className="border-t py-1" style={{ borderColor: 'var(--hairline)' }}>
                     <button
                       role="menuitem"
                       onClick={() => { setIsUserMenuOpen(false); handleLogout(); }}
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10"
+                      className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10"
                     >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round"
                           d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                       </svg>
                       Sign Out
@@ -614,7 +719,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-xl lg:hidden"
         style={{
           backgroundColor: 'var(--topbar-bg)',
-          borderColor: 'var(--topbar-border)',
+          borderColor: 'var(--hairline)',
           paddingBottom: 'env(safe-area-inset-bottom)',
         }}
       >

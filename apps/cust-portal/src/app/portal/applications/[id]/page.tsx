@@ -28,8 +28,8 @@ import {
   REQUEST_STATUS_LABELS,
   REQUEST_STATUS_COLORS,
   formatFileSize,
-  getCategoryIcon,
 } from '@/services/api/document-service';
+import Glyph, { glyphFor, GlyphTile } from '@/components/ui/Glyph';
 import {
   messagingService,
   type Message,
@@ -378,10 +378,12 @@ export default function ApplicationDetailPage() {
                 </span>
               )}
             </div>
-            <h1 className="mt-3 truncate text-2xl font-extrabold tracking-tight md:text-3xl">
+            {/* The reference code is mostly digits, so it stays in Inter tabular
+                rather than the display serif used for word headings. */}
+            <h1 className="mt-3 truncate text-[26px] font-bold tracking-tight text-white tabular-nums md:text-[30px]">
               {app.applicationNumber || 'Draft application'}
             </h1>
-            <p className="mt-1.5 text-sm text-white/75">
+            <p className="mt-1.5 text-sm text-white/70">
               {app.product?.productName
                 ? `${app.product.productName} · ${LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose}`
                 : LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose}
@@ -909,9 +911,7 @@ function DocumentsSection({ applicationId }: { applicationId: string }) {
                   key={req.id}
                   className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 dark:border-amber-500/25 dark:bg-amber-500/10"
                 >
-                  <span className="text-lg" aria-hidden="true">
-                    {getCategoryIcon(req.category)}
-                  </span>
+                  <GlyphTile name={glyphFor(req.category)} className="h-10 w-10 shrink-0 rounded-xl" />
                   <div className="flex-1 min-w-0">
                     <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                       {req.title}
@@ -996,9 +996,7 @@ function DocumentsSection({ applicationId }: { applicationId: string }) {
                   className="flex items-start gap-3 rounded-xl border px-5 py-4"
                   style={{ borderColor: 'var(--surface-border)' }}
                 >
-                  <span className="text-lg" aria-hidden="true">
-                    {getCategoryIcon(doc.category)}
-                  </span>
+                  <GlyphTile name={glyphFor(doc.category)} className="h-10 w-10 shrink-0 rounded-xl" />
                   <div className="min-w-0 flex-1">
                     <p
                       className="truncate text-base font-medium"
@@ -1306,7 +1304,11 @@ function OfferSection({
             <span
               className={`text-sm px-2.5 py-1 rounded-full ${expiryUrgent ? 'bg-red-50 text-red-600 font-medium dark:bg-red-500/15 dark:text-red-300' : 'chip'}`}
             >
-              <span aria-hidden="true">{expiryUrgent ? '⏰ ' : '🕐 '}</span>
+              <Glyph
+                name={expiryUrgent ? 'alert' : 'clock'}
+                className="mr-1 inline h-3.5 w-3.5 align-[-2px]"
+                strokeWidth={2}
+              />
               {expiryText}
             </span>
           )}

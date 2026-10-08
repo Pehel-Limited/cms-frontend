@@ -1,8 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
-import ChartTooltip from './ChartTooltip';
+import { DottedRing, rampTone } from '@/components/dashboard/DotMatrix';
 import type { PerformanceMetrics, MissingItem } from '@/services/api/dashboard-service';
 
 function humanise(s: string): string {
@@ -12,6 +11,9 @@ function humanise(s: string): string {
     .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/* Outline paths only, and no per-category hue: an icon tile identifies *what*
+   kind of thing is missing, not how urgent it is, so it stays monochrome and
+   inherits whatever colour the surrounding text carries. */
 const IDENTITY_PATH = 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z';
 const SHIELD_PATH =
   'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z';
@@ -24,20 +26,20 @@ const COIN_PATH =
 const PIN_PATH =
   'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z';
 
-const CATEGORY_META: Record<string, { path: string; color: string }> = {
-  KYC: { path: IDENTITY_PATH, color: '#06b6d4' },
-  IDENTITY: { path: IDENTITY_PATH, color: '#06b6d4' },
-  AML: { path: SHIELD_PATH, color: '#3b82f6' },
-  DOCUMENTS: { path: DOC_PATH, color: '#8b5cf6' },
-  DOCUMENT: { path: DOC_PATH, color: '#8b5cf6' },
-  CREDIT_CHECK: { path: CHART_PATH, color: '#f59e0b' },
-  CREDIT: { path: CHART_PATH, color: '#f59e0b' },
-  INCOME: { path: COIN_PATH, color: '#10b981' },
+const CATEGORY_PATHS: Record<string, string> = {
+  KYC: IDENTITY_PATH,
+  IDENTITY: IDENTITY_PATH,
+  AML: SHIELD_PATH,
+  DOCUMENTS: DOC_PATH,
+  DOCUMENT: DOC_PATH,
+  CREDIT_CHECK: CHART_PATH,
+  CREDIT: CHART_PATH,
+  INCOME: COIN_PATH,
 };
 
-function metaFor(category: string) {
-  const key = Object.keys(CATEGORY_META).find(k => category.toUpperCase().includes(k));
-  return key ? CATEGORY_META[key] : { path: PIN_PATH, color: '#64748b' };
+function pathFor(category: string): string {
+  const key = Object.keys(CATEGORY_PATHS).find(k => category.toUpperCase().includes(k));
+  return key ? CATEGORY_PATHS[key] : PIN_PATH;
 }
 
 function daysAgo(iso: string): string {
@@ -51,29 +53,36 @@ function daysAgo(iso: string): string {
 interface Props {
   performance: PerformanceMetrics | null;
   missingItems: MissingItem[];
+  /** The RM dashboard moved these into its action band; admin still shows them here. */
+  showBlockers?: boolean;
 }
 
-export default function DashboardInsights({ performance, missingItems }: Props) {
+export default function DashboardInsights({ performance, missingItems, showBlockers = true }: Props) {
   const router = useRouter();
 
-  if (!performance && missingItems.length === 0) return null;
+  if (!performance && (missingItems.length === 0 || !showBlockers)) return null;
 
+  /* Reasons for decline are nominal, so they take a plum ramp rather than four
+     unrelated hues — the ramp is the same encoding the customer portal uses for
+     any part-of-whole split. */
   const declineSegments = performance
     ? [
-        { label: 'Credit risk', value: performance.declinedCreditRisk ?? 0, color: '#ef4444' },
-        { label: 'Fraud', value: performance.declinedFraud ?? 0, color: '#a855f7' },
-        { label: 'Policy', value: performance.declinedPolicy ?? 0, color: '#f59e0b' },
-        { label: 'Incomplete', value: performance.declinedIncomplete ?? 0, color: '#64748b' },
-      ].filter(s => s.value > 0)
+        { label: 'Credit risk', value: performance.declinedCreditRisk ?? 0 },
+        { label: 'Fraud', value: performance.declinedFraud ?? 0 },
+        { label: 'Policy', value: performance.declinedPolicy ?? 0 },
+        { label: 'Incomplete', value: performance.declinedIncomplete ?? 0 },
+      ]
+        .filter(s => s.value > 0)
+        .map((s, i, all) => ({ ...s, opacity: rampTone(i, all.length) }))
     : [];
   const declineTotal = declineSegments.reduce((s, x) => s + x.value, 0);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className={`grid grid-cols-1 gap-6 ${showBlockers ? 'lg:grid-cols-2' : ''}`}>
       {/* ─── Performance ─── */}
       {performance && (
-        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
-          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+        <section className="rm-panel p-6 sm:p-7">
+          <h2 className="rm-title">
             Performance
           </h2>
           <p className="text-sm mt-1 mb-6" style={{ color: 'var(--rm-text-muted)' }}>
@@ -82,12 +91,12 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
 
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'To approval', value: performance.avgDaysToApproval, color: '#0ea5e9' },
-              { label: 'Median', value: performance.medianDaysToApproval, color: '#8b5cf6' },
-              { label: 'Approve → book', value: performance.avgDaysApprovalToBooked, color: '#10b981' },
+              { label: 'To approval', value: performance.avgDaysToApproval },
+              { label: 'Median', value: performance.medianDaysToApproval },
+              { label: 'Approve → book', value: performance.avgDaysApprovalToBooked },
             ].map(t => (
               <div key={t.label}>
-                <p className="text-3xl font-semibold tracking-tight tabular-nums" style={{ color: t.color }}>
+                <p className="num text-3xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
                   {t.value > 0 ? Math.round(t.value) : '—'}
                   {t.value > 0 && <span className="text-base font-medium">d</span>}
                 </p>
@@ -113,19 +122,22 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
                       {r.label}
                     </span>
                     <span
-                      className="text-sm font-semibold tabular-nums"
-                      style={{ color: isWarn ? '#f59e0b' : 'var(--rm-text)' }}
+                      className="num text-sm font-semibold"
+                      style={{ color: isWarn ? 'var(--rm-warn)' : 'var(--rm-text)' }}
                     >
                       {pct}%
                     </span>
                   </div>
                   <div
                     className="h-2 w-full overflow-hidden rounded-full"
-                    style={{ backgroundColor: 'rgba(127,127,127,0.15)' }}
+                    style={{ backgroundColor: 'var(--rm-hairline-strong)' }}
                   >
                     <div
                       className="h-full rounded-full transition-all duration-700"
-                      style={{ width: `${Math.min(100, pct)}%`, backgroundColor: isWarn ? '#f59e0b' : '#0ea5e9' }}
+                      style={{
+                        width: `${Math.min(100, pct)}%`,
+                        backgroundColor: isWarn ? 'var(--rm-warn)' : 'var(--rm-brand)',
+                      }}
                     />
                   </div>
                 </div>
@@ -139,40 +151,35 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
                 Why deals were declined
               </p>
               <div className="flex items-center gap-6">
-                <div className="relative w-28 h-28 shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={declineSegments}
-                        dataKey="value"
-                        nameKey="label"
-                        innerRadius="64%"
-                        outerRadius="100%"
-                        paddingAngle={2}
-                        stroke="none"
-                        animationDuration={700}
-                      >
-                        {declineSegments.map(s => (
-                          <Cell key={s.label} fill={s.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={p => <ChartTooltip {...p} />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="text-xl font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                <div className="shrink-0">
+                  <DottedRing
+                    segments={declineSegments.map(s => ({ value: s.value, opacity: s.opacity }))}
+                    size={112}
+                    dots={52}
+                    label={`${declineTotal} declined: ${declineSegments
+                      .map(s => `${s.label} ${s.value}`)
+                      .join(', ')}`}
+                  >
+                    <span className="num text-xl font-semibold" style={{ color: 'var(--rm-text)' }}>
                       {declineTotal}
                     </span>
-                  </div>
+                    <span className="text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>
+                      declined
+                    </span>
+                  </DottedRing>
                 </div>
                 <div className="flex-1 space-y-2 min-w-0">
                   {declineSegments.map(s => (
                     <div key={s.label} className="flex items-center gap-2.5 text-sm">
-                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+                      <span
+                        aria-hidden="true"
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: 'var(--rm-brand)', opacity: s.opacity }}
+                      />
                       <span className="truncate" style={{ color: 'var(--rm-text-muted)' }}>
                         {s.label}
                       </span>
-                      <span className="ml-auto font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      <span className="num ml-auto font-semibold" style={{ color: 'var(--rm-text)' }}>
                         {s.value}
                       </span>
                     </div>
@@ -185,8 +192,9 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
       )}
 
       {/* ─── Blockers ─── */}
-      <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
-        <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+      {showBlockers && (
+      <section className="rm-panel p-6 sm:p-7">
+        <h2 className="rm-title">
           What&apos;s blocking
         </h2>
         <p className="text-sm mt-1 mb-6" style={{ color: 'var(--rm-text-muted)' }}>
@@ -197,9 +205,9 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
           <div className="py-10 text-center">
             <div
               className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full"
-              style={{ backgroundColor: 'rgba(16,185,129,0.14)' }}
+              style={{ backgroundColor: 'var(--rm-brand-soft)' }}
             >
-              <svg className="h-6 w-6" style={{ color: '#10b981' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <svg className="h-6 w-6" style={{ color: 'var(--rm-up)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
@@ -213,15 +221,19 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
         ) : (
           <div className="space-y-3">
             {missingItems.slice(0, 5).map(mi => {
-              const meta = metaFor(mi.itemCategory);
               return (
                 <div key={mi.itemCategory} className="flex items-center gap-4">
                   <span
+                    aria-hidden="true"
                     className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl"
-                    style={{ backgroundColor: `${meta.color}1f` }}
+                    style={{
+                      backgroundColor: 'var(--rm-glass)',
+                      border: '1px solid var(--rm-hairline)',
+                      color: 'var(--rm-text-secondary)',
+                    }}
                   >
-                    <svg className="w-5 h-5" style={{ color: meta.color }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={meta.path} />
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d={pathFor(mi.itemCategory)} />
                     </svg>
                   </span>
                   <div className="min-w-0 flex-1">
@@ -253,6 +265,7 @@ export default function DashboardInsights({ performance, missingItems }: Props) 
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -9,7 +9,7 @@ import {
   EligibilityCheck,
   PRODUCT_TYPE_LABELS,
 } from '@/services/api/product-service';
-import { estimateRepayment } from '@/lib/loan-estimate';
+import { quoteService, Quote } from '@/services/api/quote-service';
 import { formatCurrency } from '@/lib/format';
 
 /* ── SVG icon map (decorative — the container is aria-hidden) ── */
@@ -120,6 +120,7 @@ export default function ProductDetailPage() {
 
   const [eligibility, setEligibility] = useState<EligibilityCheck | null>(null);
   const [checkingEligibility, setCheckingEligibility] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
 
   useEffect(() => {
     loadProduct();
@@ -141,15 +142,14 @@ export default function ProductDetailPage() {
   const handleEligibilityCheck = async () => {
     try {
       setCheckingEligibility(true);
+      setEligibilityError(null);
       const result = await productService.checkEligibility(code);
       setEligibility(result);
     } catch {
-      setEligibility({
-        status: 'NEEDS_REVIEW',
-        summary: 'Could not complete the eligibility check. You can still start an application.',
-        checks: [],
-        canApply: true,
-      });
+      // A check that never ran has no outcome. Claiming NEEDS_REVIEW here would
+      // read to the customer as a soft pass on criteria we never evaluated.
+      setEligibility(null);
+      setEligibilityError('We could not run the eligibility check just now.');
     } finally {
       setCheckingEligibility(false);
     }
@@ -259,7 +259,7 @@ export default function ProductDetailPage() {
               </div>
               <div className="min-w-0">
                 <div className="mb-1 flex flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                  <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">
                     {product.productName}
                   </h1>
                   {product.isFeatured && (
@@ -268,7 +268,7 @@ export default function ProductDetailPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-white/70">
+                <p className="mt-1.5 text-sm text-white/70">
                   {typeLabel}
                   {product.productCategory ? ` · ${product.productCategory}` : ''}
                 </p>
@@ -311,6 +311,13 @@ export default function ProductDetailPage() {
 
       {/* Eligibility Result */}
       {eligibility && <EligibilityResult eligibility={eligibility} />}
+      {eligibilityError && (
+        <EligibilityUnavailable
+          message={eligibilityError}
+          retrying={checkingEligibility}
+          onRetry={handleEligibilityCheck}
+        />
+      )}
 
       {/* Key Details Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -525,6 +532,46 @@ const MISSING_EVIDENCE: Record<string, { what: string; action?: string; href?: s
   },
 };
 
+function EligibilityUnavailable({
+  message,
+  retrying,
+  onRetry,
+}: {
+  message: string;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="alert alert-warning" role="status" aria-live="polite">
+      <svg
+        className="h-5 w-5 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l3 3m-3-3l-3-3m0 0a9 9 0 1118 0 9 9 0 01-18 0z"
+        />
+      </svg>
+      <div className="flex-1">
+        <h2 className="text-base font-semibold">Eligibility check unavailable</h2>
+        <p className="mt-1 text-sm leading-6">{message} No criteria were evaluated, so we cannot tell you whether you meet them.</p>
+        <button
+          onClick={onRetry}
+          disabled={retrying}
+          className="btn mt-3 border border-current px-4 py-2 text-sm font-semibold disabled:opacity-60"
+        >
+          {retrying ? 'Checking…' : 'Try again'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
   const statusConfig = {
     ELIGIBLE: {
@@ -714,15 +761,15 @@ function clamp(value: number, min: number, max: number) {
 }
 
 /**
- * Indicative repayment built from the product's own published amount, rate and
- * term limits. The customer moves the inputs; the arithmetic is closed-form and
- * the assumptions and validity window are printed with the result, so this
- * reads as an illustration and never as a decision or an offer.
+ * Indicative repayment, issued by the bank.
+ *
+ * The customer moves the inputs; the figures come back as a stored quote snapshot the
+ * bank can reproduce, labelled illustrative, with the rate that was applied and where
+ * it came from. If the quote service is unreachable this says so and offers a retry —
+ * it never falls back to arithmetic done in the browser, because a number the bank
+ * cannot reproduce is not a quote.
  */
 function RepaymentEstimate({ product }: { product: LoanProduct }) {
-  const rate = product.defaultInterestRate ?? product.minInterestRate;
-  const rateIsTypical = product.defaultInterestRate != null;
-
   const [amountText, setAmountText] = useState(
     String(product.defaultLoanAmount ?? product.minLoanAmount)
   );
@@ -739,16 +786,55 @@ function RepaymentEstimate({ product }: { product: LoanProduct }) {
     termMonths >= product.minTermMonths &&
     termMonths <= product.maxTermMonths;
 
-  const estimate = useMemo(
-    () =>
-      amountValid && termValid
-        ? estimateRepayment(
-            { amount, annualRatePct: rate, termMonths },
-            { rateLabel: `the ${rateIsTypical ? 'typical' : 'lowest'} published rate of ${rate}%` }
-          )
-        : null,
-    [amountValid, termValid, amount, termMonths, rate, rateIsTypical]
-  );
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!amountValid || !termValid) {
+      setQuote(null);
+      setQuoteError(null);
+      return;
+    }
+
+    // Debounced, and superseded responses are discarded so a slow first request
+    // cannot overwrite the quote the customer is looking at.
+    let cancelled = false;
+    setQuoting(true);
+    setQuoteError(null);
+    const handle = window.setTimeout(() => {
+      quoteService
+        .issue({ productCode: product.productCode, requestedAmount: amount, termMonths })
+        .then(issued => {
+          if (!cancelled) setQuote(issued);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setQuote(null);
+            setQuoteError('We could not get a quote for those figures.');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setQuoting(false);
+        });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [amountValid, termValid, amount, termMonths, product.productCode]);
+
+  const retryQuote = () => {
+    if (!amountValid || !termValid) return;
+    setQuoting(true);
+    setQuoteError(null);
+    quoteService
+      .issue({ productCode: product.productCode, requestedAmount: amount, termMonths })
+      .then(setQuote)
+      .catch(() => setQuoteError('We could not get a quote for those figures.'))
+      .finally(() => setQuoting(false));
+  };
 
   return (
     <div className="panel">
@@ -821,48 +907,89 @@ function RepaymentEstimate({ product }: { product: LoanProduct }) {
           </div>
         </div>
 
-        {estimate ? (
+        {quote ? (
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="stat-tile">
                 <p className="stat-label">Monthly payment</p>
-                <p className="stat-value">{fmt2(estimate.monthlyPayment)}</p>
+                <p className="stat-value">{fmt2(quote.monthlyRepayment)}</p>
               </div>
               <div className="stat-tile">
-                <p className="stat-label">Total interest</p>
-                <p className="stat-value">{fmt2(estimate.totalInterest)}</p>
+                <p className="stat-label">Total cost of credit</p>
+                <p className="stat-value">{fmt2(quote.costOfCredit)}</p>
               </div>
               <div className="stat-tile">
                 <p className="stat-label">Total repayable</p>
-                <p className="stat-value">{fmt2(estimate.totalRepayable)}</p>
+                <p className="stat-value">{fmt2(quote.totalRepayable)}</p>
               </div>
             </div>
 
-            <div>
-              <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                What this assumes
-              </p>
-              <ul className="mt-2 space-y-1">
-                {estimate.assumptions.map(assumption => (
-                  <li key={assumption} className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                    · {assumption}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
-                Based on rates published today. This indication expires{' '}
-                {new Date(estimate.validUntil).toLocaleDateString(undefined, {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
-                , after which the published rate should be checked again.
-              </p>
-            </div>
+            <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>Interest rate</dt>
+                <dd className="font-medium tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.calculatedRatePct}% {quote.rateType ? `(${quote.rateType.toLowerCase()})` : ''}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>Rate source</dt>
+                <dd className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.rateProvenance === 'PRODUCT_RATE_PLAN'
+                    ? 'a published rate plan'
+                    : 'the product’s standard rate'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>APRC</dt>
+                <dd className="font-medium tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.aprcAvailable ? `${quote.aprcPct}%` : 'Not published for this product'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>Repayments</dt>
+                <dd className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.repaymentFrequency.toLowerCase()} ·{' '}
+                  {quote.repaymentStructure === 'EQUAL_INSTALMENT'
+                    ? 'equal amount each time'
+                    : 'interest each time, balance repaid at the end'}
+                </dd>
+              </div>
+            </dl>
+
+            <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
+              Quote {quote.quoteId.slice(0, 8)} is illustrative, not an offer. Based on the rate published
+              today, it holds until{' '}
+              {new Date(quote.expiresAt).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+              .
+            </p>
           </>
+        ) : quoting ? (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }} role="status" aria-live="polite">
+            Getting a quote from the bank…
+          </p>
+        ) : quoteError ? (
+          <div className="alert alert-warning" role="alert">
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{quoteError}</p>
+              <p className="mt-1 text-sm">
+                We only show repayments the bank has calculated, so nothing is estimated here in the
+                meantime.
+              </p>
+              <button
+                onClick={retryQuote}
+                className="btn mt-3 border border-current px-4 py-2 text-sm font-semibold"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
         ) : (
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Enter an amount and term within this product&apos;s limits to see an indication.
+            Enter an amount and term within this product&apos;s limits to see a quote.
           </p>
         )}
       </div>

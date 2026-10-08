@@ -58,6 +58,7 @@ module.exports = {
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'Georgia', 'Times New Roman', 'serif'],
         mono: ['var(--font-mono)', 'monospace'],
       },
       animation: {

@@ -1,4 +1,5 @@
 import type { WorklistItem } from '@/services/api/dashboard-service';
+import { BoardColumn, UNCLASSIFIED, columnOf, riskOf } from '@/lib/application-buckets';
 
 /* Pipeline funnel stages (grouped by the dashboard view) -> underlying LOMS statuses,
    so clicking a funnel stage can filter a worklist client-side. */
@@ -48,12 +49,23 @@ export const AGE_BUCKET_RANGE: Record<string, [number, number]> = {
 
 export interface FocusFilter {
   stageFilter?: string | null;
+  /** A board column: the same click on the pipeline filters the queue by that stage set. */
+  columnFilter?: BoardColumn | typeof UNCLASSIFIED | null;
   ageFilter?: { stage: string; bucket: string } | null;
   riskOnly?: boolean;
 }
 
+/**
+ * Past its status's SLA window, or within two days of it.
+ *
+ * This replaced `priorityScore >= 70`, which was never a risk signal: the view
+ * builds that score as `(requested_amount / 100000) * 10 + days * 2`, so 70 is
+ * roughly "a €700k facility", and it flagged large healthy applications while
+ * letting a small one rot past its window.
+ */
 export function isAtRisk(item: WorklistItem): boolean {
-  return item.slaBreachDays != null || item.priorityScore >= 70 || (item.daysInCurrentStage ?? 0) > 7;
+  const tier = riskOf(item)?.tier;
+  return tier === 'high' || tier === 'medium';
 }
 
 /** Client-side drill-through filter shared by the RM and Admin dashboards. */
@@ -62,6 +74,7 @@ export function matchesFocus(item: WorklistItem, f: FocusFilter): boolean {
     const set = STAGE_STATUSES[f.stageFilter];
     if (set && !set.has(item.status)) return false;
   }
+  if (f.columnFilter && columnOf(item.status) !== f.columnFilter) return false;
   if (f.ageFilter) {
     const range = AGE_BUCKET_RANGE[f.ageFilter.bucket];
     const days = item.daysInCurrentStage ?? 0;

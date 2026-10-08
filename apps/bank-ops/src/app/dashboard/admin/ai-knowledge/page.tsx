@@ -20,7 +20,6 @@ import {
   aiKnowledgeService,
   type KnowledgeSource,
   type IngestionJob,
-  type Citation,
 } from '@/services/api/aiKnowledgeService';
 
 /* ── Single source of truth for labels + colours used by this page ── */
@@ -50,9 +49,10 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
 };
 
 const ANSWER_STATUS_LABELS: Record<string, string> = {
-  FOUND: 'Citations found',
-  NO_ANSWER: 'No answer available',
-  NO_RESULTS: 'No citations found',
+  ANSWERED: 'Answered from the registered sources',
+  NOT_FOUND: 'No active source covers this',
+  INSUFFICIENT_EVIDENCE: 'Not covered by the registered policy',
+  FAILED: 'Could not answer',
 };
 
 function humanise(value?: string): string {
@@ -312,8 +312,15 @@ export default function AiKnowledgePage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<Citation[] | null>(null);
-  const [answerStatus, setAnswerStatus] = useState<string | null>(null);
+  /* Kept as one object so the status can never render against another query's answer. */
+  const [answer, setAnswer] = useState<{
+    status: string;
+    text?: string | null;
+    model?: string | null;
+    sourcesUsed?: number;
+    latencyMs?: number | null;
+    errorMessage?: string | null;
+  } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const getBankId = useCallback((): string => {
@@ -479,12 +486,17 @@ export default function AiKnowledgePage() {
     }
     setSearchError(null);
     setSearching(true);
-    setSearchResults(null);
-    setAnswerStatus(null);
+    setAnswer(null);
     try {
       const response = await aiKnowledgeService.search(getBankId(), query);
-      setAnswerStatus(response.answerStatus);
-      setSearchResults(Array.isArray(response.results) ? response.results : []);
+      setAnswer({
+        status: response.answerStatus,
+        text: response.answer,
+        model: response.answerModel,
+        sourcesUsed: response.sourcesUsed,
+        latencyMs: response.latencyMs,
+        errorMessage: response.errorMessage,
+      });
     } catch (err) {
       console.error('Search failed:', err);
       setSearchError('Search failed. Your question was kept so you can try again.');
@@ -511,8 +523,8 @@ export default function AiKnowledgePage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">AI knowledge base</h1>
           <p className="mt-1.5 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
-            Register policy documents, ingest their content and test the cited search used by RM
-            copilot answers.
+            Register policy documents, ingest their content, and test the cited answers built from
+            them. RM copilot answers do not read this knowledge base yet.
           </p>
         </div>
         <button
@@ -811,10 +823,11 @@ export default function AiKnowledgePage() {
           className="text-xl font-semibold tracking-tight"
           style={{ color: 'var(--rm-text)' }}
         >
-          Test hybrid search
+          Test retrieval and answer
         </h2>
         <p className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-          Runs the same retrieval used for cited answers. Only active sources are searched.
+          Searches active sources, then answers from those passages only — it never answers from the
+          model&rsquo;s own knowledge of banking.
         </p>
 
         <form onSubmit={handleSearchSubmit} className="mt-5 flex flex-wrap items-end gap-3" noValidate>
@@ -841,7 +854,7 @@ export default function AiKnowledgePage() {
               style={inputStyle}
             />
             <p id="knowledge-search-hint" className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-              Citations are returned with the source, heading and relevance score.
+              The answer is written only from passages retrieved from active sources.
             </p>
           </div>
           <button
@@ -881,53 +894,49 @@ export default function AiKnowledgePage() {
         <div aria-live="polite" aria-busy={searching}>
           {searching && (
             <p className="mt-5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-              Searching active sources…
+              Searching active sources and writing the answer… This can take up to a minute.
             </p>
           )}
 
-          {!searching && answerStatus && (
+          {!searching && answer && (
             <div className="mt-6 space-y-4">
               <p className="text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>
-                {answerStatusLabel(answerStatus)}
-                {searchResults && (
-                  <span className="tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
-                    {' '}
-                    · {searchResults.length} {searchResults.length === 1 ? 'citation' : 'citations'}
-                  </span>
-                )}
+                {answerStatusLabel(answer.status)}
               </p>
 
-              {searchResults && searchResults.length > 0 ? (
-                <ul className="space-y-3">
-                  {searchResults.map(result => (
-                    <li
-                      key={result.chunkId}
-                      className="rounded-2xl p-5"
-                      style={{ backgroundColor: 'var(--rm-input)' }}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
-                          {result.sourceTitle}
-                          {result.sourceVersion ? ` (v${result.sourceVersion})` : ''}
-                        </p>
-                        <span className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
-                          Relevance {result.combinedScore.toFixed(3)}
-                        </span>
-                      </div>
-                      {result.headingPath && (
-                        <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                          {result.headingPath}
-                        </p>
-                      )}
-                      <p className="mt-3 whitespace-pre-wrap text-base" style={{ color: 'var(--rm-text-secondary)' }}>
-                        {result.snippet.length > 400 ? `${result.snippet.slice(0, 400)}…` : result.snippet}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                  No matching citations were returned for this question.
+              {answer.status === 'ANSWERED' && answer.text && (
+                <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--rm-accent-muted)' }}>
+                  <h3 className="sr-only">Answer</h3>
+                  <p
+                    className="whitespace-pre-wrap text-base"
+                    style={{ color: 'var(--rm-text)' }}
+                  >
+                    {answer.text}
+                  </p>
+                  <p className="mt-3 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Grounded in {answer.sourcesUsed}{' '}
+                    {answer.sourcesUsed === 1 ? 'passage' : 'passages'} from the active sources
+                    {answer.model ? ` · ${answer.model}` : ''}
+                    {answer.latencyMs ? ` · ${(answer.latencyMs / 1000).toFixed(1)}s` : ''}. Check the
+                    source document before relying on this.
+                  </p>
+                </div>
+              )}
+
+              {answer.status === 'INSUFFICIENT_EVIDENCE' && (
+                <p className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  Related passages were found, but they do not answer this question, so no answer was
+                  generated.
+                </p>
+              )}
+
+              {answer.status === 'FAILED' && (
+                <p
+                  className="text-sm font-medium"
+                  role="alert"
+                  style={{ color: 'var(--rm-text-secondary)' }}
+                >
+                  {answer.errorMessage || 'The AI service could not answer this question.'}
                 </p>
               )}
             </div>

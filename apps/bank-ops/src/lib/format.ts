@@ -57,6 +57,20 @@ export function getCurrencySymbol(currency?: string): string {
 }
 
 /**
+ * Compact currency for chart axes, totals and dot tooltips — €1.2M rather than
+ * €1,200,000. The symbol comes from the bank's configured currency, never a
+ * hardcoded literal.
+ */
+export function compactCurrency(value: number): string {
+  const symbol = getCurrencySymbol();
+  const compact = new Intl.NumberFormat('en', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+  return `${symbol}${compact}`;
+}
+
+/**
  * Format a loan amount range string using the bank's configured currency.
  */
 export function formatLoanAmountRange(minAmount: number, maxAmount?: number): string {

@@ -11,7 +11,8 @@ import {
   type PaymentCard,
   type Transaction,
 } from '@/lib/banking-data';
-import { Sparkline, BankCard } from '@/components/banking/BankCard';
+import { BankCard, DotMatrix } from '@/components/banking/BankCard';
+import Glyph, { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
 
 function fmt(n: number, currency: string): string {
   return new Intl.NumberFormat('en-IE', {
@@ -222,12 +223,12 @@ export default function AccountDetailPage() {
           <div className="flex items-center gap-3">
             <span
               aria-hidden="true"
-              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-2xl backdrop-blur"
+              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-white/90 ring-1 ring-inset ring-white/20 backdrop-blur"
             >
-              {account.glyph}
+              <Glyph name={ACCOUNT_GLYPH[account.type]} className="h-6 w-6" />
             </span>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{account.name}</h1>
+              <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white md:text-[32px]">{account.name}</h1>
               <p className="font-mono text-sm text-white/75">
                 {account.sortCode} · {account.accountNumber}
               </p>
@@ -239,8 +240,8 @@ export default function AccountDetailPage() {
             {fmt(account.balance, currency)}
           </p>
 
-          <div className="mt-4 max-w-xs" aria-hidden="true">
-            <Sparkline data={account.spark} width={280} height={44} strokeWidth={2} />
+          <div className="mt-4" aria-hidden="true">
+            <DotMatrix data={account.spark} cell={8} rows={8} color="#fff" label={`${account.name} balance trend`} />
           </div>
 
           {/* Actions */}
@@ -396,13 +397,7 @@ export default function AccountDetailPage() {
                             key={t.id}
                             className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                           >
-                            <span
-                              aria-hidden="true"
-                              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg"
-                              style={{ backgroundColor: 'var(--surface-input)' }}
-                            >
-                              {t.glyph || '✨'}
-                            </span>
+                            <GlyphTile name={glyphFor(t.category)} className="h-11 w-11 rounded-xl" />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                                 {t.merchant}
@@ -414,7 +409,7 @@ export default function AccountDetailPage() {
                             </div>
                             <div className="shrink-0 text-right">
                               <p
-                                className={`text-base font-bold tabular-nums ${t.direction === 'IN' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+                                className={`num text-base font-semibold ${t.direction === 'IN' ? 'delta-up' : ''}`}
                                 style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
                               >
                                 {t.direction === 'IN' ? '+' : '−'}{fmt(t.amount, currency)}

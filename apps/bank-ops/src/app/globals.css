@@ -14,8 +14,24 @@
   --rm-text: #0f172a;
   --rm-text-secondary: #475569;
   --rm-text-muted: #64748b;
-  --rm-accent: #0284c7;
-  --rm-accent-muted: rgba(2,132,199,0.10);
+
+  /* Brand — the same plum the customer portal carries, so the two halves of the
+     product read as one. `--rm-accent` is the token 200+ components already use,
+     so retokening it here moves the whole portal at once. */
+  --rm-brand: #7f2b7b;
+  --rm-brand-strong: #5e1f5b;
+  --rm-brand-soft: rgba(127, 43, 123, 0.1);
+  --rm-brand-on-soft: #7f2b7b;
+  --rm-accent: #7f2b7b;
+  --rm-accent-muted: rgba(127, 43, 123, 0.1);
+
+  /* Sentiment, for figures where the direction carries meaning. Applied to text
+     and bars, never to icons. */
+  --rm-up: #0e9b6c;
+  --rm-down: #cf4369;
+  --rm-warn: #b45309;
+  --rm-warn-soft: rgba(245, 158, 11, 0.14);
+
   --rm-topbar-bg: rgba(255,255,255,0.90);
   --rm-topbar-border: rgba(226,232,240,0.80);
 }
@@ -30,8 +46,20 @@
   --rm-text: #ffffff;
   --rm-text-secondary: #e2e8f0;
   --rm-text-muted: #94a3b8;
-  --rm-accent: #38bdf8;
-  --rm-accent-muted: rgba(56,189,248,0.15);
+
+  /* Lifted and warmed for the night ground, exactly as the customer portal does. */
+  --rm-brand: #b155ac;
+  --rm-brand-strong: #c368bd;
+  --rm-brand-soft: rgba(177, 85, 172, 0.16);
+  --rm-brand-on-soft: #e3b6e0;
+  --rm-accent: #b155ac;
+  --rm-accent-muted: rgba(177, 85, 172, 0.16);
+
+  --rm-up: #45c795;
+  --rm-down: #f0799c;
+  --rm-warn: #fbbf24;
+  --rm-warn-soft: rgba(251, 191, 36, 0.16);
+
   --rm-topbar-bg: rgba(6,13,26,0.97);
   --rm-topbar-border: rgba(255,255,255,0.08);
 }
@@ -623,4 +651,165 @@ html.dark .force-light textarea {
 html.dark .force-light input::placeholder,
 html.dark .force-light textarea::placeholder {
   color: #94a3b8 !important;
+}
+
+/* ═══ Editorial glass design standard ═══════════════════════════════════════
+   Brings the RM surfaces onto the same language as the redesigned customer
+   portal: frosted panels on the page ground, hairline rules instead of boxed
+   borders, and the display serif carrying titles and word labels while every
+   figure stays in Inter tabular. Purely additive and token-driven, so the
+   .dark theme keeps working without per-component light assumptions. */
+
+:root {
+  --rm-glass: rgba(255, 255, 255, 0.72);
+  --rm-glass-strong: rgba(255, 255, 255, 0.88);
+  --rm-glass-border: rgba(255, 255, 255, 0.8);
+  --rm-hairline: rgba(15, 23, 42, 0.08);
+  --rm-hairline-strong: rgba(15, 23, 42, 0.14);
+  --rm-shadow-glass: 0 1px 2px rgba(15, 23, 42, 0.04),
+    0 14px 34px -20px rgba(69, 32, 75, 0.32);
+  --rm-marker-bg: #0f172a;
+  --rm-marker-fg: #f8fafc;
+}
+
+html.dark {
+  --rm-glass: rgba(255, 255, 255, 0.045);
+  --rm-glass-strong: rgba(15, 29, 53, 0.72);
+  --rm-glass-border: rgba(255, 255, 255, 0.09);
+  --rm-hairline: rgba(255, 255, 255, 0.08);
+  --rm-hairline-strong: rgba(255, 255, 255, 0.16);
+  --rm-shadow-glass: 0 1px 2px rgba(0, 0, 0, 0.45),
+    0 20px 44px -24px rgba(0, 0, 0, 0.85);
+  --rm-marker-bg: #c368bd;
+  --rm-marker-fg: #1b0a1c;
+}
+
+/* Public pages stay light, so their glass must not read as dark-mode translucent. */
+html.dark .force-light {
+  --rm-glass: rgba(255, 255, 255, 0.86);
+  --rm-hairline: rgba(15, 23, 42, 0.08);
+  --rm-hairline-strong: rgba(15, 23, 42, 0.14);
+  --rm-marker-bg: #0f172a;
+  --rm-marker-fg: #f8fafc;
+}
+
+.serif {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+}
+
+/* Figures stay in Inter. The display serif is high-contrast, so currency and
+   counts come out cluttered and misaligned in it. */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.rm-panel {
+  background: var(--rm-glass);
+  backdrop-filter: blur(20px) saturate(165%);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+  border: 1px solid var(--rm-glass-border);
+  border-radius: 28px;
+  box-shadow: var(--rm-shadow-glass);
+}
+.rm-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 24px 14px;
+}
+.rm-title {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--rm-text);
+}
+.rm-sub {
+  margin-top: 3px;
+  font-size: 14px;
+  color: var(--rm-text-muted);
+}
+.rm-body { padding: 0 24px 22px; }
+.rm-foot {
+  border-top: 1px solid var(--rm-hairline);
+  padding: 14px 24px;
+  font-size: 13px;
+  color: var(--rm-text-muted);
+}
+.rm-rule { border-top: 1px solid var(--rm-hairline); }
+
+/* Hairline-divided metric strip. A restatement-free layout device: it holds the
+   same metrics the pill row held, just divided by rules instead of floats. */
+.rm-strip { display: grid; grid-template-columns: minmax(0, 1fr); }
+.rm-strip-cell { padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.rm-strip-cell:not(:first-child) { border-top: 1px solid var(--rm-hairline); }
+@media (min-width: 768px) {
+  .rm-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rm-strip-cell:nth-child(2) { border-top: 0; border-left: 1px solid var(--rm-hairline); }
+  .rm-strip-cell:not(:nth-child(2)):not(:nth-child(1)) { border-top: 1px solid var(--rm-hairline); }
+}
+@media (min-width: 1280px) {
+  .rm-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .rm-strip-cell:not(:first-child) { border-top: 0; border-left: 1px solid var(--rm-hairline); }
+}
+.rm-strip-label {
+  font-family: var(--font-display), Georgia, 'Times New Roman', serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--rm-text-secondary);
+}
+.rm-strip-value {
+  margin-top: 6px;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--rm-text);
+}
+.rm-strip-note { margin-top: 5px; font-size: 12px; color: var(--rm-text-muted); }
+
+/* Floating value marker used to anchor a chart's peak. */
+.chart-marker {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--rm-marker-bg);
+  color: var(--rm-marker-fg);
+}
+.marker-leader { width: 1px; background: var(--rm-hairline-strong); }
+
+/* Table rows separated by hairlines rather than alternating fills. */
+.rm-table thead th {
+  border-bottom: 1px solid var(--rm-hairline-strong);
+  color: var(--rm-text-muted);
+}
+.rm-table tbody tr { border-bottom: 1px solid var(--rm-hairline); transition: background-color 0.15s ease; }
+.rm-table tbody tr:last-child { border-bottom: 0; }
+.rm-table tbody tr:hover { background-color: rgba(127, 127, 127, 0.06); }
+
+/* Panels in a shared row must match height. Grid children stretch by default,
+   but the panels inside them need to be told to fill their wrapper. */
+.rm-fill { height: 100%; }
+.rm-fill > .rm-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.rm-fill > .rm-panel > .rm-body { flex: 1; }
+
+/* Used where a stretched panel's content is shorter than its row neighbour:
+   centre it so the leftover space splits evenly instead of pooling at the bottom. */
+.rm-fill > .rm-panel > .rm-body-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }

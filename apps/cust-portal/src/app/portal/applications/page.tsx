@@ -158,10 +158,10 @@ export default function ApplicationsPage() {
 
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">
               My applications
             </h1>
-            <p className="mt-1.5 text-sm text-white/75">
+            <p className="mt-1.5 text-sm text-white/70">
               {loading
                 ? 'Loading your applications…'
                 : `${counts.ACTIVE} in progress · ${counts.ALL} total`}

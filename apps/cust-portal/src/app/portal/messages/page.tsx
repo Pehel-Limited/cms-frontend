@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { PageHero } from '@/components/ui/PageHero';
 import {
   messagingService,
   formatMessageTime,
@@ -137,16 +138,14 @@ export default function MessagesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
-          Messages
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          {!listLoading && !listError
+      <PageHero
+        title="Messages"
+        subtitle={
+          !listLoading && !listError
             ? `${conversations.length} conversation${conversations.length === 1 ? '' : 's'} with your bank`
-            : 'Your conversations with the bank, in one place.'}
-        </p>
-      </div>
+            : 'Your conversations with the bank, in one place.'
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left: conversation list */}

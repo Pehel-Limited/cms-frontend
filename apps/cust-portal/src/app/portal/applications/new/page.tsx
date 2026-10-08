@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAIPreferences } from '@/lib/ai-preferences';
+import { PageHero } from '@/components/ui/PageHero';
 import {
   applicationService,
   ApplicationContext,
@@ -12,8 +13,16 @@ import {
   LoanPurpose,
   FACILITY_TYPE_LABELS,
   INTENT_TO_LOAN_PURPOSE,
+  getPurposeOptions,
+  isPurposeAllowed,
 } from '@/services/api/application-service';
-import { productService, LoanProduct, RatePlan, PRODUCT_TYPE_LABELS } from '@/services/api/product-service';
+import {
+  productService,
+  LoanProduct,
+  RatePlan,
+  PRODUCT_TYPE_LABELS,
+  filterProductsForSegment,
+} from '@/services/api/product-service';
 import { documentExtractionService, DocumentType, DocumentExtractionResult } from '@/services/api/document-extraction-service';
 import { formatCurrency } from '@/lib/format';
 import {
@@ -37,7 +46,7 @@ const PERSONAL_STEPS: { key: WizardStep; label: string }[] = [
 
 const BUSINESS_STEPS: { key: WizardStep; label: string }[] = [
   { key: 'product', label: 'Product' },
-  { key: 'loan', label: 'Facility details' },
+  { key: 'loan', label: 'Loan details' },
   { key: 'parties', label: 'People and roles' },
   { key: 'financial', label: 'Financials' },
   { key: 'review', label: 'Review and submit' },
@@ -83,6 +92,10 @@ const VEHICLE_CONDITIONS = [
 const HOME_PURPOSES = ['HOME_PURCHASE', 'HOME_CONSTRUCTION', 'HOME_RENOVATION', 'HOME_REFINANCE'];
 const VEHICLE_PURPOSES = ['VEHICLE_PURCHASE'];
 
+/** Product types whose price varies by LTV band / fixed-term tier, so the
+    customer picks a plan. All others carry a single bank-set rate. */
+const RATE_PLAN_PRODUCT_TYPES = new Set(['MORTGAGE', 'HOME_LOAN', 'COMMERCIAL_MORTGAGE']);
+
 // ─── Page ──────────────────────────────────────────────────────
 
 export default function NewApplicationPage() {
@@ -127,6 +140,11 @@ export default function NewApplicationPage() {
   }, [selectedProduct, appContext]);
 
   const STEPS = isBusiness ? BUSINESS_STEPS : PERSONAL_STEPS;
+
+  const visibleProducts = useMemo(
+    () => filterProductsForSegment(products, appContext?.segment),
+    [products, appContext]
+  );
 
   // Form data
   const [form, setForm] = useState({
@@ -259,12 +277,18 @@ export default function NewApplicationPage() {
         if (match) {
           setSelectedProduct(match);
           const mappedPurpose = prefillPurpose ? INTENT_TO_LOAN_PURPOSE[prefillPurpose] : undefined;
+          const carriedPurpose =
+            mappedPurpose && isPurposeAllowed(match.productType, mappedPurpose)
+              ? mappedPurpose
+              : undefined;
           setForm(prev => ({
             ...prev,
             requestedAmount: prefillAmount || match.defaultLoanAmount?.toString() || '',
             requestedTermMonths: match.defaultTermMonths?.toString() || '',
-            requestedInterestRate: match.defaultInterestRate?.toString() || '',
-            loanPurpose: mappedPurpose || prev.loanPurpose,
+            requestedInterestRate: RATE_PLAN_PRODUCT_TYPES.has(match.productType)
+              ? ''
+              : match.defaultInterestRate?.toString() || '',
+            loanPurpose: carriedPurpose || prev.loanPurpose,
             loanPurposeDescription: prefillTargetDate
               ? `Target date: ${prefillTargetDate}`
               : prev.loanPurposeDescription,
@@ -288,7 +312,12 @@ export default function NewApplicationPage() {
       ...prev,
       requestedAmount: p.defaultLoanAmount?.toString() || prev.requestedAmount,
       requestedTermMonths: p.defaultTermMonths?.toString() || prev.requestedTermMonths,
-      requestedInterestRate: p.defaultInterestRate?.toString() || prev.requestedInterestRate,
+      // A plan-priced product has no single default to preselect — leaving it
+      // empty keeps the picker's placeholder and the submitted rate in agreement.
+      requestedInterestRate: RATE_PLAN_PRODUCT_TYPES.has(p.productType)
+        ? ''
+        : p.defaultInterestRate?.toString() || prev.requestedInterestRate,
+      loanPurpose: isPurposeAllowed(p.productType, prev.loanPurpose) ? prev.loanPurpose : '',
     }));
     setStep('loan');
   }
@@ -534,10 +563,10 @@ export default function NewApplicationPage() {
           </svg>
         </button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
+          <h1 className="serif text-[26px] font-medium leading-tight tracking-tight sm:text-[30px]" style={{ color: 'var(--text-primary)' }}>
             New application
           </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
             {savedApp
               ? `Draft saved — ${savedApp.applicationNumber || 'no reference yet'}`
               : 'Fill in the details to apply for a loan'}
@@ -647,7 +676,7 @@ export default function NewApplicationPage() {
       <div className="card p-6">
         {step === 'product' && (
           <StepProduct
-            products={products}
+            products={visibleProducts}
             loading={loadingProducts}
             selected={selectedProduct}
             onSelect={selectProduct}
@@ -882,12 +911,27 @@ function StepLoan({
   const isHomePurpose = HOME_PURPOSES.includes(form.loanPurpose);
   const isVehiclePurpose = VEHICLE_PURPOSES.includes(form.loanPurpose);
 
-  // Admin-managed rate plans (LTV bands / fixed-term tiers / green discounts)
-  // fetched live for this product, replacing the old static rate table.
+  // A purpose carried in from a saved draft (or set by an RM) can sit outside
+  // the selected product's list — keep it selectable rather than dropping the
+  // customer's answer.
+  const allowedPurposes = getPurposeOptions(product.productType);
+  const purposeOptions =
+    form.loanPurpose && !allowedPurposes.includes(form.loanPurpose as LoanPurpose)
+      ? [...allowedPurposes, form.loanPurpose as LoanPurpose]
+      : allowedPurposes;
+
+  // Admin-managed rate plans (LTV bands / fixed-term tiers) are only offered
+  // for mortgages — every other product carries one bank-set rate that the
+  // customer is shown rather than asked to choose.
+  const canChooseRate = RATE_PLAN_PRODUCT_TYPES.has(product.productType);
   const [ratePlans, setRatePlans] = useState<RatePlan[]>([]);
-  const [loadingRatePlans, setLoadingRatePlans] = useState(false);
+  const [loadingRatePlans, setLoadingRatePlans] = useState(canChooseRate);
 
   useEffect(() => {
+    if (!canChooseRate) {
+      setRatePlans([]);
+      return;
+    }
     let cancelled = false;
     setLoadingRatePlans(true);
     productService
@@ -904,11 +948,13 @@ function StepLoan({
     return () => {
       cancelled = true;
     };
-  }, [product.productCode]);
+  }, [product.productCode, canChooseRate]);
+
+  const shownRate = form.requestedInterestRate || String(product.defaultInterestRate ?? '');
 
   return (
     <div>
-      <h2 className="section-title">{isBusiness ? 'Facility details' : 'Loan details'}</h2>
+      <h2 className="section-title">Loan details</h2>
       <p className="field-hint">
         Applying for{' '}
         <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
@@ -922,7 +968,7 @@ function StepLoan({
         {/* Amount */}
         <div>
           <label className="field-label" htmlFor="requestedAmount">
-            {isBusiness ? 'Facility amount' : 'Loan amount'}{' '}
+            Loan amount{' '}
             <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
             <span className="sr-only">(required)</span>
           </label>
@@ -1001,7 +1047,7 @@ function StepLoan({
           </label>
           {loadingRatePlans ? (
             <div className="skeleton h-10" aria-hidden="true" />
-          ) : ratePlans.length > 0 ? (
+          ) : canChooseRate && ratePlans.length > 0 ? (
             <>
               <select
                 id="requestedInterestRate"
@@ -1029,12 +1075,16 @@ function StepLoan({
                 id="requestedInterestRate"
                 type="text"
                 name="requestedInterestRate"
-                value={form.requestedInterestRate ? `${form.requestedInterestRate}% p.a.` : 'Not set'}
+                value={shownRate ? `${shownRate}% p.a.` : 'To be confirmed'}
                 readOnly
                 aria-readonly="true"
                 className="input tabular-nums"
               />
-              <p className="field-hint">Set by the bank for this product — not editable.</p>
+              <p className="field-hint">
+                {canChooseRate
+                  ? 'The bank has not published rate plans for this product yet.'
+                  : 'This product has one rate, set by the bank.'}
+              </p>
             </>
           )}
         </div>
@@ -1042,7 +1092,7 @@ function StepLoan({
         {/* Loan Purpose */}
         <div>
           <label className="field-label" htmlFor="loanPurpose">
-            {isBusiness ? 'Facility purpose' : 'Loan purpose'}{' '}
+            Loan purpose{' '}
             <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
             <span className="sr-only">(required)</span>
           </label>
@@ -1055,31 +1105,35 @@ function StepLoan({
             required
             aria-required="true"
             aria-invalid={errors.loanPurpose ? true : undefined}
-            aria-describedby={errors.loanPurpose ? 'loanPurpose-error' : undefined}
+            aria-describedby="loanPurpose-hint"
           >
             <option value="">Select purpose…</option>
-            {Object.entries(LOAN_PURPOSE_LABELS).map(([key, label]) => (
+            {purposeOptions.map(key => (
               <option key={key} value={key}>
-                {label}
+                {LOAN_PURPOSE_LABELS[key]}
               </option>
             ))}
           </select>
-          {errors.loanPurpose && (
+          {errors.loanPurpose ? (
             <p
-              id="loanPurpose-error"
+              id="loanPurpose-hint"
               className="mt-1.5 text-sm font-medium text-red-600 dark:text-red-300"
               role="alert"
             >
               {errors.loanPurpose}
             </p>
+          ) : (
+            <p id="loanPurpose-hint" className="field-hint">
+              Only the purposes available for {product.productName} are listed.
+            </p>
           )}
         </div>
 
-        {/* Business: Facility Type */}
+        {/* Business: how the borrowing is structured */}
         {isBusiness && (
           <div>
             <label className="field-label" htmlFor="facilityType">
-              Facility type
+              Type of loan
             </label>
             <select
               id="facilityType"
@@ -1652,7 +1706,7 @@ function StepFinancial({
             </div>
             <div className="sm:col-span-2">
               <label className="field-label" htmlFor="facilityPurposeDescription">
-                Facility purpose description
+                What the loan is for in your business
               </label>
               <textarea
                 id="facilityPurposeDescription"
@@ -1660,7 +1714,7 @@ function StepFinancial({
                 value={form.facilityPurposeDescription}
                 onChange={onChange}
                 rows={2}
-                placeholder="Describe how the facility will be used in your business operations…"
+                placeholder="Describe how you will use the loan in your business…"
                 className="input resize-none"
               />
             </div>
@@ -2004,7 +2058,7 @@ function StepReview({
       ],
     },
     {
-      title: isBusiness ? 'Facility details' : 'Loan details',
+      title: 'Loan details',
       items: [
         {
           label: 'Amount',
@@ -2028,7 +2082,7 @@ function StepReview({
         ...(isBusiness && form.facilityType
           ? [
               {
-                label: 'Facility type',
+                label: 'Type of loan',
                 value: FACILITY_TYPE_LABELS[form.facilityType] || form.facilityType,
               },
             ]
@@ -2101,7 +2155,7 @@ function StepReview({
                 label: 'Business vintage',
                 value: form.businessVintageYears ? `${form.businessVintageYears} years` : '—',
               },
-              { label: 'Facility purpose', value: form.facilityPurposeDescription || '—' },
+              { label: 'Loan use', value: form.facilityPurposeDescription || '—' },
             ],
           },
         ]

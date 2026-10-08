@@ -80,7 +80,7 @@ export default function PortalLoginPage() {
 
           {/* Hero content */}
           <div className="space-y-6">
-            <h1 className="text-4xl font-bold leading-tight text-white xl:text-5xl">
+            <h1 className="serif text-4xl font-medium leading-tight text-white xl:text-[44px]">
               Your banking portal,{' '}
               <span className="bg-gradient-to-r from-pink-300 to-purple-200 bg-clip-text text-transparent">
                 simplified.
@@ -115,12 +115,13 @@ export default function PortalLoginPage() {
       </div>
 
       {/* ──── Right panel: Login form ──── */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-6 py-12">
-        <div className="w-full max-w-[420px]">
+      <div className="flex flex-1 items-center justify-center px-6 py-12">
+        <div className="w-full max-w-[440px]">
           {/* Mobile logo */}
           <div className="mb-10 flex items-center justify-center gap-2.5 lg:hidden">
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#4a1747] to-[#7f2b7b]"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-white"
+              style={{ background: 'var(--tile-active)' }}
               aria-hidden="true"
             >
               <svg
@@ -137,13 +138,14 @@ export default function PortalLoginPage() {
                 />
               </svg>
             </div>
-            <span className="text-xl font-bold tracking-tight text-slate-900">Rayva</span>
+            <span className="serif text-2xl font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Rayva</span>
           </div>
 
+          <div className="glass-panel p-8">
           {/* Header */}
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
-            <p className="mt-1 text-sm text-slate-500">Sign in to access your portal</p>
+            <h2 className="serif text-[28px] font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Welcome back</h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Sign in to access your portal</p>
           </div>
 
           {/* Error */}
@@ -152,7 +154,7 @@ export default function PortalLoginPage() {
               id="login-error"
               role="alert"
               aria-live="assertive"
-              className="mb-5 flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              className="alert alert-error mb-5 !rounded-2xl"
             >
               <svg
                 className="h-4 w-4 shrink-0"
@@ -175,12 +177,13 @@ export default function PortalLoginPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label htmlFor="username" className="field-label">
                 Username
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2"
+                  style={{ color: 'var(--text-muted)' }}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -203,18 +206,19 @@ export default function PortalLoginPage() {
                   required
                   aria-describedby={errorMsg ? 'login-error' : undefined}
                   aria-invalid={errorMsg ? true : undefined}
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                  className="input !rounded-2xl py-3 pl-10 pr-4"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label htmlFor="password" className="field-label">
                 Password
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2"
+                  style={{ color: 'var(--text-muted)' }}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -237,14 +241,15 @@ export default function PortalLoginPage() {
                   required
                   aria-describedby={errorMsg ? 'login-error' : undefined}
                   aria-invalid={errorMsg ? true : undefined}
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-12 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                  className="input !rounded-2xl py-3 pl-10 pr-12"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(v => !v)}
                   aria-pressed={showPassword}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-2 transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.07]"
+                  style={{ color: 'var(--text-muted)' }}
                 >
                   {showPassword ? (
                     <svg
@@ -294,13 +299,14 @@ export default function PortalLoginPage() {
                   type="checkbox"
                   className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-500"
                 />
-                <label htmlFor="remember-me" className="cursor-pointer text-sm text-slate-600">
+                <label htmlFor="remember-me" className="cursor-pointer text-sm" style={{ color: 'var(--text-secondary)' }}>
                   Remember me
                 </label>
               </div>
               <Link
                 href="/portal/forgot-password"
-                className="text-sm font-medium text-primary-700 transition-colors hover:text-primary-800"
+                className="text-sm font-medium transition-colors"
+                style={{ color: 'var(--brand-on-soft)' }}
               >
                 Forgot password?
               </Link>
@@ -310,7 +316,7 @@ export default function PortalLoginPage() {
               type="submit"
               disabled={isLoading}
               aria-busy={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#4a1747] to-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-purple-700/20 transition-all hover:from-[#3d1040] hover:to-[#6b2568] disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn btn-primary w-full !py-3"
             >
               {isLoading ? (
                 <>
@@ -335,13 +341,15 @@ export default function PortalLoginPage() {
               )}
             </button>
           </form>
+          </div>
 
           {/* Register link */}
-          <p className="mt-7 text-center text-sm text-slate-500">
+          <p className="mt-7 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
             Don&apos;t have an account?{' '}
             <Link
               href="/portal/register"
-              className="font-semibold text-primary-700 transition-colors hover:text-primary-800"
+              className="font-semibold transition-colors"
+              style={{ color: 'var(--brand-on-soft)' }}
             >
               Create one
             </Link>

@@ -18,9 +18,12 @@ import {
 import {
   productService,
   matchProductsForIntent,
+  filterIntentsForCatalogue,
+  filterProductsForSegment,
   PRODUCT_TYPE_LABELS,
   type LoanProduct,
 } from '@/services/api/product-service';
+import { applicationService } from '@/services/api/application-service';
 
 /* ─── helpers ────────────────────────────────────────────────── */
 
@@ -290,8 +293,10 @@ export default function AiAssistantPage() {
   const [error, setError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
   const [intentOptions, setIntentOptions] = useState<IntentOption[]>(DEFAULT_INTENT_OPTIONS);
-  const [matchedProducts, setMatchedProducts] = useState<LoanProduct[]>([]);
-  const [loadingMatches, setLoadingMatches] = useState(false);
+  /* The bank's products open to this customer — the catalogue the chips and
+     the matched-product list are both read against. */
+  const [catalogue, setCatalogue] = useState<LoanProduct[]>([]);
+  const [loadingCatalogue, setLoadingCatalogue] = useState(true);
   const [preparingProductId, setPreparingProductId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -299,41 +304,25 @@ export default function AiAssistantPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [journey?.recentMessages.length]);
 
-  // Once the credit need is confirmed, fetch the bank's products and refine
-  // them down to the ones relevant for this purpose/amount instead of
-  // showing a generic "browse all products" link.
   useEffect(() => {
-    const review = journey?.currentReview;
-    if (!review || review.status !== 'CONFIRMED') {
-      setMatchedProducts([]);
-      return;
-    }
     let cancelled = false;
-    setLoadingMatches(true);
-    productService
-      .getProducts()
-      .then(all => {
-        if (cancelled) return;
-        setMatchedProducts(
-          matchProductsForIntent(
-            all,
-            review.facts.purpose,
-            review.facts.estimatedCost,
-            review.facts.borrowerSegment,
-            review.facts.assetCategory
-          )
-        );
+    Promise.all([
+      productService.getProducts(),
+      applicationService.getContext().catch(() => null),
+    ])
+      .then(([list, ctx]) => {
+        if (!cancelled) setCatalogue(filterProductsForSegment(list, ctx?.segment));
       })
       .catch(() => {
-        if (!cancelled) setMatchedProducts([]);
+        if (!cancelled) setCatalogue([]);
       })
       .finally(() => {
-        if (!cancelled) setLoadingMatches(false);
+        if (!cancelled) setLoadingCatalogue(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [journey?.currentReview?.reviewId, journey?.currentReview?.status]);
+  }, []);
 
   function handleApiError(err: unknown) {
     const e = err as { status?: number; message?: string };
@@ -434,6 +423,20 @@ export default function AiAssistantPage() {
   const review = journey?.currentReview ?? null;
   const isUnavailable = journey?.status === 'AI_PROVIDER_UNAVAILABLE';
 
+  // Only offer the purposes this customer's own catalogue can lead to, and
+  // refine the confirmed need down to those products.
+  const visibleIntentOptions = filterIntentsForCatalogue(intentOptions, catalogue);
+  const matchedProducts =
+    review?.status === 'CONFIRMED'
+      ? matchProductsForIntent(
+          catalogue,
+          review.facts.purpose,
+          review.facts.estimatedCost,
+          review.facts.borrowerSegment,
+          review.facts.assetCategory
+        )
+      : [];
+
   if (notEnabled) {
     return (
       <div className="mx-auto max-w-2xl">
@@ -478,8 +481,8 @@ export default function AiAssistantPage() {
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Rayva AI credit assistant</h1>
-            <p className="mt-1 text-sm text-white/75">
+            <h1 className="serif text-[28px] font-medium leading-tight tracking-tight sm:text-[32px]">Rayva AI credit assistant</h1>
+            <p className="mt-1.5 text-sm text-white/70">
               Tell me what you need credit for, in your own words — I&apos;ll help you get started.
             </p>
           </div>
@@ -569,13 +572,13 @@ export default function AiAssistantPage() {
         </div>
 
         {/* Intent option chips */}
-        {intentOptions.length > 0 && (!review || review.status !== 'CONFIRMED') && (
+        {visibleIntentOptions.length > 0 && (!review || review.status !== 'CONFIRMED') && (
           <div
             className="flex flex-wrap gap-2 px-5 pb-4 pt-4"
             style={{ borderTop: '1px solid var(--surface-border)' }}
           >
             <h2 className="sr-only">Suggested options</h2>
-            {intentOptions.map(opt => (
+            {visibleIntentOptions.map(opt => (
               <button
                 key={opt.code}
                 onClick={() => handleSelectIntent(opt.code)}
@@ -637,14 +640,14 @@ export default function AiAssistantPage() {
         <div className="space-y-4">
           <h2 className="section-title">Matching products</h2>
 
-          {loadingMatches && (
+          {loadingCatalogue && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Skeleton className="h-36" />
               <Skeleton className="h-36" />
             </div>
           )}
 
-          {!loadingMatches && matchedProducts.length === 0 && (
+          {!loadingCatalogue && matchedProducts.length === 0 && (
             <div className="empty-state">
               <div className="empty-state-icon">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -662,7 +665,7 @@ export default function AiAssistantPage() {
             </div>
           )}
 
-          {!loadingMatches && matchedProducts.length > 0 && (
+          {!loadingCatalogue && matchedProducts.length > 0 && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {matchedProducts.slice(0, 4).map(p => {
                 const fits =
@@ -702,7 +705,7 @@ export default function AiAssistantPage() {
             </div>
           )}
 
-          {!loadingMatches && matchedProducts.length > 0 && (
+          {!loadingCatalogue && matchedProducts.length > 0 && (
             <p className="text-center text-sm">
               <Link
                 href="/portal/products"

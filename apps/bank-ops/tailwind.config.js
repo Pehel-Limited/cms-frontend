@@ -12,18 +12,20 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        /* Plum brand — mirrors the customer portal's `primary` scale so that
+           bg-primary-600 / text-primary-700 mean the same thing in both apps. */
         primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-          950: '#082f49',
+          50: '#fdf5fd',
+          100: '#faeafc',
+          200: '#f4d4f6',
+          300: '#ecb3ed',
+          400: '#df86df',
+          500: '#cc5bc9',
+          600: '#ae3fa9',
+          700: '#7f2b7b',
+          800: '#6b2568',
+          900: '#582057',
+          950: '#39093a',
         },
         secondary: {
           50: '#faf5ff',

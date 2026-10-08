@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AIPreferencesPanel } from '@/components/intelligence/AIPreferences';
+import { PageHero } from '@/components/ui/PageHero';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store';
 import {
@@ -253,18 +254,12 @@ export default function ProfilePage() {
     <div className="space-y-6">
       <AIPreferencesPanel />
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
-            Profile and settings
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Your personal details, security status and notification preferences.
-          </p>
-        </div>
-        {!loading && !noProfile && !loadError && (
-          <div className="flex flex-wrap gap-2">
-            {editing ? (
+      <PageHero
+        title="Profile and settings"
+        subtitle="Your personal details, security status and notification preferences."
+        actions={
+          !loading && !noProfile && !loadError ? (
+            editing ? (
               <>
                 <button
                   type="button"
@@ -285,10 +280,10 @@ export default function ProfilePage() {
               <button type="button" className="btn btn-primary" onClick={() => setEditing(true)}>
                 Edit contact details
               </button>
-            )}
-          </div>
-        )}
-      </div>
+            )
+          ) : null
+        }
+      />
 
       {savedMsg && (
         <div className="alert alert-success" role="status">

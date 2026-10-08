@@ -2,8 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CARDS, TRANSACTIONS, getAccount, type PaymentCard, type Transaction } from '@/lib/banking-data';
+import {
+  CARDS,
+  TRANSACTIONS,
+  dailyCardSpend,
+  getAccount,
+  type PaymentCard,
+  type Transaction,
+} from '@/lib/banking-data';
 import { BankCard } from '@/components/banking/BankCard';
+import Glyph, { glyphFor, GlyphTile } from '@/components/ui/Glyph';
 
 function fmt(n: number, currency = 'EUR') {
   return new Intl.NumberFormat('en-IE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
@@ -13,6 +21,8 @@ function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
+const WINDOW_DAYS = 30;
+
 type ControlKey = 'online' | 'contactless';
 
 const SCHEME_LABEL: Record<PaymentCard['scheme'], string> = {
@@ -21,21 +31,39 @@ const SCHEME_LABEL: Record<PaymentCard['scheme'], string> = {
 };
 
 const TYPE_LABEL: Record<PaymentCard['type'], string> = {
-  DEBIT: 'Debit card',
-  CREDIT: 'Credit card',
+  DEBIT: 'debit card',
+  CREDIT: 'credit card',
 };
 
-const CONTROLS: { key: ControlKey; label: string; desc: string }[] = [
-  { key: 'online', label: 'Online payments', desc: 'Use this card for online and in-app purchases' },
-  { key: 'contactless', label: 'Contactless payments', desc: 'Tap to pay at terminals without entering your PIN' },
+/** The three switches the card model actually carries. There is no ATM or
+    international control behind these accounts, so none is offered. */
+const CONTROLS: { key: ControlKey; label: string; desc: string; icon: string }[] = [
+  { key: 'online', label: 'Online payments', desc: 'Use this card for online and in-app purchases', icon: 'globe' },
+  { key: 'contactless', label: 'Contactless payments', desc: 'Tap to pay at terminals without entering your PIN', icon: 'contactless' },
 ];
 
 /* ──────────────────────────────────────────────────────────────────
- * Data resolution — card activity, limits and spend are all read from the
- * banking dataset for the card that is actually selected.
+ * Data resolution
+ *
+ * Every figure on this page is summed from the card's own transactions over an
+ * explicitly labelled window, so the headline total, the comb and the payment
+ * count can never disagree with each other.
  * ────────────────────────────────────────────────────────────────── */
 
 type LoadState = 'loading' | 'ready' | 'error';
+
+/** The comb, the headline total and the day count all come out of this one
+    series, so they cannot drift apart. */
+function useCardSeries(cardId: string | undefined) {
+  const series = useMemo(() => dailyCardSpend(WINDOW_DAYS, cardId), [cardId]);
+  const total = series.reduce((sum, d) => sum + d.total, 0);
+  const activeDays = series.filter(d => d.total > 0).length;
+  const peak = series.reduce((m, d) => Math.max(m, d.total), 0);
+  const from = series.length ? series[0].date : null;
+  const to = series.length ? series[series.length - 1].date : null;
+  const range = from && to ? `${shortDate(from)} – ${shortDate(to)}` : `last ${WINDOW_DAYS} days`;
+  return { series, total, activeDays, peak, range };
+}
 
 interface CardsData {
   cards: PaymentCard[];
@@ -81,38 +109,21 @@ function useCardsData() {
   return { data, state, retry };
 }
 
-function ListSkeleton({ rows = 4 }: { rows?: number }) {
-  return (
-    <div className="divide-token">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 px-5 py-4">
-          <div className="skeleton h-10 w-10 shrink-0 rounded-xl" />
-          <div className="flex-1 space-y-2">
-            <div className="skeleton h-4 w-1/3" />
-            <div className="skeleton h-3.5 w-1/2" />
-          </div>
-          <div className="skeleton h-4 w-16 shrink-0" />
-        </div>
-      ))}
-    </div>
-  );
-}
+/* ────────────────────────────────────────────────────────────────── */
 
-function LoadError({ onRetry, what }: { onRetry: () => void; what: string }) {
+function LoadError({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="p-5">
+    <div className="glass-body">
       <div className="empty-state">
         <div className="empty-state-icon">
-          <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-          </svg>
+          <Glyph name="alert" className="h-6 w-6" />
         </div>
-        <p className="empty-state-title">We couldn&apos;t load {what}</p>
-        <p className="empty-state-text">Something went wrong while reading your card data. Your card settings have not been changed.</p>
+        <p className="empty-state-title">We couldn&apos;t load your cards</p>
+        <p className="empty-state-text">
+          Something went wrong while reading your card data. Your card settings have not been changed.
+        </p>
         <button type="button" onClick={onRetry} className="btn btn-primary btn-sm mt-4">
-          <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
+          <Glyph name="subscription" className="h-3.5 w-3.5" />
           Try again
         </button>
       </div>
@@ -120,10 +131,52 @@ function LoadError({ onRetry, what }: { onRetry: () => void; what: string }) {
   );
 }
 
+function MiniPlastic({ card }: { card: PaymentCard }) {
+  return (
+    <span aria-hidden="true" className="mini-plastic" style={{ background: card.gradient }}>
+      <span className="mini-plastic-word">Rayva</span>
+      <span className="mini-plastic-chip" />
+      <span className="mini-plastic-scheme">{card.scheme === 'VISA' ? 'VISA' : 'MC'}</span>
+    </span>
+  );
+}
+
+function ControlSwitch({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      className="relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ backgroundColor: checked ? 'var(--brand)' : 'var(--hairline-strong)' }}
+    >
+      <span
+        aria-hidden="true"
+        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────────── */
 
 export default function CardsPage() {
-  const [activeCardIdx, setActiveCardIdx] = useState(0);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, Partial<Pick<PaymentCard, 'frozen' | ControlKey>>>>({});
   const [announcement, setAnnouncement] = useState('');
   const { data, state, retry } = useCardsData();
@@ -132,12 +185,26 @@ export default function CardsPage() {
     const base = data?.cards ?? [];
     return base.map(c => ({ ...c, ...overrides[c.id] }));
   }, [data, overrides]);
-  const card = cards[Math.min(activeCardIdx, Math.max(0, cards.length - 1))];
+
+  const card = cards[Math.min(activeIdx, Math.max(0, cards.length - 1))];
   const linkedAccount = card ? getAccount(card.linkedAccountId) : undefined;
+
   const cardTxns = useMemo(
     () => (card ? (data?.transactionsByCard[card.id] ?? []).slice(0, 8) : []),
     [card, data]
   );
+
+  const { series, total: cardTotal, activeDays, peak, range } = useCardSeries(card?.id);
+
+  /* The book-wide figure is the same series without the card filter, so it can
+     never disagree with the per-card total above it. */
+  const book = useCardSeries(undefined);
+  const frozenCount = cards.filter(c => c.frozen).length;
+  const activeCount = cards.length - frozenCount;
+
+  const creditLimit = card?.creditLimit ?? 0;
+  const creditUsed = card?.creditUsed ?? 0;
+  const creditPct = creditLimit > 0 ? Math.min(100, Math.round((creditUsed / creditLimit) * 100)) : 0;
 
   const setControl = useCallback(
     (cardId: string, key: 'frozen' | ControlKey, value: boolean, announce: string) => {
@@ -147,348 +214,449 @@ export default function CardsPage() {
     []
   );
 
-  const creditLimit = card?.creditLimit ?? 0;
-  const creditUsed = card?.creditUsed ?? 0;
-  const creditPct = creditLimit > 0 ? Math.min(100, Math.round((creditUsed / creditLimit) * 100)) : 0;
-
-  /* A single, page-level failure state — one honest message and one retry,
-     rather than the same error repeated inside every panel. */
   if (state === 'error') {
     return (
-      <div className="space-y-6">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Cards</h1>
-            <p className="page-subtitle">Manage the settings, limits and activity for each of your cards.</p>
+      <div className="space-y-5">
+        <section className="glass-panel">
+          <div className="glass-head">
+            <h1 className="glass-title">Cards</h1>
           </div>
-        </div>
-        <div className="panel">
-          <LoadError onRetry={retry} what="your cards" />
-        </div>
+          <LoadError onRetry={retry} />
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Cards</h1>
-          <p className="page-subtitle">Manage the settings, limits and activity for each of your cards.</p>
-        </div>
-        <Link href="/portal/products" className="btn btn-primary shrink-0">
-          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Explore cards
-        </Link>
-      </div>
-
+    <div className="space-y-5">
       {/* Screen-reader announcement for card setting changes */}
       <p className="sr-only" aria-live="polite">{announcement}</p>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
-        {/* Left: card switcher + card art */}
-        <div className="space-y-6 xl:col-span-2">
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Your cards</h2>
-              {state === 'ready' && <span className="chip tabular-nums">{cards.length} cards</span>}
-            </div>
+      {/* ══ HERO: the plastic, and what it is doing ══ */}
+      <section className="glass-panel relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(38rem 22rem at 8% 0%, var(--brand-soft), transparent 62%), radial-gradient(30rem 20rem at 100% 100%, var(--tile-bg-hover), transparent 60%)',
+          }}
+        />
+        <div className="relative grid gap-8 p-6 sm:p-8 lg:grid-cols-2 lg:items-center">
+          <div className="card-fan overflow-hidden">
+            {cards.map((c, i) => {
+              let d = i - activeIdx;
+              if (d > cards.length / 2) d -= cards.length;
+              if (d < -cards.length / 2) d += cards.length;
+              const featured = d === 0;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setActiveIdx(i)}
+                  aria-label={c.label}
+                  aria-pressed={featured}
+                  className="fan-card"
+                  style={{
+                    transform: `translateX(calc(var(--fan-step) * ${d})) translateY(${
+                      featured ? 'var(--fan-lift)' : 'var(--fan-drop)'
+                    }) scale(${featured ? 1 : 0.9}) rotate(${d * -2}deg)`,
+                    zIndex: 30 - Math.abs(d) * 10,
+                    opacity: featured ? 1 : Math.abs(d) === 1 ? 0.62 : 0.32,
+                    filter: featured ? 'none' : 'saturate(0.65)',
+                  }}
+                >
+                  <BankCard card={c} />
+                </button>
+              );
+            })}
+          </div>
 
-            {state === 'loading' ? (
-              <ListSkeleton rows={4} />
-            ) : cards.length === 0 ? (
-              <div className="p-5">
-                <div className="empty-state">
-                  <div className="empty-state-icon">
-                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                    </svg>
+          <div className="min-w-0">
+            <p
+              className="text-xs font-semibold uppercase tracking-widest"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              {state === 'loading' ? 'Loading cards' : `${cards.length} cards on your profile`}
+            </p>
+            <h1
+              className="serif mt-2 text-[30px] font-medium leading-tight tracking-tight sm:text-[36px]"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {card ? `${card.label}, on your terms.` : 'Your cards.'}
+            </h1>
+            {card && (
+              <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                {SCHEME_LABEL[card.scheme]} {TYPE_LABEL[card.type]} ending {card.last4} · expires {card.expiry}
+                {linkedAccount ? ` · linked to ${linkedAccount.name}` : ''}
+              </p>
+            )}
+
+            <div className="mt-6 space-y-2.5">
+              <div className="stat-row">
+                <span className="action-tile-icon h-9 w-9 rounded-xl">
+                  <Glyph name="current" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="num block text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {state === 'loading' ? '—' : activeCount}
+                  </span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {activeCount === 1 ? 'Card available' : 'Cards available'}
+                  </span>
+                </span>
+              </div>
+
+              <div className="stat-row">
+                <span className="action-tile-icon h-9 w-9 rounded-xl">
+                  <Glyph name="chart" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="num block text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {state === 'loading' ? '—' : fmt(book.total)}
+                  </span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Card spending · last {WINDOW_DAYS} days
+                  </span>
+                </span>
+              </div>
+
+              <div className="stat-row">
+                <span className="action-tile-icon h-9 w-9 rounded-xl">
+                  <Glyph name="snowflake" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="num block text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {state === 'loading' ? '—' : frozenCount}
+                  </span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {frozenCount === 1 ? 'Card frozen' : 'Cards frozen'}
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ Cards list | controls + spending, then activity ══ */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        {/* Your cards */}
+        <section className="glass-panel flex flex-col xl:col-span-4" aria-label="Your cards">
+          <div className="glass-head">
+            <div>
+              <h2 className="glass-title">Your cards</h2>
+              <p className="glass-sub">Select one to control it.</p>
+            </div>
+            <Link
+              href="/portal/products"
+              className="ring-btn shrink-0 !h-9 !w-9"
+              aria-label="Explore other cards"
+            >
+              <Glyph name="plus" className="h-4 w-4" strokeWidth={2} />
+            </Link>
+          </div>
+
+          {state === 'loading' ? (
+            <div className="px-6 pb-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 py-3">
+                  <div className="skeleton h-11 w-[68px] rounded-lg" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-4 w-1/2" />
+                    <div className="skeleton h-3.5 w-2/3" />
                   </div>
-                  <p className="empty-state-title">No cards yet</p>
-                  <p className="empty-state-text">When you order a card it will appear here so you can control its settings.</p>
-                  <Link href="/portal/products" className="btn btn-primary btn-sm mt-4">Explore cards</Link>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div>
+              {cards.map((c, i) => {
+                const selected = card?.id === c.id;
+                const acc = getAccount(c.linkedAccountId);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setActiveIdx(i)}
+                    aria-pressed={selected}
+                    className="glass-row w-full text-left"
+                    style={selected ? { backgroundColor: 'var(--brand-soft)' } : undefined}
+                  >
+                    <MiniPlastic card={c} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          {c.label}
+                        </span>
+                        {c.frozen && (
+                          <span className="badge badge-warning shrink-0 !py-0.5 !text-xs">Frozen</span>
+                        )}
+                      </span>
+                      <span className="num block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {SCHEME_LABEL[c.scheme]} {TYPE_LABEL[c.type]} · •••• {c.last4}
+                      </span>
+                      {acc && (
+                        <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Linked to {acc.name}
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0" style={{ color: 'var(--text-muted)' }}>
+                      <Glyph name="chevron" className="h-4 w-4 -rotate-90" strokeWidth={2} />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {card && linkedAccount && (
+            <div className="glass-foot mt-auto">
+              <Link href={`/portal/accounts/${linkedAccount.id}`} className="link-arrow text-xs">
+                {linkedAccount.name} · {fmt(linkedAccount.available, linkedAccount.currency)} available
+                <span data-arrow aria-hidden="true">
+                  →
+                </span>
+              </Link>
+            </div>
+          )}
+        </section>
+
+        <div className="flex flex-col gap-5 xl:col-span-8">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {/* Controls */}
+            <section className="glass-panel" aria-label="Card controls">
+              <div className="glass-head">
+                <div>
+                  <h2 className="glass-title">Card controls</h2>
+                  <p className="glass-sub">
+                    {card ? `${card.label} · •••• ${card.last4}` : 'Choose a card to change its settings.'}
+                  </p>
                 </div>
               </div>
-            ) : (
-              <div className="divide-token">
-                {cards.map((c, i) => {
-                  const acc = getAccount(c.linkedAccountId);
-                  const isSelected = card?.id === c.id;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setActiveCardIdx(i)}
-                      aria-pressed={isSelected}
-                      className="w-full px-5 py-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-                      style={{
-                        backgroundColor: isSelected ? 'var(--brand-soft)' : undefined,
-                        borderLeft: `3px solid ${isSelected ? 'var(--brand)' : 'transparent'}`,
-                      }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span
-                          aria-hidden="true"
-                          className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg"
-                          style={{ background: c.gradient }}
-                        >
-                          <span className="h-3 w-5 rounded-sm border-2 border-white/60" />
+
+              {card ? (
+                <div className="pb-2">
+                  {CONTROLS.map(c => {
+                    const enabled = Boolean(card[c.key]);
+                    return (
+                      <div key={c.key} className="glass-row">
+                        <span className="action-tile-icon h-9 w-9 shrink-0 rounded-xl">
+                          <Glyph name={c.icon} className="h-4 w-4" />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                              {c.label}
-                            </span>
-                            {c.frozen && <span className="badge badge-warning shrink-0 !py-0.5 !text-xs">Frozen</span>}
+                          <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {c.label}
                           </span>
-                          <span className="mt-0.5 block truncate font-mono text-sm" style={{ color: 'var(--text-muted)' }}>
-                            {SCHEME_LABEL[c.scheme]} {TYPE_LABEL[c.type].toLowerCase()} · •••• {c.last4}
+                          <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {card.frozen ? 'Unavailable while the card is frozen' : c.desc}
                           </span>
-                          {acc && (
-                            <span className="mt-0.5 block truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                              Linked to {acc.name}
-                            </span>
-                          )}
                         </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Card art + actions */}
-          {state === 'loading' ? (
-            <div className="panel">
-              <div className="panel-body space-y-4">
-                <div className="skeleton aspect-[1.586] w-full rounded-2xl" />
-                <div className="skeleton h-10 w-full rounded-xl" />
-              </div>
-            </div>
-          ) : card ? (
-            <div className="panel">
-              <div className="panel-body space-y-4">
-                <BankCard card={card} />
-
-                {linkedAccount && (
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                    Linked to {linkedAccount.name} · expires {card.expiry}
-                  </p>
-                )}
-
-                {card.frozen && (
-                  <div className="alert alert-warning">
-                    <svg aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                    </svg>
-                    <span>This card is frozen. All new payments are blocked until you unfreeze it.</span>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setControl(
-                        card.id,
-                        'frozen',
-                        !card.frozen,
-                        card.frozen
-                          ? `${card.label} unfrozen. Payments are allowed again.`
-                          : `${card.label} frozen. New payments are blocked.`
-                      )
-                    }
-                    aria-pressed={card.frozen}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
-                    </svg>
-                    {card.frozen ? 'Unfreeze card' : 'Freeze card'}
-                  </button>
-                  <Link href="/portal/messages" className="btn btn-ghost btn-sm">
-                    Report a problem
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Right: controls, usage, activity */}
-        <div className="space-y-6 xl:col-span-3">
-          {/* Card controls */}
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Card controls</h2>
-              {card && <span className="chip">•••• {card.last4}</span>}
-            </div>
-            {state === 'loading' ? (
-              <ListSkeleton rows={2} />
-            ) : !card ? null : (
-              <div className="divide-token">
-                {CONTROLS.map(c => {
-                  const enabled = Boolean(card[c.key]);
-                  const labelId = `control-${card.id}-${c.key}`;
-                  return (
-                    <div key={c.key} className="flex items-center justify-between gap-4 px-5 py-4">
-                      <div className="min-w-0">
-                        <p id={labelId} className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-                          {c.label}
-                        </p>
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                          {card.frozen ? 'Unavailable while the card is frozen' : c.desc}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={enabled}
-                        aria-labelledby={labelId}
-                        disabled={card.frozen}
-                        onClick={() =>
-                          setControl(card.id, c.key, !enabled, `${c.label} ${!enabled ? 'enabled' : 'disabled'}`)
-                        }
-                        className="relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-                        style={{ backgroundColor: enabled ? 'var(--brand)' : 'var(--surface-border-strong)' }}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-5' : 'translate-x-0'}`}
+                        <ControlSwitch
+                          label={c.label}
+                          checked={enabled}
+                          disabled={card.frozen}
+                          onChange={() =>
+                            setControl(card.id, c.key, !enabled, `${c.label} ${!enabled ? 'enabled' : 'disabled'}`)
+                          }
                         />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                      </div>
+                    );
+                  })}
 
-          {/* Usage */}
-          {state === 'loading' ? (
-            <div className="panel">
-              <div className="panel-body space-y-3">
-                <div className="skeleton h-4 w-32" />
-                <div className="skeleton h-7 w-40" />
-                <div className="skeleton h-1.5 w-full" />
-              </div>
-            </div>
-          ) : card ? (
-            <div className="panel">
-              <div className="panel-header">
-                <h2 className="panel-title">
-                  {card.type === 'CREDIT' ? 'Credit used' : 'Spending this month'}
-                </h2>
-                {card.type === 'CREDIT' && typeof card.apr === 'number' && (
-                  <span className="chip tabular-nums">{card.apr}% APR</span>
+                  <div className="glass-row">
+                    <span className="action-tile-icon h-9 w-9 shrink-0 rounded-xl">
+                      <Glyph name="snowflake" className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {card.frozen ? 'Unfreeze card' : 'Freeze card'}
+                      </span>
+                      <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        Temporarily block all new payments on this card
+                      </span>
+                    </span>
+                    <ControlSwitch
+                      label="Freeze card"
+                      checked={card.frozen}
+                      disabled={false}
+                      onChange={() =>
+                        setControl(
+                          card.id,
+                          'frozen',
+                          !card.frozen,
+                          card.frozen ? `${card.label} unfrozen.` : `${card.label} frozen. New payments are blocked.`
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="glass-body">
+                  <div className="empty-state !py-8">
+                    <p className="empty-state-title">No card selected</p>
+                    <p className="empty-state-text">When a card is issued it will appear on the left.</p>
+                  </div>
+                </div>
+              )}
+
+              {card?.frozen && (
+                <p className="glass-foot">
+                  This card is frozen. Online and contactless payments stay off until you unfreeze it.
+                </p>
+              )}
+            </section>
+
+            {/* Spending */}
+            <section className="glass-panel" aria-label="Card spending">
+              <div className="glass-head">
+                <div>
+                  <h2 className="glass-title">Card spending</h2>
+                  <p className="glass-sub">{range}</p>
+                </div>
+                {card?.type === 'CREDIT' && typeof card.apr === 'number' && (
+                  <span className="chip num shrink-0">{card.apr}% APR</span>
                 )}
               </div>
-              <div className="panel-body">
-                {card.type === 'CREDIT' ? (
+
+              <div className="glass-body">
+                <p className="num text-[26px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                  {fmt(cardTotal)}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {activeDays
+                    ? `over ${activeDays} active day${activeDays === 1 ? '' : 's'}`
+                    : 'no completed card payments in this window'}
+                </p>
+
+                <div className="mt-5 flex items-end gap-3">
+                  <div className="thin-bars flex-1">
+                    {series.map(d => (
+                      <span
+                        key={d.date}
+                        className="thin-bar"
+                        data-zero={d.total === 0 || undefined}
+                        data-active={(d.total === peak && d.total > 0) || undefined}
+                        title={`${shortDate(d.date)} · ${fmt(d.total)}`}
+                        style={{ height: d.total > 0 ? `${Math.max(5, (d.total / (peak || 1)) * 100)}%` : '2%' }}
+                      />
+                    ))}
+                  </div>
+                  {peak > 0 && (
+                    <div className="flex shrink-0 flex-col items-center gap-1">
+                      <span className="chart-marker">{fmt(peak)}</span>
+                      <span className="marker-leader h-8" aria-hidden="true" />
+                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        peak day
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {card?.type === 'CREDIT' && creditLimit > 0 && (
                   <div
+                    className="mt-6"
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={creditLimit}
                     aria-valuenow={creditUsed}
                     aria-label={`Credit used: ${fmt(creditUsed)} of a ${fmt(creditLimit)} limit`}
                   >
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                      {fmt(creditUsed)}
-                    </p>
-                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--surface-input)' }}>
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${creditPct}%`, backgroundColor: 'var(--brand)' }}
-                      />
+                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        Credit used
+                      </span>
+                      <span className="num text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {fmt(creditUsed)} of {fmt(creditLimit)}
+                      </span>
                     </div>
-                    <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                      {creditPct}% of your {fmt(creditLimit)} limit · {fmt(Math.max(0, creditLimit - creditUsed))} available
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                      {fmt(card.spentThisMonth ?? 0)}
-                    </p>
-                    <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-                      {cardTxns.length
-                        ? `From ${cardTxns.length} card payment${cardTxns.length === 1 ? '' : 's'} in your recent activity`
-                        : 'No card payments recorded yet'}
+                    <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--tile-bg)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${creditPct}%`, backgroundColor: 'var(--brand)' }} />
+                    </div>
+                    <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {creditPct}% used · {fmt(Math.max(0, creditLimit - creditUsed))} available. The bank reports
+                      this balance; it is not derived from the payments above.
                     </p>
                   </div>
                 )}
               </div>
-            </div>
-          ) : null}
 
-          {/* Card activity */}
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Recent card activity</h2>
-              <Link href="/portal/transactions" className="link-arrow">
-                View all <span data-arrow aria-hidden="true">→</span>
+              <p className="glass-foot">
+                {card?.type === 'CREDIT'
+                  ? 'Only payments made on this card are counted. Transfers and direct debits sit against the account, not the plastic.'
+                  : 'Only completed payments made on this card are counted. Pending and declined rows are in the activity list below.'}
+              </p>
+            </section>
+          </div>
+
+          {/* Activity */}
+          <section className="glass-panel" aria-label="Recent card activity">
+            <div className="glass-head">
+              <div>
+                <h2 className="glass-title">Recent card activity</h2>
+                <p className="glass-sub">
+                  {card ? `Everything posted or pending on •••• ${card.last4}.` : 'Payments made on your cards.'}
+                </p>
+              </div>
+              <Link href="/portal/transactions" className="pill-btn shrink-0 !px-3 !py-1.5 !text-xs">
+                View all
               </Link>
             </div>
 
-            {state === 'loading' ? (
-              <ListSkeleton rows={4} />
-            ) : cardTxns.length === 0 ? (
-              <div className="p-5">
+            {cardTxns.length === 0 ? (
+              <div className="glass-body">
                 <div className="empty-state">
                   <div className="empty-state-icon">
-                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                    </svg>
+                    <Glyph name="current" className="h-6 w-6" />
                   </div>
                   <p className="empty-state-title">No activity on this card</p>
                   <p className="empty-state-text">
                     Payments made with {card ? `•••• ${card.last4}` : 'this card'} will appear here as soon as they post.
                   </p>
-                  <Link href="/portal/transactions" className="btn btn-secondary btn-sm mt-4">Browse all transactions</Link>
+                  <Link href="/portal/transactions" className="btn btn-secondary btn-sm mt-4">
+                    Browse all transactions
+                  </Link>
                 </div>
               </div>
             ) : (
-              <div className="divide-token">
+              <div>
                 {cardTxns.map((t: Transaction) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base"
-                      style={{ backgroundColor: 'var(--surface-input)' }}
-                    >
-                      {t.glyph || '✨'}
-                    </span>
+                  <div key={t.id} className="glass-row">
+                    <GlyphTile name={glyphFor(t.category)} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                      <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                         {t.merchant}
                       </p>
-                      <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                      <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
                         {t.category} · {shortDate(t.date)}
                       </p>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p
-                        className={`text-base font-bold tabular-nums ${t.direction === 'IN' ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
-                        style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
-                      >
-                        {t.direction === 'IN' ? '+' : '−'}{fmt(t.amount, t.currency)}
-                      </p>
-                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {t.status === 'PENDING' ? 'Pending' : t.status === 'DECLINED' ? 'Declined' : 'Completed'}
-                      </p>
-                    </div>
+                    <span
+                      className="shrink-0 text-xs font-medium"
+                      style={{
+                        color:
+                          t.status === 'PENDING'
+                            ? 'var(--text-muted)'
+                            : t.status === 'DECLINED'
+                              ? 'var(--down)'
+                              : 'var(--text-muted)',
+                      }}
+                    >
+                      {t.status === 'PENDING' ? 'Pending' : t.status === 'DECLINED' ? 'Declined' : 'Completed'}
+                    </span>
+                    <p
+                      className="num w-24 shrink-0 text-right text-sm font-semibold"
+                      style={t.direction === 'IN' ? { color: 'var(--up)' } : { color: 'var(--text-primary)' }}
+                    >
+                      {t.direction === 'IN' ? '+' : '−'}
+                      {fmt(t.amount, t.currency)}
+                    </p>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </div>

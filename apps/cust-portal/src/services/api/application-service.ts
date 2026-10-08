@@ -187,6 +187,72 @@ export const LOAN_PURPOSE_LABELS: Record<LoanPurpose, string> = {
   OTHER: 'Other',
 };
 
+const ALL_LOAN_PURPOSES = Object.keys(LOAN_PURPOSE_LABELS) as LoanPurpose[];
+
+/**
+ * The purposes a customer may state for each loan_product type. A mortgage
+ * can't fund a wedding and a credit card can't fund a house, so offering the
+ * full list on every product asks the customer a question the product has
+ * already answered — and hands the RM a purpose the bank cannot underwrite
+ * against that facility. Mirrors the RM-side bucketing in bank-ops
+ * (ProductFormFields.getPurposeOptions) on the same code vocabulary.
+ *
+ * Products whose type isn't listed fall back to the full list: a product the
+ * bank launches later must never dead-end an application.
+ */
+const PRODUCT_TYPE_PURPOSES: Record<string, LoanPurpose[]> = {
+  // Secured residential real estate
+  MORTGAGE: ['HOME_PURCHASE', 'HOME_CONSTRUCTION', 'HOME_RENOVATION', 'HOME_REFINANCE', 'INVESTMENT', 'OTHER'],
+  HOME_LOAN: ['HOME_PURCHASE', 'HOME_CONSTRUCTION', 'HOME_RENOVATION', 'HOME_REFINANCE', 'INVESTMENT', 'OTHER'],
+  BRIDGE_LOAN: ['HOME_PURCHASE', 'HOME_CONSTRUCTION', 'HOME_REFINANCE', 'INVESTMENT', 'OTHER'],
+  CONSTRUCTION_LOAN: ['HOME_CONSTRUCTION', 'INVESTMENT', 'OTHER'],
+  GREEN_LOAN: ['HOME_RENOVATION', 'VEHICLE_PURCHASE', 'OTHER'],
+
+  // Unsecured consumer borrowing
+  PERSONAL_LOAN: ['HOME_RENOVATION', 'DEBT_CONSOLIDATION', 'EDUCATION', 'MEDICAL', 'WEDDING', 'TRAVEL', 'PERSONAL_USE', 'OTHER'],
+  STUDENT_LOAN: ['EDUCATION', 'PERSONAL_USE', 'OTHER'],
+  CREDIT_UNION_LOAN: ['PERSONAL_USE', 'DEBT_CONSOLIDATION', 'HOME_RENOVATION', 'MEDICAL', 'EDUCATION', 'OTHER'],
+  MICROFINANCE: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'PERSONAL_USE', 'OTHER'],
+  BNPL: ['PERSONAL_USE', 'TRAVEL', 'OTHER'],
+  CREDIT_CARD: ['PERSONAL_USE', 'TRAVEL', 'OTHER'],
+  OVERDRAFT: ['PERSONAL_USE', 'DEBT_CONSOLIDATION', 'OTHER'],
+
+  // Vehicle / asset finance
+  AUTO_LOAN: ['VEHICLE_PURCHASE', 'OTHER'],
+  PCP: ['VEHICLE_PURCHASE', 'OTHER'],
+  HIRE_PURCHASE: ['VEHICLE_PURCHASE', 'EQUIPMENT_PURCHASE', 'OTHER'],
+  EQUIPMENT_FINANCING: ['EQUIPMENT_PURCHASE', 'VEHICLE_PURCHASE', 'BUSINESS_EXPANSION', 'OTHER'],
+  ASSET_LEASING: ['EQUIPMENT_PURCHASE', 'VEHICLE_PURCHASE', 'BUSINESS_EXPANSION', 'OTHER'],
+
+  // Business
+  BUSINESS_LOAN: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'DEBT_CONSOLIDATION', 'OTHER'],
+  SME_TERM_LOAN: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'DEBT_CONSOLIDATION', 'OTHER'],
+  TERM_LOAN: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'DEBT_CONSOLIDATION', 'OTHER'],
+  WORKING_CAPITAL_LOAN: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  BUSINESS_LINE_OF_CREDIT: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  REVOLVING_CREDIT: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  BUSINESS_OVERDRAFT: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  BUSINESS_CREDIT_CARD: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'TRAVEL', 'OTHER'],
+  INVOICE_FINANCE: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  AGRI_LOAN: ['WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'BUSINESS_EXPANSION', 'INVESTMENT', 'OTHER'],
+  AGRICULTURE_LOAN: ['WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'BUSINESS_EXPANSION', 'INVESTMENT', 'OTHER'],
+  COMMERCIAL_MORTGAGE: ['BUSINESS_EXPANSION', 'INVESTMENT', 'DEBT_CONSOLIDATION', 'OTHER'],
+  COMMERCIAL_REAL_ESTATE: ['BUSINESS_EXPANSION', 'INVESTMENT', 'DEBT_CONSOLIDATION', 'OTHER'],
+};
+
+export function getPurposeOptions(productType?: string | null): LoanPurpose[] {
+  return (productType && PRODUCT_TYPE_PURPOSES[productType]) || ALL_LOAN_PURPOSES;
+}
+
+/**
+ * Guards against a purpose surviving a product switch — the wizard carries form
+ * state across steps, so a purpose chosen for one product would otherwise be
+ * submitted against another.
+ */
+export function isPurposeAllowed(productType: string | null | undefined, purpose: string): boolean {
+  return getPurposeOptions(productType).includes(purpose as LoanPurpose);
+}
+
 /**
  * Maps AI Credit Assistant intent codes (IntentCatalog / DEFAULT_INTENT_OPTIONS)
  * to this wizard's LoanPurpose values, so a confirmed AI credit-journey need
@@ -372,7 +438,7 @@ export type UpdateApplicationPayload = Partial<CreateApplicationPayload>;
 export const FACILITY_TYPE_LABELS: Record<string, string> = {
   TERM_LOAN: 'Term Loan',
   WORKING_CAPITAL: 'Working Capital',
-  OVERDRAFT: 'Overdraft Facility',
+  OVERDRAFT: 'Overdraft',
   LETTER_OF_CREDIT: 'Letter of Credit',
   BANK_GUARANTEE: 'Bank Guarantee',
   BILL_DISCOUNTING: 'Bill Discounting',
@@ -386,7 +452,15 @@ export const FACILITY_TYPE_LABELS: Record<string, string> = {
 
 export interface ApplicationContext {
   customerId: string;
+  /** How the account is filed: INDIVIDUAL, BUSINESS, CORPORATE. */
   customerType: string;
+  /** PERSONAL, JOINT, SOLE_TRADER — null when the bank holds no subtype. */
+  customerSubtype: string | null;
+  /**
+   * The segment products and eligibility are assessed against, resolved by the
+   * BFF: a sole trader is an INDIVIDUAL account with segment BUSINESS.
+   */
+  segment: string;
   isBusiness: boolean;
 }
 
@@ -420,7 +494,6 @@ export interface TimelineEvent {
 }
 
 export interface CustomerStatusInfo {
-  internalStatus: string;
   stage: CustomerStage;
   stageLabel: string;
   headline: string;

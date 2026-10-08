@@ -81,7 +81,7 @@ export default function SigningPage() {
               d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
             />
           </svg>
-          <h1 className="text-white font-semibold text-lg">Secure document signing</h1>
+          <h1 className="serif text-xl font-medium text-white">Secure document signing</h1>
           <span className="ml-auto text-sm text-white/80">Simulation mode</span>
         </div>
 
@@ -169,7 +169,7 @@ export default function SigningPage() {
             >
               <p>
                 This document constitutes the binding loan agreement between you and the bank for
-                the facility referenced in your application{' '}
+                the loan referenced in your application{' '}
                 <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>
                   {applicationId.slice(0, 8)}…
                 </span>
@@ -178,7 +178,7 @@ export default function SigningPage() {
               <p>
                 By signing, you confirm that you have read and understood the terms and conditions,
                 including the interest rate, repayment schedule, fees, and covenants applicable to
-                this facility.
+                this loan.
               </p>
               <p>
                 This is a <strong>simulated signing session</strong>. In production, you would be

@@ -113,8 +113,8 @@ export default function TasksPage() {
         <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" />
 
         <div className="relative">
-          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">My tasks</h1>
-          <p className="mt-1.5 text-sm text-white/75">
+          <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">My tasks</h1>
+          <p className="mt-1.5 text-sm text-white/70">
             {loading
               ? 'Loading your tasks…'
               : counts.PENDING > 0

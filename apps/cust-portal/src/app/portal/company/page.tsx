@@ -165,7 +165,7 @@ export default function CompanyPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
-            className="text-2xl font-bold tracking-tight sm:text-3xl"
+            className="serif text-[26px] font-medium leading-tight tracking-tight sm:text-[30px]"
             style={{ color: 'var(--text-primary)' }}
           >
             {company.legalName}

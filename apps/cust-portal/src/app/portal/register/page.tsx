@@ -99,7 +99,7 @@ export default function PortalRegisterPage() {
           </div>
 
           <div className="space-y-6">
-            <h1 className="text-4xl font-bold leading-tight text-white xl:text-5xl">
+            <h1 className="serif text-4xl font-medium leading-tight text-white xl:text-[44px]">
               Start your{' '}
               <span className="bg-gradient-to-r from-pink-300 to-purple-200 bg-clip-text text-transparent">
                 banking journey.
@@ -151,12 +151,13 @@ export default function PortalRegisterPage() {
       </div>
 
       {/* ──── Right panel: Register form ──── */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 px-6 py-8">
+      <div className="flex flex-1 items-center justify-center px-6 py-8">
         <div className="w-full max-w-[440px]">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-8 justify-center">
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#4a1747] to-[#7f2b7b]"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-white"
+              style={{ background: 'var(--tile-active)' }}
               aria-hidden="true"
             >
               <svg
@@ -173,12 +174,12 @@ export default function PortalRegisterPage() {
                 />
               </svg>
             </div>
-            <span className="text-xl font-bold tracking-tight text-slate-900">Rayva</span>
+            <span className="serif text-2xl font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Rayva</span>
           </div>
 
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-slate-900">Create an account</h2>
-            <p className="mt-1 text-sm text-slate-500">Start your banking journey with Rayva</p>
+            <h2 className="serif text-[28px] font-medium tracking-tight" style={{ color: 'var(--text-primary)' }}>Create an account</h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Start your banking journey with Rayva</p>
           </div>
 
           {errorMsg && (
@@ -186,7 +187,7 @@ export default function PortalRegisterPage() {
               id="register-error"
               role="alert"
               aria-live="assertive"
-              className="mb-5 flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              className="alert alert-error mb-5 !rounded-2xl"
             >
               <svg
                 className="h-4 w-4 shrink-0"
@@ -211,7 +212,7 @@ export default function PortalRegisterPage() {
               <div>
                 <label
                   htmlFor="firstName"
-                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                  className="field-label"
                 >
                   First name
                 </label>
@@ -221,7 +222,7 @@ export default function PortalRegisterPage() {
                   type="text"
                   value={formData.firstName}
                   onChange={handleChange}
-                  className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                  className="input !rounded-2xl py-3"
                   placeholder="John"
                   required
                 />
@@ -229,7 +230,7 @@ export default function PortalRegisterPage() {
               <div>
                 <label
                   htmlFor="lastName"
-                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                  className="field-label"
                 >
                   Last name
                 </label>
@@ -239,7 +240,7 @@ export default function PortalRegisterPage() {
                   type="text"
                   value={formData.lastName}
                   onChange={handleChange}
-                  className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                  className="input !rounded-2xl py-3"
                   placeholder="Smith"
                   required
                 />
@@ -247,12 +248,12 @@ export default function PortalRegisterPage() {
             </div>
 
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="username" className="field-label">
                 Username
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 muted"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -271,7 +272,7 @@ export default function PortalRegisterPage() {
                   type="text"
                   value={formData.username}
                   onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                  className="input !rounded-2xl py-3 pl-10"
                   placeholder="choose a username"
                   autoComplete="username"
                   required
@@ -281,12 +282,12 @@ export default function PortalRegisterPage() {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">
+              <label htmlFor="email" className="field-label">
                 Email
               </label>
               <div className="relative">
                 <svg
-                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 muted"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -305,7 +306,7 @@ export default function PortalRegisterPage() {
                   type="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                  className="input !rounded-2xl py-3 pl-10"
                   placeholder="you@example.com"
                   required
                 />
@@ -315,9 +316,9 @@ export default function PortalRegisterPage() {
             <div>
               <label
                 htmlFor="phoneNumber"
-                className="block text-sm font-medium text-slate-700 mb-1.5"
+                className="field-label"
               >
-                Phone number <span className="text-slate-400">(optional)</span>
+                Phone number <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
               </label>
               <input
                 id="phoneNumber"
@@ -325,7 +326,7 @@ export default function PortalRegisterPage() {
                 type="tel"
                 value={formData.phoneNumber}
                 onChange={handleChange}
-                className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
+                className="input !rounded-2xl py-3"
                 placeholder="+353 1 234 5678"
               />
             </div>
@@ -334,7 +335,7 @@ export default function PortalRegisterPage() {
               <div>
                 <label
                   htmlFor="password"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="field-label"
                 >
                   Password
                 </label>
@@ -345,7 +346,7 @@ export default function PortalRegisterPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-11 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                    className="input !rounded-2xl py-3 pr-11"
                     placeholder="••••••••"
                     autoComplete="new-password"
                     required
@@ -357,7 +358,7 @@ export default function PortalRegisterPage() {
                     onClick={() => setShowPassword(v => !v)}
                     aria-pressed={showPassword}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-2 muted transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.07]"
                   >
                     <EyeIcon revealed={showPassword} />
                   </button>
@@ -366,7 +367,7 @@ export default function PortalRegisterPage() {
               <div>
                 <label
                   htmlFor="confirmPassword"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="field-label"
                 >
                   Confirm password
                 </label>
@@ -377,8 +378,8 @@ export default function PortalRegisterPage() {
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={handleChange}
-                    className={`w-full rounded-xl border bg-white py-2.5 pl-4 pr-11 text-sm text-slate-900 placeholder-slate-400 transition-colors focus:border-transparent focus:ring-2 focus:ring-purple-500 ${
-                      passwordMismatch ? 'border-red-300' : 'border-slate-200'
+                    className={`input !rounded-2xl py-3 pr-11 ${
+                      passwordMismatch ? 'input-error' : ''
                     }`}
                     placeholder="••••••••"
                     autoComplete="new-password"
@@ -393,7 +394,7 @@ export default function PortalRegisterPage() {
                     onClick={() => setShowConfirmPassword(v => !v)}
                     aria-pressed={showConfirmPassword}
                     aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-2 muted transition-colors hover:bg-black/[0.05] dark:hover:bg-white/[0.07]"
                   >
                     <EyeIcon revealed={showConfirmPassword} />
                   </button>
@@ -405,7 +406,7 @@ export default function PortalRegisterPage() {
                 )}
               </div>
             </div>
-            <p id="password-hint" className="-mt-1 text-sm text-slate-500">
+            <p id="password-hint" className="-mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
               At least 8 characters, including an uppercase letter, a lowercase letter, a number and
               a special character.
             </p>
@@ -441,7 +442,7 @@ export default function PortalRegisterPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-slate-500">
+          <p className="mt-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
             Already have an account?{' '}
             <Link
               href="/portal/login"

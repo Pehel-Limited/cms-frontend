@@ -11,6 +11,7 @@ import {
   PARTY_ROLE_LABELS,
 } from '@/services/api/party-service';
 import { getCurrencySymbol } from '@/lib/format';
+import { PageHero } from '@/components/ui/PageHero';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -129,9 +130,7 @@ export default function PartiesPage() {
   if (error && parties.length === 0) {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: 'var(--text-primary)' }}>
-          People and roles
-        </h1>
+        <PageHero title="People and roles" />
         <div className="alert alert-error" role="alert">
           <div className="flex-1">
             <p className="text-base font-semibold">Could not load people and roles</p>
@@ -166,12 +165,12 @@ export default function PartiesPage() {
           </button>
           <div>
             <h1
-              className="text-2xl font-bold tracking-tight sm:text-3xl"
+              className="serif text-[26px] font-medium leading-tight tracking-tight sm:text-[30px]"
               style={{ color: 'var(--text-primary)' }}
             >
               People and roles
             </h1>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
               Manage directors, shareholders, beneficial owners and authorized signatories
             </p>
           </div>

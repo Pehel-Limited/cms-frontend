@@ -13,7 +13,9 @@ import {
   type AccountSource,
   type SampleReason,
 } from '@/services/api/account-service';
-import { Sparkline } from '@/components/banking/BankCard';
+import { DotMatrix } from '@/components/banking/BankCard';
+import { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
+import { PageHero } from '@/components/ui/PageHero';
 
 function fmt(n: number, cur = 'EUR') {
   return new Intl.NumberFormat('en-IE', {
@@ -195,14 +197,10 @@ export default function AccountsPage() {
   if (state === 'error') {
     return (
       <div className="space-y-6">
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">My accounts</h1>
-            <p className="page-subtitle">
-              Balances, recent activity and payment details for every account you hold with us.
-            </p>
-          </div>
-        </div>
+        <PageHero
+          title="My accounts"
+          subtitle="Balances, recent activity and payment details for every account you hold with us."
+        />
         <div className="panel">
           <LoadError onRetry={retry} what="your accounts" />
         </div>
@@ -213,78 +211,113 @@ export default function AccountsPage() {
   return (
     <div className="space-y-6">
       {/* ── Page header ── */}
-      <div className="page-header">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="page-title">My accounts</h1>
-            {data && (
-              <span
-                className="rounded-full border px-2.5 py-1 text-sm font-medium"
-                style={{
-                  color: SOURCE_BADGE[data.source].tone,
-                  borderColor: SOURCE_BADGE[data.source].tone,
-                }}
-              >
-                {SOURCE_BADGE[data.source].label}
-              </span>
-            )}
-          </div>
-          <p className="page-subtitle">
+      <PageHero
+        title="My accounts"
+        subtitle={
+          <>
             Balances, recent activity and payment details for every account you hold with us.
-          </p>
-          {data?.source === 'SAMPLE' && data.sampleReason && (
-            <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-              {SAMPLE_REASON_TEXT[data.sampleReason]}
-            </p>
-          )}
-        </div>
-        <Link href="/portal/products" className="btn btn-primary shrink-0">
-          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Open a new account
-        </Link>
-      </div>
+            {data?.source === 'SAMPLE' && data.sampleReason && (
+              <span className="mt-1 block">{SAMPLE_REASON_TEXT[data.sampleReason]}</span>
+            )}
+          </>
+        }
+        meta={
+          data && (
+            <span
+              className="rounded-full border px-2.5 py-1 text-sm font-medium"
+              style={{
+                color: SOURCE_BADGE[data.source].tone,
+                borderColor: SOURCE_BADGE[data.source].tone,
+              }}
+            >
+              {SOURCE_BADGE[data.source].label}
+            </span>
+          )
+        }
+        actions={
+          <Link href="/portal/products" className="btn btn-primary shrink-0">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Open a new account
+          </Link>
+        }
+      />
 
       {/* ── Summary tiles ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="stat-tile">
-          <p className="stat-label">Total balance</p>
-          {state === 'loading' ? (
-            <div className="skeleton mt-2 h-7 w-32" />
-          ) : !data || !data.totalCurrency ? (
-            <>
-              <p className="stat-value">—</p>
-              {data && (
+        <div className="stat-tile flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="stat-label">Total balance</p>
+            {state === 'loading' ? (
+              <div className="skeleton mt-2 h-7 w-32" />
+            ) : !data || !data.totalCurrency ? (
+              <>
+                <p className="stat-value">—</p>
+                {data && (
+                  <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Held in more than one currency
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="stat-value">{mask(fmt(data.total, data.totalCurrency))}</p>
                 <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Held in more than one currency
+                  Across {data.accounts.length} accounts
+                  {data.balanceAsOf ? ` · as of ${new Date(data.balanceAsOf).toLocaleString()}` : ''}
                 </p>
-              )}
-            </>
-          ) : (
-            <>
-              <p className="stat-value">{mask(fmt(data.total, data.totalCurrency))}</p>
-              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                Across {data.accounts.length} accounts
-                {data.balanceAsOf ? ` · as of ${new Date(data.balanceAsOf).toLocaleString()}` : ''}
-              </p>
-            </>
+              </>
+            )}
+          </div>
+          {/* One stroke per account, scaled to its balance. A composition of
+              what is held, not a trend — the page has no balance history. */}
+          {state === 'ready' && data && data.totalCurrency && (
+            <div className="thin-bars w-24 shrink-0" aria-hidden="true">
+              {data.accounts.map(a => {
+                const peak = Math.max(...data.accounts.map(x => x.balance), 1);
+                return (
+                  <span
+                    key={a.id}
+                    className="thin-bar"
+                    style={{ height: `${Math.max(6, (a.balance / peak) * 100)}%` }}
+                  />
+                );
+              })}
+            </div>
           )}
         </div>
 
-        <div className="stat-tile">
-          <p className="stat-label">Available to spend</p>
-          {state === 'loading' ? (
-            <div className="skeleton mt-2 h-7 w-32" />
-          ) : !data || !data.totalCurrency ? (
-            <p className="stat-value">—</p>
-          ) : (
-            <>
-              <p className="stat-value">{mask(fmt(data.available, data.totalCurrency))}</p>
-              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                After pending holds
-              </p>
-            </>
+        <div className="stat-tile flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="stat-label">Available to spend</p>
+            {state === 'loading' ? (
+              <div className="skeleton mt-2 h-7 w-32" />
+            ) : !data || !data.totalCurrency ? (
+              <p className="stat-value">—</p>
+            ) : (
+              <>
+                <p className="stat-value">{mask(fmt(data.available, data.totalCurrency))}</p>
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  After pending holds
+                </p>
+              </>
+            )}
+          </div>
+          {state === 'ready' && data && data.totalCurrency && (
+            <div className="thin-bars w-24 shrink-0" aria-hidden="true">
+              {data.accounts.map(a => {
+                const peak = Math.max(...data.accounts.map(x => x.available), 1);
+                return (
+                  <span
+                    key={a.id}
+                    className="thin-bar"
+                    data-zero={a.available <= 0 || undefined}
+                    style={{ height: `${Math.max(6, (a.available / peak) * 100)}%` }}
+                  />
+                );
+              })}
+            </div>
           )}
         </div>
 
@@ -380,13 +413,11 @@ export default function AccountsPage() {
                     }}
                   >
                     <div className="flex items-center gap-3">
-                      <span
-                        aria-hidden="true"
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg text-white"
-                        style={{ background: acc.gradient }}
-                      >
-                        {acc.glyph}
-                      </span>
+                      <GlyphTile
+                        name={ACCOUNT_GLYPH[acc.type]}
+                        className="h-11 w-11 rounded-xl"
+                        tone={isSelected ? 'brand' : 'neutral'}
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-3">
                           <p className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -403,7 +434,7 @@ export default function AccountsPage() {
                               .join(' · ')}
                           </p>
                           <span aria-hidden="true" className="shrink-0">
-                            <Sparkline data={acc.spark} width={56} height={18} strokeWidth={1.5} fill={false} color="var(--brand)" />
+                            <DotMatrix data={acc.spark} cell={3} rows={5} label={`${acc.name} balance trend`} />
                           </span>
                         </div>
                       </div>
@@ -436,13 +467,11 @@ export default function AccountsPage() {
               <div className="panel-body space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <span
-                      aria-hidden="true"
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl text-xl text-white"
-                      style={{ background: selected.gradient }}
-                    >
-                      {selected.glyph}
-                    </span>
+                    <GlyphTile
+                      name={ACCOUNT_GLYPH[selected.type]}
+                      className="h-12 w-12 rounded-2xl"
+                      iconClassName="h-6 w-6"
+                    />
                     <div>
                       <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                         {selected.name}
@@ -526,13 +555,7 @@ export default function AccountsPage() {
                     key={t.id}
                     className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base"
-                      style={{ backgroundColor: 'var(--surface-input)' }}
-                    >
-                      {t.glyph || '✨'}
-                    </span>
+                    <GlyphTile name={glyphFor(t.category)} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                         {t.merchant}
@@ -543,7 +566,7 @@ export default function AccountsPage() {
                     </div>
                     <div className="shrink-0 text-right">
                       <p
-                        className={`text-base font-bold tabular-nums ${t.direction === 'IN' ? 'text-emerald-500' : ''}`}
+                        className={`num text-base font-semibold ${t.direction === 'IN' ? 'delta-up' : ''}`}
                         style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
                       >
                         {t.direction === 'IN' ? '+' : '−'}{mask(fmt(t.amount, t.currency))}

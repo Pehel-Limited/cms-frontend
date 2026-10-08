@@ -51,7 +51,7 @@ export default function HomePage() {
       <header className="fixed inset-x-0 top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
         <nav aria-label="Main" className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5" aria-label="Rayva home">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1a3a7a]" aria-hidden="true">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-700" aria-hidden="true">
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d={BRAND_LOGO_PATH} />
               </svg>
@@ -67,7 +67,7 @@ export default function HomePage() {
             </Link>
             <Link
               href="/register"
-              className="rounded-xl bg-[#1a3a7a] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#15306a]"
+              className="rounded-xl bg-primary-700 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-800"
             >
               Create an account
             </Link>

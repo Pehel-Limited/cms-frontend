@@ -142,6 +142,37 @@ export interface TrendPoint {
   declinedCount: number;
 }
 
+/* A journey the customer started but never submitted. Channel work in progress —
+   deliberately not pipeline, because nothing here has reached the bank yet. */
+export interface ChannelJourney {
+  journeyId: string;
+  bankId: string;
+  rmUserId?: string;
+  customerId: string;
+  customerName: string;
+  customerNumber: string;
+  customerType: string;
+  status: string;
+  currentStage: string;
+  journeyVersion: number;
+  productCode?: string;
+  productName?: string;
+  applicationId?: string;
+  daysStalled: number;
+  pausedReason?: string;
+  lastActiveAt?: string;
+  createdAt?: string;
+  eligibilityChecks: number;
+  factCount: number;
+  facts?: Array<{
+    factKey: string;
+    value: unknown;
+    provenance?: string;
+    source?: string;
+    confirmedAt?: string;
+  }>;
+}
+
 export const dashboardService = {
   async getKpis(bankId: string): Promise<DashboardKpis> {
     return apiClient.get<DashboardKpis>(`/api/admin/dashboard/kpis?bankId=${bankId}`);
@@ -224,6 +255,27 @@ export const dashboardService = {
     if (rmUserId) params.append('rmUserId', rmUserId);
     return apiClient.get<TrendPoint[]>(
       `/api/admin/dashboard/oversight/trends?${params.toString()}`
+    );
+  },
+
+  /** Journeys belonging to the signed-in staff member's customers. */
+  async getJourneys(bankId: string, minDaysStalled?: number, limit = 50): Promise<ChannelJourney[]> {
+    const params = new URLSearchParams({ bankId, limit: limit.toString() });
+    if (minDaysStalled) params.append('minDaysStalled', minDaysStalled.toString());
+    return apiClient.get<ChannelJourney[]>(`/api/admin/dashboard/journeys?${params.toString()}`);
+  },
+
+  async getOversightJourneys(
+    bankId: string,
+    rmUserId?: string,
+    minDaysStalled?: number,
+    limit = 100
+  ): Promise<ChannelJourney[]> {
+    const params = new URLSearchParams({ bankId, limit: limit.toString() });
+    if (rmUserId) params.append('rmUserId', rmUserId);
+    if (minDaysStalled) params.append('minDaysStalled', minDaysStalled.toString());
+    return apiClient.get<ChannelJourney[]>(
+      `/api/admin/dashboard/oversight/journeys?${params.toString()}`
     );
   },
 };

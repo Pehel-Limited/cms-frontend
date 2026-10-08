@@ -11,7 +11,6 @@ import {
   UPLOAD_STATUS_LABELS,
   UPLOAD_STATUS_COLORS,
   formatFileSize,
-  getCategoryIcon,
 } from '@/services/api/document-service';
 import {
   applicationService,
@@ -145,8 +144,8 @@ export default function DocumentsPage() {
 
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Documents</h1>
-            <p className="mt-1.5 text-sm text-white/75">
+            <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">Documents</h1>
+            <p className="mt-1.5 text-sm text-white/70">
               {loading
                 ? 'Loading your documents…'
                 : `${documents.length} ${documents.length === 1 ? 'document' : 'documents'} across ${applicationCount} ${applicationCount === 1 ? 'application' : 'applications'}`}

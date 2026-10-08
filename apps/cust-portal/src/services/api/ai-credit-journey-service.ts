@@ -29,7 +29,7 @@ export const DEFAULT_INTENT_OPTIONS: IntentOption[] = [
   { code: 'REFINANCE_EXISTING_BORROWING', label: 'Refinance existing borrowing', description: 'Replace or restructure existing borrowing' },
   { code: 'HOME_PURCHASE', label: 'Buy a home', description: 'Finance to purchase a residential property' },
   { code: 'PERSONAL_BORROWING', label: 'Personal borrowing', description: 'General personal finance needs' },
-  { code: 'OVERDRAFT', label: 'Arrange an overdraft', description: 'An overdraft facility on an existing account' },
+  { code: 'OVERDRAFT', label: 'Arrange an overdraft', description: 'An overdraft on your existing account' },
   { code: 'CREDIT_CARD', label: 'Apply for a credit card', description: 'A new credit card' },
   { code: 'OTHER', label: 'Something else', description: "A credit need that doesn't fit the options above" },
 ];

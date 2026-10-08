@@ -1,8 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { RepeatPayment } from '@/components/intelligence/RepeatPayment';
-import type { Transaction } from '@/lib/banking-data';
+import { DotMatrix } from '@/components/banking/BankCard';
+import { PageHero } from '@/components/ui/PageHero';
+import Glyph, { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
 import {
   ACCOUNTS,
   BENEFICIARIES,
@@ -10,124 +13,191 @@ import {
   TRANSACTIONS,
   type BankAccount,
   type Beneficiary,
+  type Transaction,
 } from '@/lib/banking-data';
 
 function fmt(n: number, currency = 'EUR'): string {
-  return new Intl.NumberFormat('en-IE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('en-IE', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+  }).format(n);
 }
 
-function dayNumber(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: '2-digit' });
-}
-function monthShort(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short' });
-}
 function dateLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
+
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(word => word.charAt(0))
+    .join('')
+    .toUpperCase();
+}
+
 /* ──────────────────────────────────────────────────────────────────
- * Payment types
+ * What the customer is doing — the four tiles across the top of the
+ * screen. Each is a different source of recipient, not a different
+ * form, so switching tile only swaps the "To" control.
  * ────────────────────────────────────────────────────────────────── */
 
-type PaymentStatus = 'Completed' | 'Pending' | 'Scheduled' | 'Failed';
+const ACTIONS = [
+  { id: 'transfer', label: 'Transfer', caption: 'Between my accounts', icon: 'swap' },
+  { id: 'saved', label: 'Pay someone', caption: 'A payee you have saved', icon: 'user' },
+  { id: 'bill', label: 'Pay a bill', caption: 'A supplier you pay regularly', icon: 'Bills' },
+  { id: 'new', label: 'New payee', caption: 'Set up someone else', icon: 'plus' },
+] as const;
 
-const STATUS_ORDER: PaymentStatus[] = ['Scheduled', 'Pending', 'Completed', 'Failed'];
+type ActionId = (typeof ACTIONS)[number]['id'];
 
-const STATUS_BADGE: Record<PaymentStatus, string> = {
-  Completed: 'badge badge-success',
-  Pending: 'badge badge-warning',
+/* ──────────────────────────────────────────────────────────────────
+ * Activity — posted transactions plus the upcoming schedule. Nothing is
+ * invented: every row is either a transaction on record or a standing
+ * payment that has a real next-deduction date.
+ * ────────────────────────────────────────────────────────────────── */
+
+type RowState = 'Scheduled' | 'Pending' | 'Completed' | 'Declined';
+
+const STATE_ORDER: RowState[] = ['Scheduled', 'Pending', 'Completed', 'Declined'];
+
+const STATE_BADGE: Record<RowState, string> = {
   Scheduled: 'badge badge-info',
-  Failed: 'badge badge-error',
+  Pending: 'badge badge-warning',
+  Completed: 'badge badge-success',
+  Declined: 'badge badge-error',
 };
 
-const STATUS_ICON: Record<PaymentStatus, string> = {
-  Completed: 'M4.5 12.75l6 6 9-13.5',
-  Pending: 'M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z',
-  Scheduled: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5',
-  Failed: 'M6 18L18 6M6 6l12 12',
+const STATE_GLYPH: Record<RowState, string> = {
+  Scheduled: 'calendar',
+  Pending: 'clock',
+  Completed: 'check',
+  Declined: 'x',
 };
 
-interface PaymentRow {
+interface ActivityRow {
   id: string;
   when: number;
   dateISO: string;
-  payee: string;
-  description: string;
-  fromAccount: string;
+  title: string;
+  caption: string;
+  account: string;
   amount: number;
   currency: string;
-  status: PaymentStatus;
+  direction: 'IN' | 'OUT';
+  state: RowState;
+  icon: string;
+  /** Initials for a person, otherwise an outline glyph name. */
+  who?: string;
 }
 
-const TABS = [
-  { id: 'transfer', label: 'Between my accounts' },
-  { id: 'saved', label: 'Saved payee' },
-  { id: 'new', label: 'Someone new' },
-] as const;
-type TabId = (typeof TABS)[number]['id'];
+const POSTED_WINDOW = 16;
+/* The activity list is bounded so the composer and the rail stay on one screen;
+   the count in the footer says exactly how much sits behind "Show all". */
+const ACTIVITY_PREVIEW = 6;
 
-/* ──────────────────────────────────────────────────────────────────
- * Data resolution — the payment history is assembled from posted
- * transactions plus the upcoming schedule, never from invented rows.
- * ────────────────────────────────────────────────────────────────── */
-
-type LoadState = 'loading' | 'ready' | 'error';
-
-interface PaymentsData {
-  rows: PaymentRow[];
-  accounts: BankAccount[];
-  beneficiaries: Beneficiary[];
-  statuses: PaymentStatus[];
+function nameOf(id: string): string {
+  return ACCOUNTS.find(a => a.id === id)?.name ?? 'Unknown account';
 }
 
-function resolvePayments(): PaymentsData {
-  if (!ACCOUNTS.length) throw new Error('No accounts returned');
-  const nameOf = (id: string) => ACCOUNTS.find(a => a.id === id)?.name ?? 'Unknown account';
-
-  const posted: PaymentRow[] = TRANSACTIONS.filter(t => t.direction === 'OUT')
+function postedRows(): ActivityRow[] {
+  return [...TRANSACTIONS]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 12)
+    .slice(0, POSTED_WINDOW)
     .map(t => ({
       id: t.id,
       when: new Date(t.date).getTime(),
       dateISO: t.date,
-      payee: t.merchant,
-      description: t.note ?? t.category,
-      fromAccount: nameOf(t.accountId),
+      title: t.merchant,
+      caption: t.note ? `${t.category} · ${t.note}` : t.category,
+      account: nameOf(t.accountId),
       amount: t.amount,
       currency: t.currency,
-      status: t.status === 'PENDING' ? 'Pending' : t.status === 'DECLINED' ? 'Failed' : 'Completed',
+      direction: t.direction,
+      state:
+        t.status === 'PENDING' ? 'Pending' : t.status === 'DECLINED' ? 'Declined' : 'Completed',
+      icon: glyphFor(t.category),
+      who: BENEFICIARIES.some(b => b.name === t.merchant) ? initials(t.merchant) : undefined,
     }));
+}
 
-  const scheduled: PaymentRow[] = SCHEDULED_PAYMENTS.map(s => ({
+function scheduledRows(): ActivityRow[] {
+  return SCHEDULED_PAYMENTS.map(s => ({
     id: `scheduled-${s.id}`,
     when: new Date(s.nextDate).getTime(),
     dateISO: s.nextDate,
-    payee: s.payee,
-    description: `${s.frequency} payment`,
-    fromAccount: 'Standing order',
+    title: s.payee,
+    caption: `${s.frequency} standing payment`,
+    account: 'Direct debit',
     amount: s.amount,
     currency: s.currency,
-    status: 'Scheduled',
+    direction: 'OUT' as const,
+    state: 'Scheduled' as const,
+    icon: glyphFor(s.icon),
   }));
-
-  const rows = [...scheduled, ...posted].sort((a, b) => b.when - a.when);
-  const present = new Set(rows.map(r => r.status));
-
-  return {
-    rows,
-    accounts: ACCOUNTS,
-    beneficiaries: BENEFICIARIES,
-    statuses: STATUS_ORDER.filter(s => present.has(s)),
-  };
 }
 
-function usePaymentsData() {
-  const [data, setData] = useState<PaymentsData | null>(null);
+/** A biller is anything already on the schedule or paid from history that is
+    not a personal payee — so the "Pay a bill" list is drawn from real payees. */
+interface Biller {
+  name: string;
+  detail: string;
+  icon: string;
+  typical: number;
+  currency: string;
+}
+
+function billers(): Biller[] {
+  const seen = new Map<string, Biller>();
+  SCHEDULED_PAYMENTS.forEach(s => {
+    seen.set(s.payee, {
+      name: s.payee,
+      detail: `${s.frequency} · ${fmt(s.amount, s.currency)}`,
+      icon: glyphFor(s.icon),
+      typical: s.amount,
+      currency: s.currency,
+    });
+  });
+  TRANSACTIONS.filter(t => t.direction === 'OUT')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .forEach(t => {
+      if (seen.has(t.merchant) || BENEFICIARIES.some(b => b.name === t.merchant)) return;
+      seen.set(t.merchant, {
+        name: t.merchant,
+        detail: `${t.category} · last ${fmt(t.amount, t.currency)}`,
+        icon: glyphFor(t.category),
+        typical: t.amount,
+        currency: t.currency,
+      });
+    });
+  return [...seen.values()];
+}
+
+type LoadState = 'loading' | 'ready' | 'error';
+
+interface Activity {
+  rows: ActivityRow[];
+  states: RowState[];
+}
+
+function resolveActivity(): Activity {
+  if (!ACCOUNTS.length) throw new Error('No accounts returned');
+  const rows = [...scheduledRows(), ...postedRows()].sort((a, b) => b.when - a.when);
+  const present = new Set(rows.map(r => r.state));
+  return { rows, states: STATE_ORDER.filter(s => present.has(s)) };
+}
+
+function useActivity() {
+  const [data, setData] = useState<Activity | null>(null);
   const [state, setState] = useState<LoadState>('loading');
   const [attempt, setAttempt] = useState(0);
 
@@ -137,7 +207,7 @@ function usePaymentsData() {
     const timer = window.setTimeout(() => {
       if (!active) return;
       try {
-        setData(resolvePayments());
+        setData(resolveActivity());
         setState('ready');
       } catch {
         setData(null);
@@ -150,25 +220,24 @@ function usePaymentsData() {
     };
   }, [attempt]);
 
-  const retry = useCallback(() => setAttempt(a => a + 1), []);
-  return { data, state, retry };
+  return { data, state, retry: useCallback(() => setAttempt(a => a + 1), []) };
 }
+
+/* ────────────────────────────────────────────────────────────────── */
 
 function LoadError({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="p-5">
+    <div className="glass-body">
       <div className="empty-state">
         <div className="empty-state-icon">
-          <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-          </svg>
+          <Glyph name="alert" className="h-6 w-6" />
         </div>
-        <p className="empty-state-title">We couldn&apos;t load your payments</p>
-        <p className="empty-state-text">Something went wrong while reading your payment history. No payment has been made.</p>
+        <p className="empty-state-title">We couldn&apos;t load your activity</p>
+        <p className="empty-state-text">
+          Something went wrong while reading your payment history. No payment has been made.
+        </p>
         <button type="button" onClick={onRetry} className="btn btn-primary btn-sm mt-4">
-          <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
+          <Glyph name="subscription" className="h-3.5 w-3.5" />
           Try again
         </button>
       </div>
@@ -176,51 +245,144 @@ function LoadError({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/** A native select wearing an avatar row: the whole row opens it, and the
+    keyboard path is unchanged because the select itself stays in the tree. */
+function PickRow({
+  id,
+  label,
+  value,
+  onChange,
+  avatar,
+  title,
+  detail,
+  trailing,
+  children,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  avatar: React.ReactNode;
+  title: string;
+  detail?: string;
+  trailing?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <label htmlFor={id} className="pick-row relative cursor-pointer">
+      {avatar}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          {title}
+        </span>
+        {detail && (
+          <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+            {detail}
+          </span>
+        )}
+      </span>
+      {trailing}
+      <Glyph name="chevron" className="h-4 w-4 shrink-0" strokeWidth={2} />
+      <select
+        id={id}
+        aria-label={label}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function FieldLabel({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="mb-1.5 block text-xs font-semibold uppercase tracking-wider"
+      style={{ color: 'var(--text-muted)' }}
+    >
+      {children}
+    </label>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────────── */
 
 export default function PaymentsPage() {
-  const [tab, setTab] = useState<TabId>('transfer');
+  const [action, setAction] = useState<ActionId>('transfer');
   const [payeeId, setPayeeId] = useState('');
   const [payeeText, setPayeeText] = useState('');
+  const [billerName, setBillerName] = useState('');
   const [amount, setAmount] = useState('');
   const [fromAccount, setFromAccount] = useState(ACCOUNTS[0]?.id ?? '');
   const [toAccount, setToAccount] = useState(ACCOUNTS[1]?.id ?? '');
   const [reference, setReference] = useState('');
   const [payDate, setPayDate] = useState(todayISO);
-  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'All'>('All');
-  const [submitted, setSubmitted] = useState<PaymentRow[]>([]);
+  const [direction, setDirection] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
+  const [stateFilter, setStateFilter] = useState<RowState | 'ALL'>('ALL');
+  const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useState(false);
+  const [sent, setSent] = useState<ActivityRow[]>([]);
   const [confirmation, setConfirmation] = useState('');
-  const { data, state, retry } = usePaymentsData();
 
-  const accounts = data?.accounts ?? ACCOUNTS;
-  const beneficiaries = data?.beneficiaries ?? BENEFICIARIES;
+  const { data, state, retry } = useActivity();
+
+  const accounts = ACCOUNTS;
   const source = accounts.find(a => a.id === fromAccount) ?? accounts[0];
   const otherAccounts = accounts.filter(a => a.id !== fromAccount);
+  const allBillers = useMemo(billers, []);
 
-  const rows = useMemo(() => {
-    const all = [...submitted, ...(data?.rows ?? [])];
-    return all.sort((a, b) => b.when - a.when);
-  }, [submitted, data]);
-
-  const visibleRows = useMemo(
-    () => (statusFilter === 'All' ? rows : rows.filter(r => r.status === statusFilter)),
-    [rows, statusFilter]
-  );
+  /* A recipient is resolved the same way whatever tile is selected, so the
+     submit path and the summary line never need to branch on the tile. */
+  const recipient = useMemo(() => {
+    if (action === 'transfer') {
+      const a = otherAccounts.find(x => x.id === toAccount);
+      return a
+        ? {
+            name: a.name,
+            detail: `${fmt(a.available, a.currency)} available`,
+            icon: ACCOUNT_GLYPH[a.type],
+            currency: a.currency,
+          }
+        : null;
+    }
+    if (action === 'saved') {
+      const b = BENEFICIARIES.find(x => x.id === payeeId);
+      return b
+        ? { name: b.name, detail: b.handle, icon: '', initials: initials(b.name), currency: 'EUR' }
+        : null;
+    }
+    if (action === 'bill') {
+      const s = allBillers.find(x => x.name === billerName);
+      return s
+        ? { name: s.name, detail: s.detail, icon: s.icon, currency: s.currency }
+        : null;
+    }
+    const typed = payeeText.trim();
+    return typed ? { name: typed, detail: 'New payee', icon: 'user', currency: 'EUR' } : null;
+  }, [action, otherAccounts, toAccount, payeeId, allBillers, billerName, payeeText]);
 
   const numericAmount = parseFloat(amount || '0');
   const available = source?.available ?? 0;
-  const recipientChosen =
-    tab === 'transfer' ? Boolean(toAccount) : tab === 'saved' ? Boolean(payeeId) : Boolean(payeeText.trim());
   const overBalance = numericAmount > available;
   const canSend =
-    Boolean(source) && recipientChosen && Number.isFinite(numericAmount) && numericAmount > 0 && !overBalance;
+    Boolean(source) && Boolean(recipient) && Number.isFinite(numericAmount) && numericAmount > 0 && !overBalance;
 
-  const recipientLabel =
-    tab === 'transfer'
-      ? otherAccounts.find(a => a.id === toAccount)?.name ?? 'the selected account'
-      : tab === 'saved'
-        ? beneficiaries.find(b => b.id === payeeId)?.name ?? 'the selected payee'
-        : payeeText.trim() || 'the new payee';
+  const rows = useMemo(() => [...sent, ...(data?.rows ?? [])].sort((a, b) => b.when - a.when), [sent, data]);
+
+  const visibleRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter(r => {
+      if (direction !== 'ALL' && r.direction !== direction) return false;
+      if (stateFilter !== 'ALL' && r.state !== stateFilter) return false;
+      if (!q) return true;
+      return `${r.title} ${r.caption} ${r.account}`.toLowerCase().includes(q);
+    });
+  }, [rows, direction, stateFilter, query]);
+
+  const shownRows = expanded ? visibleRows : visibleRows.slice(0, ACTIVITY_PREVIEW);
 
   useEffect(() => {
     if (!confirmation) return;
@@ -229,210 +391,298 @@ export default function PaymentsPage() {
   }, [confirmation]);
 
   const handleSubmit = useCallback(() => {
-    if (!canSend || !source) return;
+    if (!canSend || !source || !recipient) return;
     const when = new Date(`${payDate}T12:00:00`).getTime();
-    const row: PaymentRow = {
+    const iso = Number.isFinite(when) ? new Date(when).toISOString() : new Date().toISOString();
+    const row: ActivityRow = {
       id: `local-${Date.now()}`,
       when: Number.isFinite(when) ? when : Date.now(),
-      dateISO: Number.isFinite(when) ? new Date(when).toISOString() : new Date().toISOString(),
-      payee: recipientLabel,
-      description: reference.trim() || 'One-off payment',
-      fromAccount: source.name,
+      dateISO: iso,
+      title: recipient.name,
+      caption: reference.trim() || 'One-off payment',
+      account: source.name,
       amount: numericAmount,
       currency: source.currency,
-      status: payDate > todayISO() ? 'Scheduled' : 'Pending',
+      direction: 'OUT',
+      state: payDate > todayISO() ? 'Scheduled' : 'Pending',
+      icon: recipient.icon || 'send',
+      who: 'initials' in recipient ? recipient.initials : undefined,
     };
-    setSubmitted(prev => [row, ...prev]);
-    setConfirmation(`${fmt(row.amount, row.currency)} to ${row.payee} prepared as a demo from ${row.fromAccount}. No money has moved.`);
+    setSent(prev => [row, ...prev]);
+    setConfirmation(
+      `${fmt(row.amount, row.currency)} to ${row.title} prepared as a demo from ${row.account}. No money has moved.`
+    );
     setAmount('');
     setReference('');
-  }, [canSend, source, payDate, recipientLabel, reference, numericAmount]);
+  }, [canSend, source, recipient, payDate, reference, numericAmount]);
 
-  const handleClear = useCallback(() => {
-    setAmount('');
-    setReference('');
+  const chooseAction = useCallback((next: ActionId) => {
+    setAction(next);
     setPayeeId('');
+    setBillerName('');
     setPayeeText('');
-    setPayDate(todayISO());
-    setConfirmation('');
   }, []);
 
-  const prepareRepeat = useCallback((transaction: Transaction) => {
-    const beneficiary = BENEFICIARIES.find(b => b.name === transaction.merchant);
-    setTab(beneficiary ? 'saved' : 'new');
-    setPayeeId(beneficiary?.id ?? '');
-    setPayeeText(transaction.merchant);
-    setAmount(String(transaction.amount));
-    setReference(transaction.note || '');
-    setFromAccount(transaction.accountId);
-  }, []);
+  const swap = useCallback(() => {
+    setAction('transfer');
+    setFromAccount(toAccount);
+    setToAccount(fromAccount);
+  }, [fromAccount, toAccount]);
 
-  const pickQuickRecipient = useCallback((b: Beneficiary) => {
-    setTab('saved');
+  const pickPayee = useCallback((b: Beneficiary) => {
+    setAction('saved');
     setPayeeId(b.id);
-    setConfirmation(`${b.name} selected as the payee.`);
+    setConfirmation(`${b.name} selected as the payee. Add an amount to continue.`);
   }, []);
+
+  const pickBiller = useCallback((name: string, typical: number) => {
+    setAction('bill');
+    setBillerName(name);
+    setAmount(String(typical));
+  }, []);
+
+  const prepareRepeat = useCallback((t: Transaction) => {
+    const beneficiary = BENEFICIARIES.find(b => b.name === t.merchant);
+    if (beneficiary) {
+      setAction('saved');
+      setPayeeId(beneficiary.id);
+    } else {
+      setAction('new');
+      setPayeeText(t.merchant);
+    }
+    setAmount(String(t.amount));
+    setReference(t.note || '');
+    setFromAccount(t.accountId);
+  }, []);
+
+  const scheduledCount = SCHEDULED_PAYMENTS.length;
+  const scheduledTotal = SCHEDULED_PAYMENTS.reduce((sum, s) => sum + s.amount, 0);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Payments &amp; transfers</h1>
-          <p className="page-subtitle">Move money between your accounts, pay a saved payee, or set up someone new.</p>
-        </div>
+    <div className="space-y-5">
+      <PageHero
+        title="Payments & transfers"
+        subtitle="Choose what you are paying for, then fill in the amount. Every payment on this screen is simulated."
+        meta={
+          <>
+            <span className="chip">Sample data</span>
+            <span className="chip">{accounts.length} accounts</span>
+            <span className="chip">{scheduledCount} scheduled</span>
+          </>
+        }
+        actions={
+          <Link href="/portal/transactions" className="pill-btn">
+            All activity
+            <Glyph name="Transfers" className="h-4 w-4" />
+          </Link>
+        }
+      />
+
+      {/* ══ What are you paying ══ */}
+      <div role="group" aria-label="Payment type" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {ACTIONS.map(a => (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => chooseAction(a.id)}
+            aria-pressed={action === a.id}
+            data-active={action === a.id}
+            className="action-tile"
+          >
+            <span className="action-tile-icon">
+              <Glyph name={a.icon} className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{a.label}</span>
+              <span
+                className="block truncate text-xs"
+                style={{ color: 'inherit', opacity: 0.65 }}
+              >
+                {a.caption}
+              </span>
+            </span>
+            <span className="action-tile-arrow">
+              <Glyph name="send" className="h-4 w-4" />
+            </span>
+          </button>
+        ))}
       </div>
 
       <RepeatPayment onRepeat={prepareRepeat} />
-      <p className="text-xs text-[var(--text-secondary)]">Banking preview · sample accounts and transactions. Payments on this screen are simulated; no money moves.</p>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        {/* Left: form + history */}
-        <div className="space-y-6 xl:col-span-2">
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        {/* ══ Composer + activity ══ */}
+        <div className="flex flex-col gap-5 xl:col-span-7">
           <form
-            className="panel"
+            className="glass-panel"
             onSubmit={e => {
               e.preventDefault();
               handleSubmit();
             }}
           >
-            <div className="panel-header">
-              <h2 className="panel-title">Make a payment</h2>
+            <div className="glass-head">
+              <div>
+                <h2 className="glass-title">
+                  {action === 'transfer' ? 'Transfer money' : 'Make a payment'}
+                </h2>
+                <p className="glass-sub">
+                  {action === 'transfer'
+                    ? 'Moving between your own accounts settles instantly.'
+                    : 'Pick a date to schedule instead of sending now.'}
+                </p>
+              </div>
+              <span className="chip num shrink-0">{fmt(available, source?.currency ?? 'EUR')} available</span>
             </div>
 
-            <div className="panel-body space-y-6">
-              {/* Payment type */}
-              <div>
-                <span id="payment-type-label" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                  Payment type
-                </span>
-                <div role="group" aria-labelledby="payment-type-label" className="segmented w-full">
-                  {TABS.map(t => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setTab(t.id)}
-                      aria-pressed={tab === t.id}
-                      data-active={tab === t.id}
-                      className="segmented-item flex-1 !shrink justify-center"
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* From */}
+            <div className="glass-body space-y-4">
+              {/* From / To */}
+              <div className="flex flex-col gap-3">
                 <div>
-                  <label htmlFor="pay-from" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                    From
-                  </label>
-                  <select
+                  <FieldLabel htmlFor="pay-from">From</FieldLabel>
+                  <PickRow
                     id="pay-from"
+                    label="Account to pay from"
                     value={fromAccount}
-                    onChange={e => setFromAccount(e.target.value)}
-                    className="select"
+                    onChange={setFromAccount}
+                    avatar={
+                      <GlyphTile
+                        name={ACCOUNT_GLYPH[source?.type ?? 'CURRENT']}
+                        className="h-9 w-9 rounded-xl"
+                        iconClassName="h-4 w-4"
+                      />
+                    }
+                    title={source?.name ?? 'No account'}
+                    detail={`${source?.sortCode ?? ''} · ${source?.accountNumber ?? ''}`}
+                    trailing={
+                      <span className="num shrink-0 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {fmt(source?.balance ?? 0, source?.currency ?? 'EUR')}
+                      </span>
+                    }
                   >
                     {accounts.map(a => (
                       <option key={a.id} value={a.id}>
                         {a.name} — {fmt(a.available, a.currency)} available
                       </option>
                     ))}
-                  </select>
+                  </PickRow>
                 </div>
 
-                {/* To */}
+                {action === 'transfer' && otherAccounts.length > 0 && (
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={swap}
+                      className="ring-btn !h-9 !w-9"
+                      aria-label="Swap the accounts"
+                    >
+                      <Glyph name="swap" className="h-4 w-4" strokeWidth={2} />
+                    </button>
+                  </div>
+                )}
+
                 <div>
-                  {tab === 'transfer' && (
-                    <>
-                      <label htmlFor="pay-to-account" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                        To account
-                      </label>
-                      <select
-                        id="pay-to-account"
-                        value={toAccount}
-                        onChange={e => setToAccount(e.target.value)}
-                        className="select"
-                      >
-                        {otherAccounts.length === 0 && <option value="">No other accounts</option>}
-                        {otherAccounts.map(a => (
-                          <option key={a.id} value={a.id}>{a.name}</option>
+                  <FieldLabel htmlFor={action === 'new' ? 'pay-new-payee' : 'pay-to'}>To</FieldLabel>
+                  {action === 'new' ? (
+                    <input
+                      id="pay-new-payee"
+                      type="text"
+                      value={payeeText}
+                      onChange={e => setPayeeText(e.target.value)}
+                      placeholder="Who are you paying?"
+                      autoComplete="off"
+                      className="input"
+                    />
+                  ) : otherAccounts.length === 0 && action === 'transfer' ? (
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                      This is the only account we can see, so there is nothing to transfer to yet.
+                    </p>
+                  ) : (
+                    <PickRow
+                      id="pay-to"
+                      label="Recipient"
+                      value={action === 'transfer' ? toAccount : action === 'saved' ? payeeId : billerName}
+                      onChange={v => {
+                        if (action === 'transfer') setToAccount(v);
+                        else if (action === 'saved') setPayeeId(v);
+                        else {
+                          setBillerName(v);
+                          const b = allBillers.find(x => x.name === v);
+                          if (b) setAmount(String(b.typical));
+                        }
+                      }}
+                      avatar={
+                        recipient && 'initials' in recipient && recipient.initials ? (
+                          <span className="avatar-dot h-9 w-9 text-xs">{recipient.initials}</span>
+                        ) : (
+                          <GlyphTile
+                            name={recipient?.icon || (action === 'transfer' ? 'Transfers' : 'Other')}
+                            className="h-9 w-9 rounded-xl"
+                            iconClassName="h-4 w-4"
+                          />
+                        )
+                      }
+                      title={recipient?.name ?? (action === 'bill' ? 'Choose a supplier' : action === 'saved' ? 'Choose a payee' : 'Choose an account')}
+                      detail={recipient?.detail ?? 'Nothing selected yet'}
+                    >
+                      <option value="">
+                        {action === 'transfer' ? 'Choose an account' : action === 'saved' ? 'Choose a payee' : 'Choose a supplier'}
+                      </option>
+                      {action === 'transfer' &&
+                        otherAccounts.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} — {fmt(a.available, a.currency)}
+                          </option>
                         ))}
-                      </select>
-                    </>
-                  )}
-
-                  {tab === 'saved' && (
-                    <>
-                      <label htmlFor="pay-to-payee" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                        Saved payee
-                      </label>
-                      <select
-                        id="pay-to-payee"
-                        value={payeeId}
-                        onChange={e => setPayeeId(e.target.value)}
-                        className="select"
-                      >
-                        <option value="">Choose a payee</option>
-                        {beneficiaries.map(b => (
-                          <option key={b.id} value={b.id}>{b.name} ({b.handle})</option>
+                      {action === 'saved' &&
+                        BENEFICIARIES.map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.handle})
+                          </option>
                         ))}
-                      </select>
-                    </>
-                  )}
-
-                  {tab === 'new' && (
-                    <>
-                      <label htmlFor="pay-to-new" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                        Payee name
-                      </label>
-                      <input
-                        id="pay-to-new"
-                        type="text"
-                        value={payeeText}
-                        onChange={e => setPayeeText(e.target.value)}
-                        placeholder="e.g. Olivia Bennett"
-                        autoComplete="off"
-                        className="input"
-                      />
-                    </>
+                      {action === 'bill' &&
+                        allBillers.map(b => (
+                          <option key={b.name} value={b.name}>
+                            {b.name} — {b.detail}
+                          </option>
+                        ))}
+                    </PickRow>
                   )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Amount */}
-                <div>
-                  <label htmlFor="pay-amount" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                    Amount
-                  </label>
-                  <div className="relative">
-                    <span aria-hidden="true" className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>
-                      €
-                    </span>
-                    <input
-                      id="pay-amount"
-                      type="text"
-                      value={amount}
-                      onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                      placeholder="0.00"
-                      inputMode="decimal"
-                      aria-describedby="pay-amount-hint"
-                      className="input pl-8 tabular-nums"
-                    />
-                  </div>
-                  <p id="pay-amount-hint" className="field-hint">
-                    {overBalance
-                      ? `That is more than the ${fmt(available, source?.currency ?? 'EUR')} available in ${source?.name ?? 'this account'}.`
-                      : `${fmt(available, source?.currency ?? 'EUR')} available in ${source?.name ?? 'this account'}`}
-                  </p>
+              {/* Amount */}
+              <div>
+                <FieldLabel htmlFor="pay-amount">Amount</FieldLabel>
+                <div className="relative">
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    €
+                  </span>
+                  <input
+                    id="pay-amount"
+                    type="text"
+                    value={amount}
+                    onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                    aria-describedby="pay-amount-hint"
+                    className="input num pl-9 text-lg"
+                  />
                 </div>
+                <p id="pay-amount-hint" className="field-hint">
+                  {overBalance
+                    ? `That is more than the ${fmt(available, source?.currency ?? 'EUR')} available in ${source?.name ?? 'this account'}.`
+                    : `${fmt(available, source?.currency ?? 'EUR')} available in ${source?.name ?? 'this account'}.`}
+                </p>
+              </div>
 
-                {/* Date */}
+              {/* When + reference */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="pay-date" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                    Payment date
-                  </label>
+                  <FieldLabel htmlFor="pay-date">When</FieldLabel>
                   <input
                     id="pay-date"
                     type="date"
@@ -441,40 +691,41 @@ export default function PaymentsPage() {
                     onChange={e => setPayDate(e.target.value)}
                     className="input"
                   />
-                  <p className="field-hint">Today if you leave this as it is.</p>
+                </div>
+                <div>
+                  <FieldLabel htmlFor="pay-reference">Reference</FieldLabel>
+                  <input
+                    id="pay-reference"
+                    type="text"
+                    value={reference}
+                    onChange={e => setReference(e.target.value)}
+                    placeholder="Optional"
+                    autoComplete="off"
+                    className="input"
+                  />
                 </div>
               </div>
 
-              {/* Reference */}
-              <div>
-                <label htmlFor="pay-reference" className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                  Reference (optional)
-                </label>
-                <input
-                  id="pay-reference"
-                  type="text"
-                  value={reference}
-                  onChange={e => setReference(e.target.value)}
-                  placeholder="e.g. Rent, Invoice #123"
-                  autoComplete="off"
-                  className="input"
-                />
-              </div>
-
               {overBalance && (
-                <p className="text-sm font-medium text-red-600 dark:text-red-400" role="alert">
+                <p className="text-sm font-medium" role="alert" style={{ color: 'var(--down)' }}>
                   Insufficient available balance for this payment.
                 </p>
               )}
 
-              <div className="flex flex-wrap gap-3 border-t pt-5" style={{ borderColor: 'var(--surface-border)' }}>
+              <div className="flex flex-wrap items-center gap-3 pt-1">
                 <button type="submit" disabled={!canSend} className="btn btn-primary flex-1">
-                  <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
-                  </svg>
-                  Submit payment
+                  <Glyph name="send" className="h-4 w-4" strokeWidth={2} />
+                  {payDate > todayISO() ? 'Schedule payment' : 'Continue'}
                 </button>
-                <button type="button" onClick={handleClear} className="btn btn-secondary">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAmount('');
+                    setReference('');
+                    setConfirmation('');
+                  }}
+                  className="btn btn-secondary"
+                >
                   Clear
                 </button>
               </div>
@@ -482,9 +733,7 @@ export default function PaymentsPage() {
               <div aria-live="polite">
                 {confirmation && (
                   <div className="alert alert-success">
-                    <svg aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
+                    <Glyph name="check" className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
                     <span>{confirmation}</span>
                   </div>
                 )}
@@ -492,149 +741,201 @@ export default function PaymentsPage() {
             </div>
           </form>
 
-          {/* Payment history */}
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Payments and upcoming</h2>
-              <span className="chip tabular-nums" aria-live="polite">
+          {/* ══ Activity ══ */}
+          <section className="glass-panel" aria-label="Recent activity">
+            <div className="glass-head flex-col !items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="glass-title">Recent activity</h2>
+                <p className="glass-sub">
+                  Posted payments, money in, and everything still scheduled.
+                </p>
+              </div>
+              <span className="chip num shrink-0" aria-live="polite">
                 {state === 'loading' ? 'Loading' : `${visibleRows.length} shown`}
               </span>
             </div>
 
-            {data && data.statuses.length > 1 && (
-              <div
-                role="group"
-                aria-label="Filter payments by status"
-                className="flex flex-wrap gap-2 border-b px-5 py-4"
-                style={{ borderColor: 'var(--surface-border)' }}
-              >
-                {(['All', ...data.statuses] as (PaymentStatus | 'All')[]).map(s => (
+            <div
+              className="flex flex-col gap-3 px-6 pb-4 lg:flex-row lg:items-center"
+              style={{ borderTop: '1px solid var(--hairline)', paddingTop: 16 }}
+            >
+              <div className="relative flex-1">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <Glyph name="search" className="h-4 w-4" strokeWidth={2} />
+                </span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Payee, category or account"
+                  aria-label="Search activity"
+                  className="input pl-9"
+                />
+              </div>
+
+              <div className="segmented" role="group" aria-label="Filter by direction">
+                {(
+                  [
+                    { id: 'ALL', label: 'All' },
+                    { id: 'IN', label: 'Money in' },
+                    { id: 'OUT', label: 'Money out' },
+                  ] as const
+                ).map(f => (
                   <button
-                    key={s}
+                    key={f.id}
                     type="button"
-                    onClick={() => setStatusFilter(s)}
-                    aria-pressed={statusFilter === s}
-                    className="chip transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
-                    style={
-                      statusFilter === s
-                        ? { backgroundColor: 'var(--brand-soft)', borderColor: 'var(--brand)', color: 'var(--brand-on-soft)' }
-                        : undefined
-                    }
+                    onClick={() => setDirection(f.id)}
+                    aria-pressed={direction === f.id}
+                    data-active={direction === f.id}
+                    className="segmented-item"
                   >
-                    {s}
+                    {f.label}
                   </button>
                 ))}
               </div>
-            )}
+
+              <select
+                value={stateFilter}
+                onChange={e => setStateFilter(e.target.value as RowState | 'ALL')}
+                aria-label="Filter by status"
+                className="select !w-auto"
+              >
+                <option value="ALL">Any status</option>
+                {(data?.states ?? STATE_ORDER).map(s => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {state === 'loading' ? (
-              <div className="divide-token">
+              <div>
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 px-5 py-4">
-                    <div className="skeleton h-10 w-10 shrink-0 rounded-xl" />
+                  <div key={i} className="glass-row">
+                    <div className="skeleton h-10 w-10 rounded-xl" />
                     <div className="flex-1 space-y-2">
                       <div className="skeleton h-4 w-1/3" />
                       <div className="skeleton h-3.5 w-1/4" />
                     </div>
-                    <div className="skeleton h-4 w-20 shrink-0" />
+                    <div className="skeleton h-4 w-20" />
                   </div>
                 ))}
               </div>
             ) : state === 'error' ? (
               <LoadError onRetry={retry} />
             ) : visibleRows.length === 0 ? (
-              <div className="p-5">
+              <div className="glass-body">
                 <div className="empty-state">
                   <div className="empty-state-icon">
-                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                    </svg>
+                    <Glyph name="calendar" className="h-6 w-6" />
                   </div>
-                  <p className="empty-state-title">
-                    {statusFilter === 'All' ? 'No payments yet' : `No ${statusFilter.toLowerCase()} payments`}
-                  </p>
+                  <p className="empty-state-title">Nothing matches those filters</p>
                   <p className="empty-state-text">
-                    {statusFilter === 'All'
-                      ? 'Payments you make and payments you schedule will both be listed here.'
-                      : `Nothing is currently marked as ${statusFilter.toLowerCase()}. Choose a different status to see the rest.`}
+                    {rows.length === 0
+                      ? 'Payments you make and payments you schedule will both appear here.'
+                      : `${rows.length} activity ${rows.length === 1 ? 'row exists' : 'rows exist'} outside the current search and filters.`}
                   </p>
-                  {statusFilter !== 'All' && (
-                    <button type="button" onClick={() => setStatusFilter('All')} className="btn btn-secondary btn-sm mt-4">
-                      Show all payments
+                  {rows.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery('');
+                        setDirection('ALL');
+                        setStateFilter('ALL');
+                      }}
+                      className="btn btn-secondary btn-sm mt-4"
+                    >
+                      Clear filters
                     </button>
                   )}
                 </div>
               </div>
             ) : (
-              <div
-                role="region"
-                aria-label="Payments and upcoming payments, scroll horizontally to see all columns"
-                tabIndex={0}
-                className="overflow-x-auto"
-              >
-                <table className="w-full min-w-[680px] border-collapse text-sm" aria-label="Payments and upcoming payments">
-                  <thead>
-                    <tr>
-                      {['Date', 'Payee', 'From', 'Amount', 'Status'].map(h => (
-                        <th
-                          key={h}
-                          scope="col"
-                          className="px-5 py-3 text-left text-sm font-semibold"
-                          style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--surface-border)' }}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleRows.map(r => (
-                      <tr key={r.id} className="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
-                        <td className="px-5 py-4 text-sm whitespace-nowrap" style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--surface-border)' }}>
-                          {dateLabel(r.dateISO)}
-                        </td>
-                        <td className="px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                          <span className="block text-base font-medium" style={{ color: 'var(--text-primary)' }}>{r.payee}</span>
-                          <span className="block text-sm" style={{ color: 'var(--text-muted)' }}>{r.description}</span>
-                        </td>
-                        <td className="px-5 py-4 text-sm" style={{ color: 'var(--text-secondary)', borderBottom: '1px solid var(--surface-border)' }}>
-                          {r.fromAccount}
-                        </td>
-                        <td
-                          className="px-5 py-4 text-right text-base font-bold tabular-nums whitespace-nowrap"
-                          style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--surface-border)' }}
-                        >
-                          −{fmt(r.amount, r.currency)}
-                        </td>
-                        <td className="px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                          <span className={`${STATUS_BADGE[r.status]} whitespace-nowrap`}>
-                            <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d={STATUS_ICON[r.status]} />
-                            </svg>
-                            {r.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div>
+                {shownRows.map(r => (
+                  <div key={r.id} className="glass-row">
+                    {r.who ? (
+                      <span className="avatar-dot h-10 w-10 text-sm">{r.who}</span>
+                    ) : (
+                      <GlyphTile name={r.icon} />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {r.title}
+                      </p>
+                      <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {r.caption} · {dateLabel(r.dateISO)}
+                      </p>
+                    </div>
+                    <span className={`${STATE_BADGE[r.state]} shrink-0 whitespace-nowrap`}>
+                      <Glyph name={STATE_GLYPH[r.state]} className="h-3.5 w-3.5" strokeWidth={2} />
+                      {r.state}
+                    </span>
+                    <div className="w-24 shrink-0 text-right">
+                      <p
+                        className={`num text-sm font-semibold ${r.direction === 'IN' ? 'delta-up' : ''}`}
+                        style={r.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
+                      >
+                        {r.direction === 'IN' ? '+' : '−'}
+                        {fmt(r.amount, r.currency)}
+                      </p>
+                      <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {r.account}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-          </div>
+
+            {visibleRows.length > ACTIVITY_PREVIEW && (
+              <div className="flex items-center justify-between gap-3 px-6 pb-5 pt-4">
+                {expanded ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(false)}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Show fewer
+                  </button>
+                ) : (
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Showing {ACTIVITY_PREVIEW} of {visibleRows.length} matching rows
+                  </span>
+                )}
+                <Link href="/portal/transactions" className="link-arrow shrink-0 text-sm">
+                  Full transaction history
+                  <span data-arrow aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              </div>
+            )}
+          </section>
         </div>
 
-        {/* Right sidebar */}
-        <div className="space-y-6">
-          {/* Quick transfers */}
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Quick transfers</h2>
+        {/* ══ Rail ══ */}
+        <div className="flex flex-col gap-5 xl:col-span-5">
+          <section className="glass-panel" aria-label="Your accounts">
+            <div className="glass-head">
+              <div>
+                <h2 className="glass-title">Your accounts</h2>
+                <p className="glass-sub">Where the money would come from.</p>
+              </div>
+              <Link href="/portal/accounts" className="pill-btn shrink-0 !px-3 !py-1.5 !text-xs">
+                Manage
+              </Link>
             </div>
             {state === 'loading' ? (
-              <div className="divide-token">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 px-5 py-4">
-                    <div className="skeleton h-10 w-10 shrink-0 rounded-full" />
+              <div className="pb-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="glass-row">
+                    <div className="skeleton h-9 w-9 rounded-xl" />
                     <div className="flex-1 space-y-2">
                       <div className="skeleton h-4 w-1/2" />
                       <div className="skeleton h-3.5 w-1/3" />
@@ -642,108 +943,148 @@ export default function PaymentsPage() {
                   </div>
                 ))}
               </div>
-            ) : state === 'error' ? (
-              <p className="px-5 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-                Saved payees are unavailable right now. Use “Try again” on the payment history panel.
-              </p>
-            ) : beneficiaries.length === 0 ? (
-              <div className="p-5">
-                <div className="empty-state !py-10">
-                  <div className="empty-state-icon">
-                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                    </svg>
-                  </div>
-                  <p className="empty-state-title">No saved payees</p>
-                  <p className="empty-state-text">People you pay more than once can be saved here for next time.</p>
-                </div>
-              </div>
             ) : (
-              <div className="divide-token">
-                {beneficiaries.slice(0, 5).map(b => (
-                  <div key={b.id} className="flex items-center gap-3 px-5 py-4">
-                    <span
-                      aria-hidden="true"
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-                      style={{ background: b.gradient }}
-                    >
-                      {b.glyph}
+              <div className="pb-3">
+                {accounts.map(a => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => {
+                      setFromAccount(a.id);
+                      if (action === 'transfer' && a.id === toAccount) setToAccount(source?.id ?? a.id);
+                    }}
+                    aria-pressed={a.id === fromAccount}
+                    className="glass-row w-full text-left"
+                  >
+                    <GlyphTile
+                      name={ACCOUNT_GLYPH[a.type]}
+                      className="h-9 w-9 rounded-xl"
+                      iconClassName="h-4 w-4"
+                      tone={a.id === fromAccount ? 'brand' : 'neutral'}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {a.name}
+                      </span>
+                      <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {a.accountNumber}
+                      </span>
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>{b.name}</p>
-                      <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {b.handle}
-                        {typeof b.lastSent === 'number' ? ` · last sent ${fmt(b.lastSent)}` : ''}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => pickQuickRecipient(b)}
-                      className="btn btn-secondary btn-sm shrink-0"
-                      aria-label={`Pay ${b.name}`}
-                    >
-                      Pay
-                    </button>
-                  </div>
+                    <span aria-hidden="true" className="shrink-0">
+                      <DotMatrix data={a.spark} cell={3} rows={5} label={`${a.name} balance trend`} />
+                    </span>
+                    <span className="num w-24 shrink-0 text-right text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {fmt(a.available, a.currency)}
+                    </span>
+                  </button>
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          {/* Upcoming scheduled */}
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Upcoming scheduled</h2>
-              <span className="chip tabular-nums">{SCHEDULED_PAYMENTS.length} total</span>
+          <section className="glass-panel" aria-label="People you pay">
+            <div className="glass-head">
+              <div>
+                <h2 className="glass-title">People you pay</h2>
+                <p className="glass-sub">Saved payees, ready to select.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  chooseAction('new');
+                  setConfirmation('Add a name in the New payee field to set someone up.');
+                }}
+                className="ring-btn shrink-0 !h-9 !w-9"
+                aria-label="Set up a new payee"
+              >
+                <Glyph name="plus" className="h-4 w-4" strokeWidth={2} />
+              </button>
             </div>
-            <div className="divide-token">
-              {SCHEDULED_PAYMENTS.map(s => (
-                <div key={s.id} className="flex items-center gap-3 px-5 py-4">
-                  <span
-                    aria-hidden="true"
-                    className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl"
-                    style={{ backgroundColor: 'var(--surface-input)' }}
-                  >
-                    <span className="text-xs font-semibold leading-none" style={{ color: 'var(--text-muted)' }}>
-                      {monthShort(s.nextDate)}
-                    </span>
-                    <span className="text-base font-bold leading-tight tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                      {dayNumber(s.nextDate)}
-                    </span>
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>{s.payee}</p>
-                    <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                      {s.frequency} · {dateLabel(s.nextDate)}
-                    </p>
-                  </div>
-                  <p className="shrink-0 text-base font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                    {fmt(s.amount, s.currency)}
-                  </p>
-                </div>
+            <div className="flex flex-wrap gap-2 px-6 pb-5">
+              {BENEFICIARIES.map(b => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => pickPayee(b)}
+                  aria-pressed={action === 'saved' && payeeId === b.id}
+                  className="flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-sm font-medium transition-colors"
+                  style={{
+                    background: action === 'saved' && payeeId === b.id ? 'var(--brand-soft)' : 'var(--tile-bg)',
+                    border: '1px solid var(--hairline)',
+                    color:
+                      action === 'saved' && payeeId === b.id
+                        ? 'var(--brand-on-soft)'
+                        : 'var(--text-secondary)',
+                  }}
+                >
+                  <span className="avatar-dot !border-0 h-7 w-7 text-[10px]">{initials(b.name)}</span>
+                  {b.name.split(' ')[0]}
+                </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          {/* Fraud notice */}
-          <div className="panel flex items-start gap-3 p-5">
-            <span
-              aria-hidden="true"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-              style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
-            >
-              <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-              </svg>
+          <section className="glass-panel" aria-label="Suppliers you pay regularly">
+            <div className="glass-head">
+              <div>
+                <h2 className="glass-title">Everyday bills</h2>
+                <p className="glass-sub">
+                  {scheduledCount} on standing order · {fmt(scheduledTotal)} a cycle
+                </p>
+              </div>
+            </div>
+            <div className="pb-3">
+              {allBillers.slice(0, 5).map(b => (
+                <button
+                  key={b.name}
+                  type="button"
+                  onClick={() => pickBiller(b.name, b.typical)}
+                  aria-pressed={action === 'bill' && billerName === b.name}
+                  className="glass-row w-full text-left"
+                >
+                  <GlyphTile
+                    name={b.icon}
+                    className="h-9 w-9 rounded-xl"
+                    iconClassName="h-4 w-4"
+                    tone={action === 'bill' && billerName === b.name ? 'brand' : 'neutral'}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {b.name}
+                    </span>
+                    <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {b.detail}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs font-medium" style={{ color: 'var(--brand-on-soft)' }}>
+                    Use
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="glass-foot">
+              Selecting a bill fills the payee and the amount usually paid. You can still change both.
+            </p>
+          </section>
+
+          <section className="glass-panel flex flex-1 items-start gap-3 p-5" aria-label="Fraud warning">
+            <span className="action-tile-icon shrink-0">
+              <Glyph name="shield" className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Fraud notice</p>
-              <p className="mt-1 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-                We will never ask for your password, PIN or full card details. If someone does, report it through
-                messages straight away.
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Fraud notice
+              </p>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                We will never ask for your password, PIN or full card details. If someone does, report
+                it through{' '}
+                <Link href="/portal/messages" className="link-arrow">
+                  messages
+                </Link>
+                .
               </p>
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>

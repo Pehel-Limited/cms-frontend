@@ -112,7 +112,7 @@ export default function LoginPage() {
         <div className="w-full max-w-[420px]">
           <div className="mb-10 flex items-center gap-2.5">
             <span
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1a3a7a]"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-700"
               aria-hidden="true"
             >
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -255,7 +255,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1a3a7a] px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-[#15306a] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? (
                 <>

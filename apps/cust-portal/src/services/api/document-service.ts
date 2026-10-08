@@ -167,24 +167,6 @@ export function formatFileSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function getCategoryIcon(category: DocumentCategory): string {
-  const icons: Partial<Record<DocumentCategory, string>> = {
-    IDENTITY: '🪪',
-    ADDRESS_PROOF: '🏠',
-    INCOME_PROOF: '💰',
-    BANK_STATEMENT: '🏦',
-    TAX_RETURN: '📋',
-    EMPLOYMENT_LETTER: '💼',
-    BUSINESS_REGISTRATION: '🏢',
-    FINANCIAL_STATEMENT: '📊',
-    COLLATERAL: '🔒',
-    INSURANCE: '🛡️',
-    LEGAL: '⚖️',
-    SIGNED_AGREEMENT: '✍️',
-  };
-  return icons[category] || '📄';
-}
-
 // ─── Service ───────────────────────────────────────────────────
 
 export const documentService = {

@@ -59,22 +59,20 @@ function toUiAccountType(account: CustomerAccount): AccountType {
   }
 }
 
-const TYPE_ART: Record<AccountType, { gradient: string; glyph: string }> = {
+/** Plastic for the account face. The avatar glyph is derived from `type` by the
+    Glyph set, so nothing here needs to carry an icon. */
+const TYPE_ART: Record<AccountType, { gradient: string }> = {
   CURRENT: {
     gradient: 'linear-gradient(135deg, #2d0e2b 0%, #4a1747 50%, #7f2b7b 100%)',
-    glyph: '💜',
   },
   SAVINGS: {
     gradient: 'linear-gradient(135deg, #0f3d3e 0%, #0c5e54 50%, #10b981 100%)',
-    glyph: '🌱',
   },
   JOINT: {
     gradient: 'linear-gradient(135deg, #5b1d4f 0%, #9d174d 50%, #db2777 100%)',
-    glyph: '🏠',
   },
   VAULT: {
     gradient: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #0ea5e9 100%)',
-    glyph: '✈️',
   },
 };
 
@@ -105,7 +103,6 @@ export function toBankAccount(account: CustomerAccount): BankAccount {
     balance: account.currentBalance ?? account.availableBalance ?? 0,
     available: account.availableBalance ?? account.currentBalance ?? 0,
     gradient: TYPE_ART[type].gradient,
-    glyph: TYPE_ART[type].glyph,
     spark: [],
     statusDisplay: account.statusDisplay,
     balanceAsOf: account.balanceAsOf,

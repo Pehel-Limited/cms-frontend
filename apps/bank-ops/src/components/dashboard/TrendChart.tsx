@@ -1,25 +1,45 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Area,
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import ChartTooltip, { compactCurrency } from './ChartTooltip';
+import { useMemo, useState } from 'react';
+import { DotGroups } from '@/components/dashboard/DotMatrix';
+import { compactCurrency } from '@/lib/format';
 import type { TrendPoint } from '@/services/api/dashboard-service';
 
-const COUNT_SERIES = [
-  { key: 'submittedCount', name: 'Submitted', color: '#0ea5e9' },
-  { key: 'approvedCount', name: 'Approved', color: '#10b981' },
-  { key: 'declinedCount', name: 'Declined', color: '#ef4444' },
-] as const;
+/** Which axis a series is measured against, and which one the toggle emphasises. */
+type Axis = 'count' | 'value';
+interface SeriesMeta {
+  key: keyof TrendPoint;
+  name: string;
+  color: string;
+  axis: Axis;
+}
+
+/* Brand for volume, sentiment for outcomes. Approved and declined are not two
+   arbitrary categories — one is good news and one is bad — so they earn the
+   up/down hues. Everything else stays in the plum ramp rather than borrowing a
+   sky blue that no longer matches the rest of the product.
+   `var()` works here because the dots are painted through inline `style`; SVG
+   presentation attributes would silently resolve nothing. */
+const COUNT_SERIES: SeriesMeta[] = [
+  { key: 'submittedCount', name: 'Submitted', color: 'var(--rm-brand)', axis: 'count' },
+  { key: 'approvedCount', name: 'Approved', color: 'var(--rm-up)', axis: 'count' },
+  { key: 'declinedCount', name: 'Declined', color: 'var(--rm-down)', axis: 'count' },
+];
+/* Money gets its own series and its own scale, because a value in millions and a
+   count of applications cannot share one. */
+const VALUE_SERIES: SeriesMeta = {
+  key: 'submittedValue',
+  name: 'Requested value',
+  color: 'var(--rm-brand-strong)',
+  axis: 'value',
+};
+
+/** Geometry per mode: one series gets a wider, shorter grid than three, so the
+    pitch is chosen to keep both roughly the same overall size. */
+const GEOMETRY: Record<Axis, { cell: number; rows: number }> = {
+  count: { cell: 6, rows: 13 },
+  value: { cell: 13, rows: 6 },
+};
 
 function weekLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -27,38 +47,16 @@ function weekLabel(iso: string): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/* Recharts paints via SVG attributes, which don't resolve CSS custom properties,
-   so read the resolved theme tokens and refresh when <html> flips light/dark. */
-function useThemeTokens(): { grid: string; text: string } {
-  const [tokens, setTokens] = useState({ grid: 'rgba(128,128,128,0.18)', text: '#94a3b8' });
-
-  useEffect(() => {
-    const read = () => {
-      const styles = getComputedStyle(document.documentElement);
-      setTokens({
-        grid: styles.getPropertyValue('--rm-border').trim() || 'rgba(128,128,128,0.18)',
-        text: styles.getPropertyValue('--rm-text-muted').trim() || '#94a3b8',
-      });
-    };
-    read();
-    const observer = new MutationObserver(read);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  return tokens;
-}
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReduced(mq.matches);
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return reduced;
+/* DOM swatches rather than a chart legend: they sit outside the SVG, so they can
+   use theme tokens and match the dot encoding they describe. */
+function LegendMark({ color }: { color: string }) {
+  return (
+    <span aria-hidden="true" className="grid grid-cols-2 gap-[2px]">
+      {[0.55, 1, 0.25, 0.75].map((o, i) => (
+        <span key={i} className="h-[5px] w-[5px] rounded-full" style={{ backgroundColor: color, opacity: o }} />
+      ))}
+    </span>
+  );
 }
 
 interface Props {
@@ -68,15 +66,9 @@ interface Props {
 }
 
 export default function TrendChart({ points, scopeLabel = 'your book' }: Props) {
-  const [mode, setMode] = useState<'count' | 'value'>('count');
-  const { grid, text } = useThemeTokens();
-  const reducedMotion = usePrefersReducedMotion();
-  const duration = reducedMotion ? 0 : 800;
+  const [mode, setMode] = useState<Axis>('count');
 
-  const data = useMemo(
-    () => points.map(p => ({ ...p, label: weekLabel(p.weekStart) })),
-    [points]
-  );
+  const labels = useMemo(() => points.map(p => weekLabel(p.weekStart)), [points]);
 
   const totals = useMemo(
     () =>
@@ -93,20 +85,38 @@ export default function TrendChart({ points, scopeLabel = 'your book' }: Props) 
     [points]
   );
 
-  if (data.length === 0) return null;
-
-  /* A window with nothing in it is not a trend — say so instead of drawing a flat line. */
+  /* A window with nothing in it is not a trend — say so instead of drawing a
+     row of empty columns and letting the reader infer a shape. */
   const hasSignal = totals.submitted + totals.decided > 0;
 
+  /* The same rule for money: a run of zeros is an absent series, not a trend,
+     so it is not plotted and the value toggle is not offered. */
+  const hasValueSignal = points.some(p => Number(p.submittedValue ?? 0) > 0);
+  const emphasis: Axis = hasValueSignal ? mode : 'count';
+  const plotted = emphasis === 'value' ? [VALUE_SERIES] : COUNT_SERIES;
+
+  /* Every series in a mode shares one maximum, so a taller column really does
+     mean more — normalising each series to its own peak would make a week of 2
+     decisions look as busy as a week of 40 submissions. */
+  const scale = useMemo(
+    () => Math.max(...plotted.flatMap(s => points.map(p => Number(p[s.key] ?? 0))), 0),
+    [plotted, points]
+  );
+
+  const geometry = GEOMETRY[emphasis];
+
+  // Below every hook: bailing out above one changes the hook count between the
+  // empty render and the loaded one, which React rejects outright.
+  if (points.length === 0) return null;
+
   return (
-    <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+    <section className="rm-panel p-6 sm:p-7">
       <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
-            Trend
-          </h2>
-          <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
-            {data.length} weeks · {scopeLabel}
+          <h2 className="rm-title">Trend</h2>
+          {/* window length comes from the data, never a hardcoded twelve */}
+          <p className="rm-sub">
+            {points.length} week{points.length === 1 ? '' : 's'} · applications and requested value
           </p>
         </div>
         <div
@@ -115,107 +125,76 @@ export default function TrendChart({ points, scopeLabel = 'your book' }: Props) 
           role="group"
           aria-label="Trend metric"
         >
-          {(['count', 'value'] as const).map(m => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              aria-pressed={mode === m}
-              className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
-              style={
-                mode === m
-                  ? { backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }
-                  : { color: 'var(--rm-text-muted)' }
-              }
-            >
-              {m === 'count' ? 'Applications' : 'Requested value'}
-            </button>
-          ))}
+          {(['count', 'value'] as const).map(m => {
+            const unavailable = m === 'value' && !hasValueSignal;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                disabled={unavailable}
+                title={
+                  unavailable ? `No requested value recorded for ${scopeLabel} in this window` : undefined
+                }
+                aria-pressed={emphasis === m}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-40"
+                style={
+                  emphasis === m
+                    ? { backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }
+                    : { color: 'var(--rm-text-muted)' }
+                }
+              >
+                {m === 'count' ? 'Applications' : 'Requested value'}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {hasSignal ? (
-        <div className="h-56 w-full animate-fade-in">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -8 }}>
-              <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: text, fontSize: 12 }}
-                stroke={grid}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-                minTickGap={16}
-              />
-              <YAxis
-                tick={{ fill: text, fontSize: 12 }}
-                stroke={grid}
-                tickLine={false}
-                axisLine={false}
-                width={56}
-                tickFormatter={v => (mode === 'value' ? compactCurrency(Number(v)) : String(v))}
-              />
-              <Tooltip
-                content={p => (
-                  <ChartTooltip
-                    {...p}
-                    currencyKeys={mode === 'value' ? ['submittedValue'] : undefined}
-                    labelSuffix=" week"
-                  />
-                )}
-                cursor={{ fill: 'rgba(127,127,127,0.08)' }}
-              />
-              {mode === 'count' ? (
-                <>
-                  <Bar
-                    dataKey="submittedCount"
-                    name="Submitted"
-                    fill={COUNT_SERIES[0].color}
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={28}
-                    animationDuration={duration}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="approvedCount"
-                    name="Approved"
-                    stroke={COUNT_SERIES[1].color}
-                    strokeWidth={2}
-                    dot={{ r: 2.5, strokeWidth: 0, fill: COUNT_SERIES[1].color }}
-                    activeDot={{ r: 4 }}
-                    animationDuration={duration}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="declinedCount"
-                    name="Declined"
-                    stroke={COUNT_SERIES[2].color}
-                    strokeWidth={2}
-                    strokeDasharray="4 3"
-                    dot={{ r: 2.5, strokeWidth: 0, fill: COUNT_SERIES[2].color }}
-                    activeDot={{ r: 4 }}
-                    animationDuration={duration}
-                  />
-                </>
-              ) : (
-                <Area
-                  type="monotone"
-                  dataKey="submittedValue"
-                  name="Requested"
-                  stroke="#0ea5e9"
-                  strokeWidth={2}
-                  fill="#0ea5e9"
-                  fillOpacity={0.16}
-                  animationDuration={duration}
-                />
-              )}
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+        <>
+          <div className="w-full overflow-x-auto animate-fade-in">
+            <DotGroups
+              series={plotted.map(s => ({
+                name: s.name,
+                color: s.color,
+                values: points.map(p => Number(p[s.key] ?? 0)),
+              }))}
+              labels={labels}
+              cell={geometry.cell}
+              rows={geometry.rows}
+              max={scale}
+              label={`${emphasis === 'count' ? 'Weekly' : 'Requested value'} for ${scopeLabel}, ${points.length} weeks`}
+              format={(name, value, b) =>
+                `${labels[b]} · ${name}: ${
+                  emphasis === 'value' ? compactCurrency(value) : `${value}`
+                }`
+              }
+            />
+          </div>
+
+          <ul
+            className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm"
+            aria-label="Charted series"
+          >
+            {plotted.map(s => (
+              <li key={String(s.key)} className="flex items-center gap-2">
+                <LegendMark color={s.color} />
+                <span style={{ color: 'var(--rm-text-secondary)' }}>{s.name}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : (
         <p className="text-sm py-8 text-center" style={{ color: 'var(--rm-text-muted)' }}>
           No submissions or decisions recorded for {scopeLabel} in this window.
+        </p>
+      )}
+
+      {hasSignal && !hasValueSignal && (
+        <p className="mt-3 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          No requested value is recorded for {scopeLabel} in this window, so that series is not
+          plotted — the counts above carry no value trend.
         </p>
       )}
 
@@ -224,34 +203,35 @@ export default function TrendChart({ points, scopeLabel = 'your book' }: Props) 
         style={{ borderTop: '1px solid var(--rm-border)', color: 'var(--rm-text-muted)' }}
       >
         <span>
-          <span className="font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+          <span className="num font-semibold" style={{ color: 'var(--rm-text)' }}>
             {totals.submitted}
           </span>{' '}
           submitted
         </span>
         <span>
-          <span className="font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+          <span className="num font-semibold" style={{ color: 'var(--rm-up)' }}>
             {totals.approved}
           </span>{' '}
           approved
         </span>
         <span>
-          <span className="font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
+          <span className="num font-semibold" style={{ color: 'var(--rm-down)' }}>
             {totals.declined}
           </span>{' '}
           declined
         </span>
         <span>
-          <span className="font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
-            {compactCurrency(totals.value)}
+          <span className="num font-semibold" style={{ color: 'var(--rm-text)' }}>
+            {hasValueSignal ? compactCurrency(totals.value) : '—'}
           </span>{' '}
-          requested
+          requested value
         </span>
       </div>
 
       <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
-        Weeks keyed on submission date and decision date as recorded on each application.
-        {'Decisions land in the week they were made, so a week can show decisions against earlier submissions.'}
+        Weeks keyed on submission date and decision date as recorded on each application. Decisions
+        land in the week they were made, so a week can show decisions against earlier submissions.
+        Each column is one week&rsquo;s own total — nothing is interpolated between them.
       </p>
     </section>
   );

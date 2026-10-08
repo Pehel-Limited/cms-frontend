@@ -270,20 +270,17 @@ export default function AccountsPage() {
               </>
             )}
           </div>
-          {/* One stroke per account, scaled to its balance. A composition of
-              what is held, not a trend — the page has no balance history. */}
+          {/* One column per account, scaled to its balance. A composition of what
+              is held, not a trend — the page has no balance history. */}
           {state === 'ready' && data && data.totalCurrency && (
-            <div className="thin-bars w-24 shrink-0" aria-hidden="true">
-              {data.accounts.map(a => {
-                const peak = Math.max(...data.accounts.map(x => x.balance), 1);
-                return (
-                  <span
-                    key={a.id}
-                    className="thin-bar"
-                    style={{ height: `${Math.max(6, (a.balance / peak) * 100)}%` }}
-                  />
-                );
-              })}
+            <div className="shrink-0">
+              <DotMatrix
+                data={data.accounts.map(a => a.balance)}
+                cell={8}
+                rows={5}
+                label={`Balance held by each of ${data.accounts.length} accounts`}
+                format={(value, i) => `${data.accounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
+              />
             </div>
           )}
         </div>
@@ -305,18 +302,15 @@ export default function AccountsPage() {
             )}
           </div>
           {state === 'ready' && data && data.totalCurrency && (
-            <div className="thin-bars w-24 shrink-0" aria-hidden="true">
-              {data.accounts.map(a => {
-                const peak = Math.max(...data.accounts.map(x => x.available), 1);
-                return (
-                  <span
-                    key={a.id}
-                    className="thin-bar"
-                    data-zero={a.available <= 0 || undefined}
-                    style={{ height: `${Math.max(6, (a.available / peak) * 100)}%` }}
-                  />
-                );
-              })}
+            <div className="shrink-0">
+              <DotMatrix
+                data={data.accounts.map(a => Math.max(0, a.available))}
+                cell={8}
+                rows={5}
+                color="var(--brand-strong)"
+                label={`Available to spend in each of ${data.accounts.length} accounts`}
+                format={(value, i) => `${data.accounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
+              />
             </div>
           )}
         </div>

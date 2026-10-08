@@ -5,12 +5,13 @@ import Link from 'next/link';
 import {
   CARDS,
   TRANSACTIONS,
+  bucketDaily,
   dailyCardSpend,
   getAccount,
   type PaymentCard,
   type Transaction,
 } from '@/lib/banking-data';
-import { BankCard } from '@/components/banking/BankCard';
+import { BankCard, DotMatrix } from '@/components/banking/BankCard';
 import Glyph, { glyphFor, GlyphTile } from '@/components/ui/Glyph';
 
 function fmt(n: number, currency = 'EUR') {
@@ -46,23 +47,26 @@ const CONTROLS: { key: ControlKey; label: string; desc: string; icon: string }[]
  * Data resolution
  *
  * Every figure on this page is summed from the card's own transactions over an
- * explicitly labelled window, so the headline total, the comb and the payment
+ * explicitly labelled window, so the headline total, the dot matrix and the payment
  * count can never disagree with each other.
  * ────────────────────────────────────────────────────────────────── */
 
 type LoadState = 'loading' | 'ready' | 'error';
 
-/** The comb, the headline total and the day count all come out of this one
-    series, so they cannot drift apart. */
+/** The dot matrix, the headline total and the day count all come out of this one
+    series, so they cannot drift apart. The chart draws three-day buckets of it. */
 function useCardSeries(cardId: string | undefined) {
   const series = useMemo(() => dailyCardSpend(WINDOW_DAYS, cardId), [cardId]);
+  /* Three-day totals: the panel is a narrow column, and 30 columns of dots in it
+     renders each one too small to compare. */
+  const chartSeries = useMemo(() => bucketDaily(series, 3), [series]);
   const total = series.reduce((sum, d) => sum + d.total, 0);
   const activeDays = series.filter(d => d.total > 0).length;
   const peak = series.reduce((m, d) => Math.max(m, d.total), 0);
   const from = series.length ? series[0].date : null;
   const to = series.length ? series[series.length - 1].date : null;
   const range = from && to ? `${shortDate(from)} – ${shortDate(to)}` : `last ${WINDOW_DAYS} days`;
-  return { series, total, activeDays, peak, range };
+  return { series, chartSeries, total, activeDays, peak, range };
 }
 
 interface CardsData {
@@ -194,7 +198,7 @@ export default function CardsPage() {
     [card, data]
   );
 
-  const { series, total: cardTotal, activeDays, peak, range } = useCardSeries(card?.id);
+  const { chartSeries, total: cardTotal, activeDays, peak, range } = useCardSeries(card?.id);
 
   /* The book-wide figure is the same series without the card filter, so it can
      never disagree with the per-card total above it. */
@@ -531,17 +535,14 @@ export default function CardsPage() {
                 </p>
 
                 <div className="mt-5 flex items-end gap-3">
-                  <div className="thin-bars flex-1">
-                    {series.map(d => (
-                      <span
-                        key={d.date}
-                        className="thin-bar"
-                        data-zero={d.total === 0 || undefined}
-                        data-active={(d.total === peak && d.total > 0) || undefined}
-                        title={`${shortDate(d.date)} · ${fmt(d.total)}`}
-                        style={{ height: d.total > 0 ? `${Math.max(5, (d.total / (peak || 1)) * 100)}%` : '2%' }}
-                      />
-                    ))}
+                  <div className="min-w-0 flex-1">
+                    <DotMatrix
+                      data={chartSeries.map(d => d.total)}
+                      box={{ width: 160, height: 56 }}
+                      stretch
+                      label={`Card spending in three-day totals over ${WINDOW_DAYS} days`}
+                      format={(value, i) => `To ${shortDate(chartSeries[i].date)} · ${fmt(value)}`}
+                    />
                   </div>
                   {peak > 0 && (
                     <div className="flex shrink-0 flex-col items-center gap-1">

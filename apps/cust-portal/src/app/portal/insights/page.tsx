@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   spendByCategory,
   bucketSpendByDay,
+  bucketDaily,
   savingsGoal,
   TRANSACTIONS,
   SCHEDULED_PAYMENTS,
@@ -300,13 +301,10 @@ export default function InsightsPage() {
   /* The KPI thumbnail is 30 days of daily figures, which is far too many dots to
      read at 72px. Collapsed into three-day sums — still the same money, just
      coarser, so the shape of the window survives at thumbnail size. */
-  const threeDayBuckets = useMemo(() => {
-    const out: number[] = [];
-    for (let i = 0; i < dailySpend.length; i += 3) {
-      out.push(dailySpend.slice(i, i + 3).reduce((sum, d) => sum + d.total, 0));
-    }
-    return out;
-  }, [dailySpend]);
+  const threeDayBuckets = useMemo(
+    () => bucketDaily(dailySpend, 3).map(d => d.total),
+    [dailySpend]
+  );
 
   const peak = useMemo(() => {
     const idx = dailySpend.reduce((best, d, i) => (d.total > dailySpend[best].total ? i : best), 0);

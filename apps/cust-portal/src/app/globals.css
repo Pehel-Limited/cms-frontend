@@ -932,26 +932,26 @@
 /* ─── KPI strip: one panel, hairline-divided cells ─── */
 .kpi-strip {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .kpi-cell {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 20px 24px;
+  gap: 12px;
+  padding: 16px;
 }
-.kpi-cell:not(:first-child) { border-top: 1px solid var(--hairline); }
+/* Hairlines follow the grid: a divider between columns, and one above the rows
+   that wrap onto a second line. */
+.kpi-cell:nth-child(even) { border-left: 1px solid var(--hairline); }
+.kpi-cell:nth-child(2n + 1):nth-child(n + 3) { border-top: 1px solid var(--hairline); }
 @media (min-width: 768px) {
-  .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .kpi-cell:nth-child(2) { border-top: 0; border-left: 1px solid var(--hairline); }
-  .kpi-cell:nth-child(3),
-  .kpi-cell:nth-child(4) { border-top: 1px solid var(--hairline); }
+  .kpi-cell { gap: 16px; padding: 20px 24px; }
 }
 @media (min-width: 1280px) {
   .kpi-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .kpi-cell:not(:first-child) { border-top: 0; }
-  .kpi-cell:not(:first-child) { border-left: 1px solid var(--hairline); }
+  .kpi-cell:nth-child(2n + 1):nth-child(n + 3) { border-top: 0; }
+  .kpi-cell:nth-child(n + 2) { border-left: 1px solid var(--hairline); }
 }
 .kpi-label {
   font-family: var(--font-display), Georgia, 'Times New Roman', serif;
@@ -1220,6 +1220,29 @@
   color: rgba(255, 255, 255, 0.88);
 }
 
+/* ─── Account rail (phones) ────────────────────────────────────────────
+   The fan needs width for its neighbours to sit beside the front card rather
+   than across it. Below 640px the accounts become a snap rail: one card centred
+   at a time, the next peeking off the right edge so it reads as swipeable. */
+.acct-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 16px 18px;
+}
+.acct-rail::-webkit-scrollbar { display: none; }
+.rail-card {
+  flex: 0 0 76%;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  transition: transform 0.2s ease;
+}
+.rail-card:active { transform: scale(0.98); }
+@media (min-width: 640px) { .acct-rail { display: none; } }
+
 /* ─── Fanned card stack ─── */
 .card-fan {
   --fan-step: 86px;
@@ -1247,34 +1270,9 @@
 .fan-card:focus-visible { outline-offset: 6px; }
 
 /* ─── Micro charts ──────────────────────────────────────────────────
-   Two CSS encodings: a comb of hairline strokes for a time series, and a
-   segmented composition bar with a leader line up to a marker pill. Each keeps
-   one dark "active" element so the eye has an anchor. Per-day dot grids are
-   drawn by <DotMatrix /> rather than here. */
-
-/* Hairline comb. Strokes are 2px and distributed edge to edge; anything wider
-   reads as a bar chart and loses the reference's lightness. */
-.thin-bars {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 2px;
-  height: 92px;
-}
-.thin-bar {
-  flex: 0 1 2px;
-  width: 2px;
-  border-radius: 1px;
-  /* Days with spend must read as ink; only the empty ones recede. A hairline
-     tone on both made the whole comb look missing. */
-  background: var(--text-muted);
-  opacity: 0.5;
-  transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s ease;
-}
-.thin-bar[data-zero='true'] { background: var(--hairline-strong); opacity: 1; }
-.thin-bar[data-active='true'] { background: var(--text-primary); opacity: 1; }
-:is(.dark) .thin-bar { opacity: 0.6; }
-:is(.dark) .thin-bar[data-active='true'] { background: var(--brand-strong); opacity: 1; }
+   Time series are drawn by <DotMatrix />, never by a stroke comb here — a row of
+   hairlines reads as straight lines, which is the encoding the user rejected.
+   What is left is the composition bar and the leader up to its marker pill. */
 
 /* The dark value marker the reference floats over a chart's peak, with a hairline
    leader dropping from it to the element it points at. */
@@ -1333,8 +1331,9 @@
   .glass-foot { padding: 12px 18px; }
   .kpi-cell { padding: 16px 18px; }
   .kpi-value { font-size: 25px; }
-  .card-fan { min-height: 210px; }
-  .fan-card { width: 224px; }
+  /* The rail replaces the fan outright on a phone rather than shrinking it: the
+     stack only reads as a stack when the neighbours sit beside the front card. */
+  .card-fan { display: none; }
 }
 
 

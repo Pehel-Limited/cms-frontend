@@ -470,6 +470,24 @@ export function dailySpendSeries(days = 14): DailySpend[] {
     transactions carrying a cardId — transfers and direct debits are excluded, so
     the two measure overlapping but different sets. Pass `cardId` to scope it to
     one card. */
+/**
+ * Collapse a daily series into `size`-day sums.
+ *
+ * A 30-day window is 30 columns, which stops being readable in a panel only ~160px
+ * wide — the dots shrink past the point where a taller column means anything. The
+ * money is unchanged, only the resolution, so the shape of the window survives.
+ * Each bucket carries the date it ends on.
+ */
+export function bucketDaily<T extends { date: string; total: number }>(series: T[], size = 3): T[] {
+  const out: T[] = [];
+  for (let i = 0; i < series.length; i += size) {
+    const slice = series.slice(i, i + size);
+    if (slice.length === 0) continue;
+    out.push({ ...slice[slice.length - 1], total: slice.reduce((sum, d) => sum + d.total, 0) });
+  }
+  return out;
+}
+
 export function dailyCardSpend(days: number, cardId?: string): { date: string; total: number }[] {
   const rows = TRANSACTIONS.filter(
     t => t.direction === 'OUT' && t.status === 'COMPLETED' && t.cardId && (!cardId || t.cardId === cardId)

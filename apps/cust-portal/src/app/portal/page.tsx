@@ -11,6 +11,7 @@ import {
   SCHEDULED_PAYMENTS,
   TRANSACTIONS,
   recentTransactions,
+  bucketDaily,
   dailyCardSpend,
   spendByCategory,
   totalBalanceEUR,
@@ -333,6 +334,23 @@ function EyeIcon({ open }: { open: boolean }) {
   );
 }
 
+/* The verbs, not the destinations — the bottom bar already carries Home, Accounts,
+   Payments and Applications on a phone. */
+const QUICK_ACTIONS = [
+  { href: '/portal/payments', label: 'Make a payment', icon:
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" /> },
+  { href: '/portal/payments', label: 'Transfer money', icon:
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /> },
+  { href: '/portal/transactions', label: 'Pay a bill', icon:
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /> },
+  { href: '/portal/documents', label: 'Statements', icon:
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /> },
+  { href: '/portal/products', label: 'Products', icon:
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /> },
+  { href: '/portal/ai-assistant', label: 'Rayva AI', icon:
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" /> },
+];
+
 /* ─── main component ─────────────────────────────────────────── */
 export default function PortalDashboard() {
   const [hideBalance, setHideBalance] = useState(false);
@@ -442,6 +460,9 @@ export default function PortalDashboard() {
     [dailySpend]
   );
   const dailyTotal = useMemo(() => dailySpend.reduce((s, d) => s + d.total, 0), [dailySpend]);
+  /* Three-day totals. The panel is a quarter of the row, so 30 columns of dots
+     would each be too small to compare against their neighbour. */
+  const dailyBuckets = useMemo(() => bucketDaily(dailySpend, 3), [dailySpend]);
 
   const cardDaily = useMemo(() => dailyCardSpend(30), []);
   const cardPeak = useMemo(
@@ -449,6 +470,7 @@ export default function PortalDashboard() {
     [cardDaily]
   );
   const cardSpendTotal = useMemo(() => cardDaily.reduce((s, d) => s + d.total, 0), [cardDaily]);
+  const cardBuckets = useMemo(() => bucketDaily(cardDaily, 3), [cardDaily]);
 
   /* Credit utilisation is summed across the credit cards only — a debit card has
      no limit, so folding it in would divide two different kinds of number. */
@@ -463,12 +485,14 @@ export default function PortalDashboard() {
           <h1>; this page's heading is not part of the visual design. */}
       <h1 className="sr-only">Overview</h1>
 
-      {/* ══ KPI strip — one frosted bar, hairline-divided. The only place the
-             headline money figures live. ══ */}
+      {/* ══ Money ══
+          The one panel that answers "what do I have". Ordered first because that is
+          the first question on a phone, and the four figures share a single panel so
+          the answer is above the fold rather than below four stacked rows. */}
       <section className="glass-panel" aria-label="Money summary">
         {/* Kept out of the cells so every value starts on the same baseline. */}
         <div
-          className="flex items-center justify-between gap-3 px-6 py-3"
+          className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6"
           style={{ borderBottom: '1px solid var(--hairline)' }}
         >
           <span className="badge badge-neutral !text-[11px]">Sample data</span>
@@ -517,390 +541,13 @@ export default function PortalDashboard() {
         </div>
       </section>
 
-      {/* ══ Accounts as a fanned stack | where the money went ══ */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <section className="glass-panel xl:col-span-7" aria-label="Your accounts">
-          <div className="glass-head">
-            <div>
-              <h2 className="glass-title">Accounts</h2>
-              <p className="glass-sub">Tap a card to bring it forward</p>
-            </div>
-            <PillLink href="/portal/accounts">View all</PillLink>
-          </div>
-
-          {/* Neighbour labels either side of the focused card, so the stack reads
-              as a set rather than four disconnected tiles. */}
-          <div className="flex items-start justify-between gap-3 px-6">
-            <button
-              type="button"
-              onClick={() => stepAccount(-1)}
-              className="min-w-0 flex-1 text-left"
-              aria-label="Previous account"
-            >
-              <p className="serif truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                {accounts[(selectedAccount - 1 + accounts.length) % accounts.length]?.name}
-              </p>
-            </button>
-            <div className="shrink-0 text-center">
-              <p className="serif text-[26px] font-medium leading-tight" style={{ color: 'var(--text-primary)' }}>
-                {shownAccount?.name}
-              </p>
-              <p className="num text-xl font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                {shownAccount && (
-                  <BalanceAmount
-                    amount={shownAccount.balance}
-                    currency={shownAccount.currency}
-                    hidden={hideBalance}
-                    symbolClassName="text-sm mr-0.5"
-                    centsClassName="text-sm opacity-60"
-                  />
-                )}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => stepAccount(1)}
-              className="min-w-0 flex-1 text-right"
-              aria-label="Next account"
-            >
-              <p className="serif truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                {accounts[(selectedAccount + 1) % accounts.length]?.name}
-              </p>
-            </button>
-          </div>
-
-          <div className="card-fan mt-4 overflow-hidden">
-            {accounts.map((acc, i) => {
-              let d = i - selectedAccount;
-              if (d > accounts.length / 2) d -= accounts.length;
-              if (d < -accounts.length / 2) d += accounts.length;
-              const featured = d === 0;
-              return (
-                <button
-                  key={acc.id}
-                  type="button"
-                  onClick={() => setSelectedAccount(i)}
-                  aria-label={acc.name}
-                  aria-pressed={featured}
-                  className="fan-card"
-                  style={{
-                    transform: `translateX(calc(var(--fan-step) * ${d})) translateY(${featured ? 'var(--fan-lift)' : 'var(--fan-drop)'}) scale(${featured ? 1 : 0.9}) rotate(${d * -2}deg)`,
-                    zIndex: 30 - Math.abs(d) * 10,
-                    /* Only the front card stays fully opaque; anything see-through
-                       on top of its neighbours reads as one muddy shape. */
-                    opacity: featured ? 1 : Math.abs(d) === 1 ? 0.62 : 0.32,
-                    filter: featured ? 'none' : 'saturate(0.65)',
-                  }}
-                >
-                  <AccountPlastic acc={acc} hidden={hideBalance} featured={featured} />
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-col items-center gap-4 px-6 pb-6">
-            <div className="flex items-center gap-2" role="tablist" aria-label="Choose account">
-              {accounts.map((acc, i) => (
-                <button
-                  key={acc.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={i === selectedAccount}
-                  aria-label={acc.name}
-                  onClick={() => setSelectedAccount(i)}
-                  className="h-2.5 rounded-full transition-all"
-                  style={{
-                    width: i === selectedAccount ? 26 : 10,
-                    background: i === selectedAccount ? 'var(--brand)' : 'var(--hairline-strong)',
-                  }}
-                />
-              ))}
-            </div>
-
-            {shownAccount?.type === 'SAVINGS' && goal.target > 0 && (
-              <div
-                className="w-full max-w-sm"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={goal.target}
-                aria-valuenow={goal.saved}
-                aria-label={`Savings goal: ${Math.round(goalPct)}% of target`}
-              >
-                <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--hairline)' }}>
-                  <div className="h-full rounded-full" style={{ width: `${goalPct}%`, background: 'var(--brand)' }} />
-                </div>
-                <p className="mt-2 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {Math.round(goalPct)}% of {hideBalance ? '••••••' : fmtEUR(goal.target)} goal
-                </p>
-              </div>
-            )}
-
-            <Link
-              href={`/portal/accounts/${shownAccount?.id}`}
-              className="pill-btn"
-            >
-              Open {shownAccount?.name}
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-        </section>
-
-        {/* Spending categories — the reference's 2-up grid over a stacked bar. */}
-        <section className="glass-panel flex flex-col xl:col-span-5" aria-label="Where the money went">
-          <div className="glass-head">
-            <div>
-              <h2 className="glass-title">Spending categories</h2>
-              <p className="glass-sub">Settled spending, excludes transfers</p>
-            </div>
-            <PillLink href="/portal/insights">Insights</PillLink>
-          </div>
-          <div className="glass-body flex-1">
-            <div className="grid grid-cols-2 gap-x-6">
-              {topSpend.slice(0, 4).map(c => (
-                <div key={c.category} className="cat-cell">
-                  <p className="cat-name flex items-center gap-2">
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: c.color }}
-                      aria-hidden="true"
-                    />
-                    {c.category}
-                  </p>
-                  <p className="num text-[22px] font-bold">
-                    {mask(fmtEUR(c.total))}
-                  </p>
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {Math.round(c.pct)}% of spend
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4" aria-hidden="true">
-              <div className="stack-bar">
-                {topSpend.map((c, i) => (
-                  <span
-                    key={c.category}
-                    className="stack-seg"
-                    data-comb={i === 0 || undefined}
-                    style={{
-                      width: `${c.pct}%`,
-                      background: i === 0 ? undefined : c.color,
-                      color: c.color,
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="mt-2 flex items-center justify-between text-xs" style={{ color: 'var(--text-muted)' }}>
-                <span>{topSpend[0]?.category} leads at {Math.round(topSpend[0]?.pct ?? 0)}%</span>
-                <span>{spend.length} categories</span>
-              </div>
-            </div>
-          </div>
-          <p className="glass-foot">
-            {mask(fmtEUR(spendTotal))} across {spend.length} categories
-            {spendWindow ? ` · ${spendWindow}` : ''}
-          </p>
-        </section>
-      </div>
-
-      {/* ══ Daily spending (hairline comb) | Card usage (dots) | Utilisation ══ */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-12">
-        <section className="glass-panel lg:col-span-1 xl:col-span-4" aria-label="Daily spending">
-          <div className="glass-head">
-            <div>
-              <h2 className="glass-title">Daily spending</h2>
-              <p className="glass-sub">Last 30 days</p>
-            </div>
-            <PillLink href="/portal/insights">View all</PillLink>
-          </div>
-          <div className="glass-body">
-            <p className="num text-[26px] font-bold">{mask(fmtEUR(dailyTotal))}</p>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              over {dailySpend.filter(d => d.total > 0).length} active days
-            </p>
-
-            <div className="mt-5 flex items-end gap-3">
-              <div className="thin-bars flex-1">
-                {dailySpend.map(d => {
-                  const ratio = dailyPeak.total > 0 ? d.total / dailyPeak.total : 0;
-                  /* Heights stay proportional. The only exception is a 5% floor for
-                     days that had any spend at all — without it a €5.60 rail fare
-                     against a €410 flight is sub-pixel, and "no spend" becomes
-                     indistinguishable from "small spend". */
-                  return (
-                    <span
-                      key={d.date}
-                      className="thin-bar"
-                      data-zero={d.total === 0 || undefined}
-                      data-active={(d.total === dailyPeak.total && d.total > 0) || undefined}
-                      title={`${new Date(d.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · ${fmtEUR(d.total)}`}
-                      style={{ height: d.total > 0 ? `${Math.max(5, ratio * 100)}%` : '2%' }}
-                    />
-                  );
-                })}
-              </div>
-              {dailyPeak.total > 0 && (
-                <div className="flex shrink-0 flex-col items-center gap-1">
-                  <span className="chart-marker">
-                    {Math.round((dailyPeak.total / (dailyTotal || 1)) * 100)}%
-                  </span>
-                  <span className="marker-leader h-8" aria-hidden="true" />
-                  <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                    peak
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="glass-panel lg:col-span-1 xl:col-span-4" aria-label="Card usage">
-          <div className="glass-head">
-            <div>
-              <h2 className="glass-title">Card usage</h2>
-              <p className="glass-sub">Card-funded payments</p>
-            </div>
-            <PillLink href="/portal/cards">Manage</PillLink>
-          </div>
-          <div className="glass-body">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="num text-[26px] font-bold">{mask(fmtEUR(cardSpendTotal))}</p>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  last 30 days
-                </p>
-              </div>
-              {cardPeak.total > 0 && (
-                <span className="chart-marker mb-1">
-                  {Math.round((cardPeak.total / (cardSpendTotal || 1)) * 100)}%
-                </span>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <DotMatrix
-                data={cardDaily.map(d => d.total)}
-                box={{ width: 360, height: 72 }}
-                stretch
-                label={`Card-funded spending by day, last ${cardDaily.length} days`}
-                format={(value, i) =>
-                  `${new Date(cardDaily[i].date).toLocaleDateString(undefined, {
-                    day: 'numeric',
-                    month: 'short',
-                  })} · ${fmtEUR(value)}`
-                }
-              />
-            </div>
-            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-              Excludes transfers and direct debits, which carry no card.
-            </p>
-          </div>
-        </section>
-
-        <section className="glass-panel lg:col-span-2 xl:col-span-4" aria-label="Card utilisation">
-          <div className="glass-head">
-            <div>
-              <h2 className="glass-title">Card utilisation</h2>
-              <p className="glass-sub">Credit used against total limit</p>
-            </div>
-            <PillLink href="/portal/cards">View all</PillLink>
-          </div>
-
-          {creditCards.length === 0 ? (
-            <p className="glass-body text-sm" style={{ color: 'var(--text-muted)' }}>
-              No credit cards on this profile yet.
-            </p>
-          ) : (
-            <div className="glass-body">
-              <div className="flex items-center gap-6">
-                {/* The ring is drawn from the same two numbers the caption states. */}
-                <div className="relative h-[104px] w-[104px] shrink-0" aria-hidden="true">
-                  <svg viewBox="0 0 104 104" className="h-full w-full -rotate-90">
-                    <circle
-                      cx="52" cy="52" r="44" fill="none"
-                      stroke="var(--hairline-strong)" strokeWidth="9" strokeLinecap="round"
-                    />
-                    <circle
-                      cx="52" cy="52" r="44" fill="none"
-                      stroke="var(--brand)" strokeWidth="9" strokeLinecap="round"
-                      strokeDasharray={`${(utilPct / 100) * 2 * Math.PI * 44} ${2 * Math.PI * 44}`}
-                    />
-                  </svg>
-                  <span className="num absolute inset-0 flex items-center justify-center text-xl font-bold">
-                    {utilPct}%
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <p className="num text-[24px] font-bold">{mask(fmtEUR(creditUsed))}</p>
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                    of {mask(fmtEUR(creditLimit))} available
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {creditCards.map(c => {
-                  const pct = Math.min(100, Math.round(((c.creditUsed ?? 0) / (c.creditLimit ?? 1)) * 100));
-                  return (
-                    <div key={c.id}>
-                      <div className="flex items-baseline justify-between gap-3 text-sm">
-                        <span className="truncate font-medium" style={{ color: 'var(--text-secondary)' }}>
-                          {c.label} <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>•••• {c.last4}</span>
-                        </span>
-                        <span className="num shrink-0 font-semibold">{pct}%</span>
-                      </div>
-                      <div
-                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full"
-                        style={{ background: 'var(--hairline)' }}
-                        role="progressbar"
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={pct}
-                        aria-label={`${c.label} utilisation`}
-                      >
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--brand)' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* ══ Quick actions ══ */}
+      {/* ══ Quick actions ══
+          Second, not fourth: on a phone these are thumb-reachable and they are what
+          the visit is usually for. The bottom bar already carries the four main
+          destinations, so this row is for the verbs. */}
       <nav aria-label="Quick actions" className="glass-panel">
-        <div className="grid grid-cols-3 gap-1 p-3 sm:grid-cols-6">
-          {[
-            {
-              href: '/portal/payments', label: 'Make a payment', icon:
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.27 3.13a.6.6 0 01.82-.73l16.5 8.05a.6.6 0 010 1.08l-16.5 8.06a.6.6 0 01-.82-.73L6 12zm0 0h6" />
-            },
-            {
-              href: '/portal/payments', label: 'Transfer money', icon:
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-            },
-            {
-              href: '/portal/transactions', label: 'Pay a bill', icon:
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
-            },
-            {
-              href: '/portal/documents', label: 'Statements', icon:
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            },
-            {
-              href: '/portal/products', label: 'Products', icon:
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            },
-            {
-              href: '/portal/ai-assistant', label: 'Rayva AI', icon:
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-            },
-          ].map(a => (
+        <div className="grid grid-cols-3 gap-1 p-2 sm:grid-cols-6 sm:p-3">
+          {QUICK_ACTIONS.map(a => (
             <Link
               key={a.label}
               href={a.href}
@@ -919,7 +566,148 @@ export default function PortalDashboard() {
         </div>
       </nav>
 
-      {/* ══ Activity: transactions | repeat shortcuts + upcoming payments ══ */}
+      {/* ══ Accounts ══
+          Two readings of the same four accounts. On a phone the fan collapses its
+          neighbours on top of the featured card, so the accounts become a swipeable
+          rail where each card is the tap target. From 640px the fan and its stepper
+          return, because there is width for the stack to read as a stack. */}
+      <section className="glass-panel" aria-label="Your accounts">
+        <div className="glass-head">
+          <div>
+            <h2 className="glass-title">Accounts</h2>
+            <p className="glass-sub sm:hidden">{accounts.length} accounts · tap to open</p>
+            <p className="glass-sub hidden sm:block">Tap a card to bring it forward</p>
+          </div>
+          <PillLink href="/portal/accounts">View all</PillLink>
+        </div>
+
+        {/* Mobile: a snap rail. Each card links straight to its account. */}
+        <div className="acct-rail">
+          {accounts.map(acc => (
+            <Link key={acc.id} href={`/portal/accounts/${acc.id}`} className="rail-card">
+              <AccountPlastic acc={acc} hidden={hideBalance} featured />
+            </Link>
+          ))}
+        </div>
+
+        {/* sm and up: the fan, with the neighbours named either side of the front card
+            so the stack reads as a set rather than four disconnected tiles. */}
+        <div className="hidden items-start justify-between gap-3 px-6 sm:flex">
+          <button
+            type="button"
+            onClick={() => stepAccount(-1)}
+            className="min-w-0 flex-1 text-left"
+            aria-label="Previous account"
+          >
+            <p className="serif truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+              {accounts[(selectedAccount - 1 + accounts.length) % accounts.length]?.name}
+            </p>
+          </button>
+          <div className="shrink-0 text-center">
+            <p className="serif text-[26px] font-medium leading-tight" style={{ color: 'var(--text-primary)' }}>
+              {shownAccount?.name}
+            </p>
+            <p className="num text-xl font-semibold" style={{ color: 'var(--text-secondary)' }}>
+              {shownAccount && (
+                <BalanceAmount
+                  amount={shownAccount.balance}
+                  currency={shownAccount.currency}
+                  hidden={hideBalance}
+                  symbolClassName="text-sm mr-0.5"
+                  centsClassName="text-sm opacity-60"
+                />
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => stepAccount(1)}
+            className="min-w-0 flex-1 text-right"
+            aria-label="Next account"
+          >
+            <p className="serif truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+              {accounts[(selectedAccount + 1) % accounts.length]?.name}
+            </p>
+          </button>
+        </div>
+
+        <div className="card-fan mt-4 overflow-hidden">
+          {accounts.map((acc, i) => {
+            let d = i - selectedAccount;
+            if (d > accounts.length / 2) d -= accounts.length;
+            if (d < -accounts.length / 2) d += accounts.length;
+            const featured = d === 0;
+            return (
+              <button
+                key={acc.id}
+                type="button"
+                onClick={() => setSelectedAccount(i)}
+                aria-label={acc.name}
+                aria-pressed={featured}
+                className="fan-card"
+                style={{
+                  transform: `translateX(calc(var(--fan-step) * ${d})) translateY(${featured ? 'var(--fan-lift)' : 'var(--fan-drop)'}) scale(${featured ? 1 : 0.9}) rotate(${d * -2}deg)`,
+                  zIndex: 30 - Math.abs(d) * 10,
+                  /* Only the front card stays fully opaque; anything see-through
+                     on top of its neighbours reads as one muddy shape. */
+                  opacity: featured ? 1 : Math.abs(d) === 1 ? 0.62 : 0.32,
+                  filter: featured ? 'none' : 'saturate(0.65)',
+                }}
+              >
+                <AccountPlastic acc={acc} hidden={hideBalance} featured={featured} />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="hidden flex-col items-center gap-4 px-6 pb-6 sm:flex">
+          <div className="flex items-center gap-2" role="tablist" aria-label="Choose account">
+            {accounts.map((acc, i) => (
+              <button
+                key={acc.id}
+                type="button"
+                role="tab"
+                aria-selected={i === selectedAccount}
+                aria-label={acc.name}
+                onClick={() => setSelectedAccount(i)}
+                className="h-2.5 rounded-full transition-all"
+                style={{
+                  width: i === selectedAccount ? 26 : 10,
+                  background: i === selectedAccount ? 'var(--brand)' : 'var(--hairline-strong)',
+                }}
+              />
+            ))}
+          </div>
+
+          {shownAccount?.type === 'SAVINGS' && goal.target > 0 && (
+            <div
+              className="w-full max-w-sm"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={goal.target}
+              aria-valuenow={goal.saved}
+              aria-label={`Savings goal: ${Math.round(goalPct)}% of target`}
+            >
+              <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--hairline)' }}>
+                <div className="h-full rounded-full" style={{ width: `${goalPct}%`, background: 'var(--brand)' }} />
+              </div>
+              <p className="mt-2 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                {Math.round(goalPct)}% of {hideBalance ? '••••••' : fmtEUR(goal.target)} goal
+              </p>
+            </div>
+          )}
+
+          <Link href={`/portal/accounts/${shownAccount?.id}`} className="pill-btn">
+            Open {shownAccount?.name}
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+      </section>
+
+      {/* ══ Activity: transactions | repeat shortcuts + upcoming payments ══
+          What happened and what is about to, before anything analytical. */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
 
         {/* Recent transactions — grouped by day */}
@@ -1040,11 +828,11 @@ export default function PortalDashboard() {
             <PillLink href="/portal/applications">View all</PillLink>
           </div>
           {appLoading ? (
-            <div className="space-y-3 px-6 pb-6">
+            <div className="space-y-3 px-4 pb-6 sm:px-6">
               {[1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
           ) : recentApps.length === 0 ? (
-            <div className="px-6 pb-6">
+            <div className="px-4 pb-6 sm:px-6">
               <div className="empty-state">
                 <div className="empty-state-icon">
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -1058,7 +846,7 @@ export default function PortalDashboard() {
             </div>
           ) : (
             <>
-              <div className="px-6">
+              <div className="px-4 sm:px-6">
                 <div className="rounded-2xl" style={{ border: '1px solid var(--hairline)' }}>
                 {recentApps.map(app => {
                   const updates = signalsByApp.get(app.applicationId) ?? [];
@@ -1096,7 +884,7 @@ export default function PortalDashboard() {
                         {!terminal.has(app.status) && journeyStep(app.status) >= 0 && (
                           <div className="mt-2 flex items-center gap-2">
                             <div
-                              className="h-1 w-24 overflow-hidden rounded-full"
+                              className="h-1 w-16 overflow-hidden rounded-full sm:w-24"
                               style={{ backgroundColor: 'var(--hairline-strong)' }}
                             >
                               <div
@@ -1127,7 +915,7 @@ export default function PortalDashboard() {
                 </div>
               </div>
               <div
-                className="glass-foot mt-4 flex items-center justify-between !text-sm"
+                className="glass-foot mt-4 flex flex-wrap items-center justify-between gap-2 !text-sm"
                 style={{ color: 'var(--text-muted)' }}
               >
                 <span>{activeApps.length} active · {apps.length} total</span>
@@ -1140,7 +928,7 @@ export default function PortalDashboard() {
         </section>
 
         {/* Relationship manager + support */}
-        <section className="glass-panel flex flex-col p-6 xl:col-span-4" aria-label="Your relationship manager">
+        <section className="glass-panel flex flex-col p-4 sm:p-6 xl:col-span-4" aria-label="Your relationship manager">
           <div className="flex items-center gap-3">
             <div
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -1183,6 +971,227 @@ export default function PortalDashboard() {
               Need help? Contact support
             </Link>
           </div>
+        </section>
+      </div>
+
+      {/* ══ The insight band ══
+          Last, deliberately. Categories, daily spend, card usage and utilisation all
+          describe money already gone; a customer opens the app for their balance and
+          their activity first, and the full analysis has its own page. */}
+      <section className="glass-panel" aria-label="Where the money went">
+        <div className="glass-head">
+          <div>
+            <h2 className="glass-title">Spending categories</h2>
+            <p className="glass-sub">Settled spending, excludes transfers</p>
+          </div>
+          <PillLink href="/portal/insights">Insights</PillLink>
+        </div>
+        <div className="glass-body">
+          <div className="grid grid-cols-2 gap-x-6 sm:grid-cols-4">
+            {topSpend.slice(0, 4).map(c => (
+              <div key={c.category} className="cat-cell">
+                <p className="cat-name flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: c.color }}
+                    aria-hidden="true"
+                  />
+                  {c.category}
+                </p>
+                <p className="num text-[22px] font-bold">
+                  {mask(fmtEUR(c.total))}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {Math.round(c.pct)}% of spend
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4" aria-hidden="true">
+            <div className="stack-bar">
+              {topSpend.map((c, i) => (
+                <span
+                  key={c.category}
+                  className="stack-seg"
+                  data-comb={i === 0 || undefined}
+                  style={{
+                    width: `${c.pct}%`,
+                    background: i === 0 ? undefined : c.color,
+                    color: c.color,
+                  }}
+                />
+              ))}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs" style={{ color: 'var(--text-muted)' }}>
+              <span>{topSpend[0]?.category} leads at {Math.round(topSpend[0]?.pct ?? 0)}%</span>
+              <span>{spend.length} categories</span>
+            </div>
+          </div>
+        </div>
+        <p className="glass-foot">
+          {mask(fmtEUR(spendTotal))} across {spend.length} categories
+          {spendWindow ? ` · ${spendWindow}` : ''}
+        </p>
+      </section>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-12">
+        <section className="glass-panel lg:col-span-1 xl:col-span-4" aria-label="Daily spending">
+          <div className="glass-head">
+            <div>
+              <h2 className="glass-title">Daily spending</h2>
+              <p className="glass-sub">Last 30 days</p>
+            </div>
+            <PillLink href="/portal/insights">View all</PillLink>
+          </div>
+          <div className="glass-body">
+            <p className="num text-[26px] font-bold">{mask(fmtEUR(dailyTotal))}</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              over {dailySpend.filter(d => d.total > 0).length} active days
+            </p>
+
+            <div className="mt-5 flex items-end gap-3">
+              <div className="min-w-0 flex-1">
+                <DotMatrix
+                  data={dailyBuckets.map(d => d.total)}
+                  box={{ width: 160, height: 56 }}
+                  stretch
+                  label={`Spending in three-day totals over ${dailySpend.length} days`}
+                  format={(value, i) =>
+                    `To ${new Date(dailyBuckets[i].date).toLocaleDateString(undefined, {
+                      day: 'numeric',
+                      month: 'short',
+                    })} · ${fmtEUR(value)}`
+                  }
+                />
+              </div>
+              {dailyPeak.total > 0 && (
+                <div className="flex shrink-0 flex-col items-center gap-1">
+                  <span className="chart-marker">
+                    {Math.round((dailyPeak.total / (dailyTotal || 1)) * 100)}%
+                  </span>
+                  <span className="marker-leader h-8" aria-hidden="true" />
+                  <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    peak
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="glass-panel lg:col-span-1 xl:col-span-4" aria-label="Card usage">
+          <div className="glass-head">
+            <div>
+              <h2 className="glass-title">Card usage</h2>
+              <p className="glass-sub">Card-funded payments</p>
+            </div>
+            <PillLink href="/portal/cards">Manage</PillLink>
+          </div>
+          <div className="glass-body">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="num text-[26px] font-bold">{mask(fmtEUR(cardSpendTotal))}</p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  last 30 days
+                </p>
+              </div>
+              {cardPeak.total > 0 && (
+                <span className="chart-marker mb-1">
+                  {Math.round((cardPeak.total / (cardSpendTotal || 1)) * 100)}%
+                </span>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <DotMatrix
+                data={cardBuckets.map(d => d.total)}
+                box={{ width: 160, height: 56 }}
+                stretch
+                label={`Card-funded spending in three-day totals, last ${cardDaily.length} days`}
+                format={(value, i) =>
+                  `To ${new Date(cardBuckets[i].date).toLocaleDateString(undefined, {
+                    day: 'numeric',
+                    month: 'short',
+                  })} · ${fmtEUR(value)}`
+                }
+              />
+            </div>
+            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+              Excludes transfers and direct debits, which carry no card.
+            </p>
+          </div>
+        </section>
+
+        <section className="glass-panel lg:col-span-2 xl:col-span-4" aria-label="Card utilisation">
+          <div className="glass-head">
+            <div>
+              <h2 className="glass-title">Card utilisation</h2>
+              <p className="glass-sub">Credit used against total limit</p>
+            </div>
+            <PillLink href="/portal/cards">View all</PillLink>
+          </div>
+
+          {creditCards.length === 0 ? (
+            <p className="glass-body text-sm" style={{ color: 'var(--text-muted)' }}>
+              No credit cards on this profile yet.
+            </p>
+          ) : (
+            <div className="glass-body">
+              <div className="flex items-center gap-6">
+                {/* The ring is drawn from the same two numbers the caption states. */}
+                <div className="relative h-[104px] w-[104px] shrink-0" aria-hidden="true">
+                  <svg viewBox="0 0 104 104" className="h-full w-full -rotate-90">
+                    <circle
+                      cx="52" cy="52" r="44" fill="none"
+                      stroke="var(--hairline-strong)" strokeWidth="9" strokeLinecap="round"
+                    />
+                    <circle
+                      cx="52" cy="52" r="44" fill="none"
+                      stroke="var(--brand)" strokeWidth="9" strokeLinecap="round"
+                      strokeDasharray={`${(utilPct / 100) * 2 * Math.PI * 44} ${2 * Math.PI * 44}`}
+                    />
+                  </svg>
+                  <span className="num absolute inset-0 flex items-center justify-center text-xl font-bold">
+                    {utilPct}%
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <p className="num text-[24px] font-bold">{mask(fmtEUR(creditUsed))}</p>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    of {mask(fmtEUR(creditLimit))} available
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {creditCards.map(c => {
+                  const pct = Math.min(100, Math.round(((c.creditUsed ?? 0) / (c.creditLimit ?? 1)) * 100));
+                  return (
+                    <div key={c.id}>
+                      <div className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="truncate font-medium" style={{ color: 'var(--text-secondary)' }}>
+                          {c.label} <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>•••• {c.last4}</span>
+                        </span>
+                        <span className="num shrink-0 font-semibold">{pct}%</span>
+                      </div>
+                      <div
+                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full"
+                        style={{ background: 'var(--hairline)' }}
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={pct}
+                        aria-label={`${c.label} utilisation`}
+                      >
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--brand)' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </div>

@@ -254,23 +254,13 @@ function KpiCell({
 
 /* An account rendered as card art. These are accounts rather than cards, so the
    face carries the account name, balance and masked number. */
-function AccountPlastic({
-  acc,
-  hidden,
-  featured,
-}: {
-  acc: BankAccount;
-  hidden: boolean;
-  featured: boolean;
-}) {
+function AccountPlastic({ acc, hidden }: { acc: BankAccount; hidden: boolean }) {
   return (
     <div
       className="relative aspect-[1.586] w-full overflow-hidden rounded-2xl p-4 text-white"
       style={{
         background: acc.gradient,
-        boxShadow: featured
-          ? '0 30px 52px -24px rgba(28, 8, 30, 0.8), 0 6px 14px -8px rgba(28, 8, 30, 0.5)'
-          : '0 16px 30px -22px rgba(28, 8, 30, 0.7)',
+        boxShadow: '0 16px 30px -22px rgba(28, 8, 30, 0.7)',
       }}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.26),transparent_55%)]" />
@@ -396,7 +386,6 @@ export default function PortalDashboard() {
   const [appLoading, setAppLoading] = useState(true);
   const [taskCount, setTaskCount] = useState(0);
   const [realSignals, setRealSignals] = useState<CustomerSignal[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState(0);
 
   useEffect(() => {
     applicationService
@@ -445,10 +434,6 @@ export default function PortalDashboard() {
     [apps]
   );
   const mask = useCallback((s: string) => (hideBalance ? '••••••' : s), [hideBalance]);
-
-  const shownAccount = accounts[selectedAccount] ?? accounts[0];
-  const stepAccount = (dir: number) =>
-    setSelectedAccount(i => (i + dir + accounts.length) % accounts.length);
 
   const goalPct = goal.target > 0 ? Math.min(100, (goal.saved / goal.target) * 100) : 0;
 
@@ -567,146 +552,32 @@ export default function PortalDashboard() {
       </nav>
 
       {/* ══ Accounts ══
-          Two readings of the same four accounts. On a phone the fan collapses its
-          neighbours on top of the featured card, so the accounts become a swipeable
-          rail where each card is the tap target. From 640px the fan and its stepper
-          return, because there is width for the stack to read as a stack. */}
+          One list of cards, each a direct link. On a phone it is a swipe rail; from
+          640px they sit inline so all four are readable at once. Nothing is selected
+          or brought forward here — every card already carries its own name, balance
+          and number, so the fan's front-card readout only existed because the fan
+          hid the others. */}
       <section className="glass-panel" aria-label="Your accounts">
         <div className="glass-head">
           <div>
             <h2 className="glass-title">Accounts</h2>
-            <p className="glass-sub sm:hidden">{accounts.length} accounts · tap to open</p>
-            <p className="glass-sub hidden sm:block">Tap a card to bring it forward</p>
+            <p className="glass-sub">
+              {accounts.length} accounts · tap one to open it
+            </p>
           </div>
           <PillLink href="/portal/accounts">View all</PillLink>
         </div>
 
-        {/* Mobile: a snap rail. Each card links straight to its account. */}
-        <div className="acct-rail">
+        <div className="acct-list">
           {accounts.map(acc => (
-            <Link key={acc.id} href={`/portal/accounts/${acc.id}`} className="rail-card">
-              <AccountPlastic acc={acc} hidden={hideBalance} featured />
+            <Link key={acc.id} href={`/portal/accounts/${acc.id}`} aria-label={acc.name}>
+              <AccountPlastic acc={acc} hidden={hideBalance} />
             </Link>
           ))}
         </div>
-
-        {/* sm and up: the fan, with the neighbours named either side of the front card
-            so the stack reads as a set rather than four disconnected tiles. */}
-        <div className="hidden items-start justify-between gap-3 px-6 sm:flex">
-          <button
-            type="button"
-            onClick={() => stepAccount(-1)}
-            className="min-w-0 flex-1 text-left"
-            aria-label="Previous account"
-          >
-            <p className="serif truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-              {accounts[(selectedAccount - 1 + accounts.length) % accounts.length]?.name}
-            </p>
-          </button>
-          <div className="shrink-0 text-center">
-            <p className="serif text-[26px] font-medium leading-tight" style={{ color: 'var(--text-primary)' }}>
-              {shownAccount?.name}
-            </p>
-            <p className="num text-xl font-semibold" style={{ color: 'var(--text-secondary)' }}>
-              {shownAccount && (
-                <BalanceAmount
-                  amount={shownAccount.balance}
-                  currency={shownAccount.currency}
-                  hidden={hideBalance}
-                  symbolClassName="text-sm mr-0.5"
-                  centsClassName="text-sm opacity-60"
-                />
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => stepAccount(1)}
-            className="min-w-0 flex-1 text-right"
-            aria-label="Next account"
-          >
-            <p className="serif truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-              {accounts[(selectedAccount + 1) % accounts.length]?.name}
-            </p>
-          </button>
-        </div>
-
-        <div className="card-fan mt-4 overflow-hidden">
-          {accounts.map((acc, i) => {
-            let d = i - selectedAccount;
-            if (d > accounts.length / 2) d -= accounts.length;
-            if (d < -accounts.length / 2) d += accounts.length;
-            const featured = d === 0;
-            return (
-              <button
-                key={acc.id}
-                type="button"
-                onClick={() => setSelectedAccount(i)}
-                aria-label={acc.name}
-                aria-pressed={featured}
-                className="fan-card"
-                style={{
-                  transform: `translateX(calc(var(--fan-step) * ${d})) translateY(${featured ? 'var(--fan-lift)' : 'var(--fan-drop)'}) scale(${featured ? 1 : 0.9}) rotate(${d * -2}deg)`,
-                  zIndex: 30 - Math.abs(d) * 10,
-                  /* Only the front card stays fully opaque; anything see-through
-                     on top of its neighbours reads as one muddy shape. */
-                  opacity: featured ? 1 : Math.abs(d) === 1 ? 0.62 : 0.32,
-                  filter: featured ? 'none' : 'saturate(0.65)',
-                }}
-              >
-                <AccountPlastic acc={acc} hidden={hideBalance} featured={featured} />
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="hidden flex-col items-center gap-4 px-6 pb-6 sm:flex">
-          <div className="flex items-center gap-2" role="tablist" aria-label="Choose account">
-            {accounts.map((acc, i) => (
-              <button
-                key={acc.id}
-                type="button"
-                role="tab"
-                aria-selected={i === selectedAccount}
-                aria-label={acc.name}
-                onClick={() => setSelectedAccount(i)}
-                className="h-2.5 rounded-full transition-all"
-                style={{
-                  width: i === selectedAccount ? 26 : 10,
-                  background: i === selectedAccount ? 'var(--brand)' : 'var(--hairline-strong)',
-                }}
-              />
-            ))}
-          </div>
-
-          {shownAccount?.type === 'SAVINGS' && goal.target > 0 && (
-            <div
-              className="w-full max-w-sm"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={goal.target}
-              aria-valuenow={goal.saved}
-              aria-label={`Savings goal: ${Math.round(goalPct)}% of target`}
-            >
-              <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--hairline)' }}>
-                <div className="h-full rounded-full" style={{ width: `${goalPct}%`, background: 'var(--brand)' }} />
-              </div>
-              <p className="mt-2 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                {Math.round(goalPct)}% of {hideBalance ? '••••••' : fmtEUR(goal.target)} goal
-              </p>
-            </div>
-          )}
-
-          <Link href={`/portal/accounts/${shownAccount?.id}`} className="pill-btn">
-            Open {shownAccount?.name}
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
       </section>
 
-      {/* ══ Activity: transactions | repeat shortcuts + upcoming payments ══
+            {/* ══ Activity: transactions | repeat shortcuts + upcoming payments ══
           What happened and what is about to, before anything analytical. */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
 

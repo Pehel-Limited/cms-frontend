@@ -1220,11 +1220,13 @@
   color: rgba(255, 255, 255, 0.88);
 }
 
-/* ─── Account rail (phones) ────────────────────────────────────────────
-   The fan needs width for its neighbours to sit beside the front card rather
-   than across it. Below 640px the accounts become a snap rail: one card centred
-   at a time, the next peeking off the right edge so it reads as swipeable. */
-.acct-rail {
+/* ─── Account list: a swipe rail on phones, inline from 640px ───────────
+   One list, two layouts. Below 640px a fan collapses its neighbours onto the
+   front card, so the accounts become a snap rail with the next one peeking off
+   the right edge. On a desktop the fan left the whole panel empty either side of
+   four small cards, so they simply sit in a row and every one is readable at
+   once — which also retires the "bring it forward" selection it needed. */
+.acct-list {
   display: flex;
   gap: 12px;
   overflow-x: auto;
@@ -1233,15 +1235,34 @@
   -webkit-overflow-scrolling: touch;
   padding: 2px 16px 18px;
 }
-.acct-rail::-webkit-scrollbar { display: none; }
-.rail-card {
+.acct-list::-webkit-scrollbar { display: none; }
+.acct-list > * {
   flex: 0 0 76%;
   scroll-snap-align: center;
   scroll-snap-stop: always;
   transition: transform 0.2s ease;
 }
-.rail-card:active { transform: scale(0.98); }
-@media (min-width: 640px) { .acct-rail { display: none; } }
+.acct-list > *:active { transform: scale(0.98); }
+@media (min-width: 640px) {
+  .acct-list {
+    display: grid;
+    /* Two across through tablet: an auto-fit floor that also yields four columns on
+       a desktop would give three here, and a fourth account orphaned on its own row
+       reads as a mistake rather than a wrap. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    overflow: visible;
+    scroll-snap-type: none;
+    padding: 4px 24px 24px;
+  }
+  .acct-list > * { flex: none; }
+  .acct-list > *:active { transform: none; }
+}
+/* auto-fit, not a fixed four: it collapses the tracks nobody occupies, so a customer
+   with two accounts gets two wide cards rather than two cards and a gap. */
+@media (min-width: 1024px) {
+  .acct-list { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+}
 
 /* ─── Fanned card stack ─── */
 .card-fan {
@@ -1331,9 +1352,6 @@
   .glass-foot { padding: 12px 18px; }
   .kpi-cell { padding: 16px 18px; }
   .kpi-value { font-size: 25px; }
-  /* The rail replaces the fan outright on a phone rather than shrinking it: the
-     stack only reads as a stack when the neighbours sit beside the front card. */
-  .card-fan { display: none; }
 }
 
 

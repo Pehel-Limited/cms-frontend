@@ -104,48 +104,48 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export const STATUS_COLORS: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-700',
-  SUBMITTED: 'bg-blue-100 text-blue-700',
-  PENDING_KYC: 'bg-yellow-100 text-yellow-700',
-  KYC_APPROVED: 'bg-teal-100 text-teal-700',
-  KYC_REJECTED: 'bg-red-100 text-red-700',
-  PENDING_DOCUMENTS: 'bg-yellow-100 text-yellow-700',
-  DOCUMENTS_RECEIVED: 'bg-teal-100 text-teal-700',
-  PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-700',
-  CREDIT_APPROVED: 'bg-emerald-100 text-emerald-700',
-  CREDIT_DECLINED: 'bg-red-100 text-red-700',
-  PENDING_UNDERWRITING: 'bg-orange-100 text-orange-700',
-  IN_UNDERWRITING: 'bg-orange-100 text-orange-700',
-  UNDERWRITING_APPROVED: 'bg-emerald-100 text-emerald-700',
-  UNDERWRITING_DECLINED: 'bg-red-100 text-red-700',
+  DRAFT: 'bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-200',
+  SUBMITTED: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  PENDING_KYC: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300',
+  KYC_APPROVED: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  KYC_REJECTED: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  PENDING_DOCUMENTS: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300',
+  DOCUMENTS_RECEIVED: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  PENDING_CREDIT_CHECK: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+  CREDIT_APPROVED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  CREDIT_DECLINED: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  PENDING_UNDERWRITING: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  IN_UNDERWRITING: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  UNDERWRITING_APPROVED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  UNDERWRITING_DECLINED: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
   REFERRED_TO_SENIOR: 'bg-indigo-100 text-indigo-700',
   REFERRED_TO_UNDERWRITER: 'bg-indigo-100 text-indigo-700',
-  PENDING_DECISION: 'bg-amber-100 text-amber-700',
-  APPROVED: 'bg-green-100 text-green-700',
-  DECLINED: 'bg-red-100 text-red-700',
+  PENDING_DECISION: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  APPROVED: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+  DECLINED: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
   OFFER_GENERATED: 'bg-cyan-100 text-cyan-700',
   OFFER_SENT: 'bg-cyan-100 text-cyan-700',
-  OFFER_ACCEPTED: 'bg-green-100 text-green-700',
-  OFFER_REJECTED: 'bg-red-100 text-red-700',
-  OFFER_EXPIRED: 'bg-gray-100 text-gray-500',
-  OFFER_COUNTERED: 'bg-amber-100 text-amber-700',
-  PENDING_CONDITIONS: 'bg-yellow-100 text-yellow-700',
-  CONDITIONS_MET: 'bg-teal-100 text-teal-700',
+  OFFER_ACCEPTED: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+  OFFER_REJECTED: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  OFFER_EXPIRED: 'bg-gray-100 text-gray-500 dark:text-gray-400',
+  OFFER_COUNTERED: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  PENDING_CONDITIONS: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-300',
+  CONDITIONS_MET: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
   PENDING_ESIGN: 'bg-violet-100 text-violet-700',
   ESIGN_IN_PROGRESS: 'bg-violet-100 text-violet-700',
-  ESIGN_COMPLETED: 'bg-emerald-100 text-emerald-700',
+  ESIGN_COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
   PENDING_BOOKING: 'bg-sky-100 text-sky-700',
   BOOKING_IN_PROGRESS: 'bg-sky-100 text-sky-700',
-  BOOKED: 'bg-green-100 text-green-700',
+  BOOKED: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
   PENDING_DISBURSEMENT: 'bg-lime-100 text-lime-700',
   DISBURSEMENT_IN_PROGRESS: 'bg-lime-100 text-lime-700',
-  DISBURSED: 'bg-green-100 text-green-700',
-  RETURNED: 'bg-orange-100 text-orange-700',
-  CANCELLED: 'bg-gray-100 text-gray-500',
-  WITHDRAWN: 'bg-gray-100 text-gray-600',
-  EXPIRED: 'bg-gray-100 text-gray-500',
-  ACTIVE: 'bg-green-100 text-green-700',
-  CLOSED: 'bg-gray-100 text-gray-600',
+  DISBURSED: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+  RETURNED: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  CANCELLED: 'bg-gray-100 text-gray-500 dark:text-gray-400',
+  WITHDRAWN: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-200',
+  EXPIRED: 'bg-gray-100 text-gray-500 dark:text-gray-400',
+  ACTIVE: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300',
+  CLOSED: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-200',
 };
 
 // ─── Loan Purpose ──────────────────────────────────────────────
@@ -186,6 +186,72 @@ export const LOAN_PURPOSE_LABELS: Record<LoanPurpose, string> = {
   INVESTMENT: 'Investment',
   OTHER: 'Other',
 };
+
+const ALL_LOAN_PURPOSES = Object.keys(LOAN_PURPOSE_LABELS) as LoanPurpose[];
+
+/**
+ * The purposes a customer may state for each loan_product type. A mortgage
+ * can't fund a wedding and a credit card can't fund a house, so offering the
+ * full list on every product asks the customer a question the product has
+ * already answered — and hands the RM a purpose the bank cannot underwrite
+ * against that facility. Mirrors the RM-side bucketing in bank-ops
+ * (ProductFormFields.getPurposeOptions) on the same code vocabulary.
+ *
+ * Products whose type isn't listed fall back to the full list: a product the
+ * bank launches later must never dead-end an application.
+ */
+const PRODUCT_TYPE_PURPOSES: Record<string, LoanPurpose[]> = {
+  // Secured residential real estate
+  MORTGAGE: ['HOME_PURCHASE', 'HOME_CONSTRUCTION', 'HOME_RENOVATION', 'HOME_REFINANCE', 'INVESTMENT', 'OTHER'],
+  HOME_LOAN: ['HOME_PURCHASE', 'HOME_CONSTRUCTION', 'HOME_RENOVATION', 'HOME_REFINANCE', 'INVESTMENT', 'OTHER'],
+  BRIDGE_LOAN: ['HOME_PURCHASE', 'HOME_CONSTRUCTION', 'HOME_REFINANCE', 'INVESTMENT', 'OTHER'],
+  CONSTRUCTION_LOAN: ['HOME_CONSTRUCTION', 'INVESTMENT', 'OTHER'],
+  GREEN_LOAN: ['HOME_RENOVATION', 'VEHICLE_PURCHASE', 'OTHER'],
+
+  // Unsecured consumer borrowing
+  PERSONAL_LOAN: ['HOME_RENOVATION', 'DEBT_CONSOLIDATION', 'EDUCATION', 'MEDICAL', 'WEDDING', 'TRAVEL', 'PERSONAL_USE', 'OTHER'],
+  STUDENT_LOAN: ['EDUCATION', 'PERSONAL_USE', 'OTHER'],
+  CREDIT_UNION_LOAN: ['PERSONAL_USE', 'DEBT_CONSOLIDATION', 'HOME_RENOVATION', 'MEDICAL', 'EDUCATION', 'OTHER'],
+  MICROFINANCE: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'PERSONAL_USE', 'OTHER'],
+  BNPL: ['PERSONAL_USE', 'TRAVEL', 'OTHER'],
+  CREDIT_CARD: ['PERSONAL_USE', 'TRAVEL', 'OTHER'],
+  OVERDRAFT: ['PERSONAL_USE', 'DEBT_CONSOLIDATION', 'OTHER'],
+
+  // Vehicle / asset finance
+  AUTO_LOAN: ['VEHICLE_PURCHASE', 'OTHER'],
+  PCP: ['VEHICLE_PURCHASE', 'OTHER'],
+  HIRE_PURCHASE: ['VEHICLE_PURCHASE', 'EQUIPMENT_PURCHASE', 'OTHER'],
+  EQUIPMENT_FINANCING: ['EQUIPMENT_PURCHASE', 'VEHICLE_PURCHASE', 'BUSINESS_EXPANSION', 'OTHER'],
+  ASSET_LEASING: ['EQUIPMENT_PURCHASE', 'VEHICLE_PURCHASE', 'BUSINESS_EXPANSION', 'OTHER'],
+
+  // Business
+  BUSINESS_LOAN: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'DEBT_CONSOLIDATION', 'OTHER'],
+  SME_TERM_LOAN: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'DEBT_CONSOLIDATION', 'OTHER'],
+  TERM_LOAN: ['BUSINESS_EXPANSION', 'WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'DEBT_CONSOLIDATION', 'OTHER'],
+  WORKING_CAPITAL_LOAN: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  BUSINESS_LINE_OF_CREDIT: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  REVOLVING_CREDIT: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  BUSINESS_OVERDRAFT: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  BUSINESS_CREDIT_CARD: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'TRAVEL', 'OTHER'],
+  INVOICE_FINANCE: ['WORKING_CAPITAL', 'BUSINESS_EXPANSION', 'OTHER'],
+  AGRI_LOAN: ['WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'BUSINESS_EXPANSION', 'INVESTMENT', 'OTHER'],
+  AGRICULTURE_LOAN: ['WORKING_CAPITAL', 'EQUIPMENT_PURCHASE', 'BUSINESS_EXPANSION', 'INVESTMENT', 'OTHER'],
+  COMMERCIAL_MORTGAGE: ['BUSINESS_EXPANSION', 'INVESTMENT', 'DEBT_CONSOLIDATION', 'OTHER'],
+  COMMERCIAL_REAL_ESTATE: ['BUSINESS_EXPANSION', 'INVESTMENT', 'DEBT_CONSOLIDATION', 'OTHER'],
+};
+
+export function getPurposeOptions(productType?: string | null): LoanPurpose[] {
+  return (productType && PRODUCT_TYPE_PURPOSES[productType]) || ALL_LOAN_PURPOSES;
+}
+
+/**
+ * Guards against a purpose surviving a product switch — the wizard carries form
+ * state across steps, so a purpose chosen for one product would otherwise be
+ * submitted against another.
+ */
+export function isPurposeAllowed(productType: string | null | undefined, purpose: string): boolean {
+  return getPurposeOptions(productType).includes(purpose as LoanPurpose);
+}
 
 /**
  * Maps AI Credit Assistant intent codes (IntentCatalog / DEFAULT_INTENT_OPTIONS)
@@ -372,7 +438,7 @@ export type UpdateApplicationPayload = Partial<CreateApplicationPayload>;
 export const FACILITY_TYPE_LABELS: Record<string, string> = {
   TERM_LOAN: 'Term Loan',
   WORKING_CAPITAL: 'Working Capital',
-  OVERDRAFT: 'Overdraft Facility',
+  OVERDRAFT: 'Overdraft',
   LETTER_OF_CREDIT: 'Letter of Credit',
   BANK_GUARANTEE: 'Bank Guarantee',
   BILL_DISCOUNTING: 'Bill Discounting',
@@ -386,7 +452,15 @@ export const FACILITY_TYPE_LABELS: Record<string, string> = {
 
 export interface ApplicationContext {
   customerId: string;
+  /** How the account is filed: INDIVIDUAL, BUSINESS, CORPORATE. */
   customerType: string;
+  /** PERSONAL, JOINT, SOLE_TRADER — null when the bank holds no subtype. */
+  customerSubtype: string | null;
+  /**
+   * The segment products and eligibility are assessed against, resolved by the
+   * BFF: a sole trader is an INDIVIDUAL account with segment BUSINESS.
+   */
+  segment: string;
   isBusiness: boolean;
 }
 
@@ -420,7 +494,6 @@ export interface TimelineEvent {
 }
 
 export interface CustomerStatusInfo {
-  internalStatus: string;
   stage: CustomerStage;
   stageLabel: string;
   headline: string;

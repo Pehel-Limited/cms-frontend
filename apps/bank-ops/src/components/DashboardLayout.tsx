@@ -7,8 +7,11 @@ import { useAppSelector, useAppDispatch } from '@/store';
 import { logoutUser } from '@/store/slices/authSlice';
 import { useTheme } from '@/app/providers';
 
-/* ─── RM-specific surface tokens (always dark) ─── */
-// bg: #060d1a  card: #0d1526  border: rgba(255,255,255,0.07)
+/* ─── RM-specific surface tokens (always dark) ───
+   The rail keeps its own always-dark ground, but tinted plum rather than navy so
+   it belongs to the same brand as the content beside it. */
+const BRAND_GRADIENT = 'linear-gradient(135deg,#7f2b7b,#b155ac)';
+const RAIL_GRADIENT = 'linear-gradient(to bottom,#170b18 0%,#22101f 55%,#2d1529 100%)';
 
 const NAV_ITEMS = [
   {
@@ -96,6 +99,17 @@ const AI_KNOWLEDGE_ITEM = {
   ),
 };
 
+const AI_APPROVALS_ITEM = {
+  name: 'AI Approvals',
+  path: '/dashboard/ai-approvals',
+  icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+        d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+};
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -124,7 +138,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     path === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(path);
 
   const navItems = user?.userType === 'BANK_USER'
-    ? [...NAV_ITEMS, AI_KNOWLEDGE_ITEM, ADMIN_ITEM]
+    ? [...NAV_ITEMS, AI_APPROVALS_ITEM, AI_KNOWLEDGE_ITEM, ADMIN_ITEM]
     : NAV_ITEMS;
 
   const getUserRole = () => {
@@ -143,16 +157,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         href={item.path}
         onClick={() => setMobileSidebarOpen(false)}
         title={sidebarCollapsed ? item.name : undefined}
+        aria-current={active ? 'page' : undefined}
         className={[
           'group relative flex items-center rounded-xl text-sm font-medium transition-all duration-200',
           sidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-3 py-2.5',
           active
-            ? 'bg-cyan-500/15 text-cyan-300'
+            ? 'bg-primary-500/15 text-primary-200'
             : 'text-slate-400 hover:bg-white/5 hover:text-white',
         ].join(' ')}
       >
         {active && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-cyan-400 rounded-r-full" />
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary-400 rounded-r-full" />
         )}
         <span className="shrink-0">{item.icon}</span>
         {!sidebarCollapsed && <span>{item.name}</span>}
@@ -162,6 +177,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: 'var(--rm-bg)' }}>
+      <a
+        href="#rm-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:px-4 focus:py-2 focus:text-sm focus:font-semibold"
+        style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }}
+      >
+        Skip to main content
+      </a>
       {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 bg-black/60 z-40 md:hidden" onClick={() => setMobileSidebarOpen(false)} />
@@ -169,9 +191,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ─── Sidebar ─── */}
       <aside
+        style={{ background: RAIL_GRADIENT }}
         className={[
           'fixed md:sticky top-0 left-0 z-50 h-screen flex flex-col transition-all duration-300',
-          'bg-gradient-to-b from-[#0a1628] via-[#0d1e3a] to-[#0f2444]',
           'border-r border-white/[0.06]',
           sidebarCollapsed ? 'w-[70px]' : 'w-[220px]',
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
@@ -180,7 +202,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo */}
         <div className={['flex items-center h-16 shrink-0 border-b border-white/[0.06]', sidebarCollapsed ? 'justify-center' : 'gap-3 px-5'].join(' ')}>
           <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-lg"
-            style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+            style={{ background: BRAND_GRADIENT }}>
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
@@ -194,7 +216,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+        <nav aria-label="Main" className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
           {navItems.map(item => <NavLink key={item.path} item={item} />)}
         </nav>
 
@@ -203,7 +225,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="mx-3 mb-2 rounded-2xl p-3 border border-white/[0.07]" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
             <div className="flex items-center gap-2.5 mb-2">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 shadow"
-                style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+                style={{ background: BRAND_GRADIENT }}>
                 {initials}
               </div>
               <div className="min-w-0">
@@ -212,7 +234,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
             </div>
-            <Link href="/dashboard/rm" className="flex items-center justify-between text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+            <Link href="/dashboard/rm" className="flex items-center justify-between text-[10px] text-primary-300 hover:text-primary-200 font-semibold transition-colors">
               View Profile
               <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -245,7 +267,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-30 h-16 flex items-center px-4 md:px-6 gap-3 border-b transition-colors duration-200"
           style={{ backgroundColor: 'var(--rm-topbar-bg)', backdropFilter: 'blur(12px)', borderColor: 'var(--rm-topbar-border)' }}>
           {/* Mobile hamburger */}
-          <button className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5" onClick={() => setMobileSidebarOpen(true)}>
+          <button className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5" onClick={() => setMobileSidebarOpen(true)} aria-label="Open navigation menu" aria-expanded={mobileSidebarOpen}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
@@ -256,10 +278,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
+            <label htmlFor="rm-search" className="sr-only">
+              Search customers, applications, accounts
+            </label>
             <input
+              id="rm-search"
               type="text"
               placeholder="Search customers, applications, accounts..."
-              className="w-full pl-9 pr-14 py-2 rounded-xl text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 transition-colors"
+              className="w-full pl-9 pr-14 py-2 rounded-xl text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-colors"
               style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)', border: '1px solid var(--rm-border)' }}
             />
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">⌘K</kbd>
@@ -276,7 +302,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           {/* 3-dots menu */}
-          <button className="p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }}>
+          <button className="p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }} aria-label="More options">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
             </svg>
@@ -304,13 +330,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           {/* Notifications */}
-          <button className="relative p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }}>
+          <button className="relative p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }} aria-label="Notifications">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
                 d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center ring-2 ring-[#060d1a]">8</span>
-          </button>
+                      </button>
 
           {/* User menu */}
           <div className="relative" ref={menuRef}>
@@ -320,7 +345,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               style={{ borderColor: 'var(--rm-border)' }}
             >
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow"
-                style={{ background: 'linear-gradient(135deg,#0ea5e9,#2563eb)' }}>
+                style={{ background: BRAND_GRADIENT }}>
                 {initials}
               </div>
               <div className="hidden sm:block text-left">
@@ -340,7 +365,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--rm-border)' }}>
                   <p className="text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>{user?.firstName} {user?.lastName}</p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--rm-text-muted)' }}>{user?.email}</p>
-                  <span className="inline-block mt-2 text-[10px] uppercase tracking-wider text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full font-bold">
+                  <span className="inline-block mt-2 text-[10px] uppercase tracking-wider text-primary-300 bg-primary-500/10 border border-primary-500/20 px-2 py-0.5 rounded-full font-bold">
                     {getUserRole()}
                   </span>
                 </div>
@@ -373,20 +398,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto p-4 sm:p-6">
+        <main id="rm-main" className="flex-1 overflow-auto p-4 sm:p-6">
           {children}
         </main>
 
         {/* Footer */}
         <footer className="px-6 py-3 border-t flex items-center justify-center gap-4 text-[11px] shrink-0 transition-colors"
           style={{ borderColor: 'var(--rm-border)', color: 'var(--rm-text-muted)' }}>
-          <span>© 2025 NorthBank. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} NorthBank. All rights reserved.</span>
           <span className="text-slate-700">·</span>
-          <a href="#" className="hover:text-slate-400 transition-colors">Privacy Policy</a>
+          <Link href="/dashboard/diagnostic" className="hover:text-slate-400 transition-colors">
+            System status
+          </Link>
           <span className="text-slate-700">·</span>
-          <a href="#" className="hover:text-slate-400 transition-colors">Terms of Use</a>
-          <span className="text-slate-700">·</span>
-          <a href="#" className="hover:text-slate-400 transition-colors">Help &amp; Support</a>
+          <Link href="/dashboard/admin" className="hover:text-slate-400 transition-colors">
+            Administration
+          </Link>
         </footer>
       </div>
     </div>

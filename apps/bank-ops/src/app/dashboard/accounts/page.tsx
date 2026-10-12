@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   accountService,
@@ -9,146 +10,133 @@ import {
   type AccountStatus,
   type AccountStatsResponse,
   accountCategoryLabels,
+  accountStatusLabels,
   accountTypeLabels,
   formatCurrency,
 } from '@/services/api/accountService';
 import { useAppSelector } from '@/store';
 import config from '@/config';
+import {
+  SortableHeader,
+  type SortConfig,
+  handleSortToggle,
+  sortData,
+} from '@/components/SortableHeader';
 
 type StatusFilter = 'all' | AccountStatus;
 type CategoryFilter = 'all' | AccountCategory;
 
-const ACCOUNT_CATEGORIES = [
-  { value: 'all', label: 'All Categories' },
-  { value: 'DEPOSIT', label: 'Deposit Accounts' },
-  { value: 'CREDIT', label: 'Credit Accounts' },
-  { value: 'OPERATIONAL', label: 'Operational Accounts' },
+const PAGE_SIZE = 20;
+
+const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
+  { value: 'all', label: 'All categories' },
+  ...(Object.keys(accountCategoryLabels) as AccountCategory[]).map(c => ({
+    value: c as CategoryFilter,
+    label: `${accountCategoryLabels[c]} accounts`,
+  })),
 ];
 
-const ACCOUNT_STATUSES = [
-  { value: 'all', label: 'All Statuses' },
-  { value: 'PENDING', label: 'Pending' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'DORMANT', label: 'Dormant' },
-  { value: 'FROZEN', label: 'Frozen' },
-  { value: 'CLOSED', label: 'Closed' },
-  { value: 'BLOCKED', label: 'Blocked' },
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All statuses' },
+  ...(Object.keys(accountStatusLabels) as AccountStatus[]).map(s => ({
+    value: s as StatusFilter,
+    label: accountStatusLabels[s],
+  })),
 ];
 
-/* Status → accent colour (works in both themes via rgba tint) */
-const STATUS_COLOR: Record<string, string> = {
-  ACTIVE: '#10b981',
-  PENDING: '#f59e0b',
-  DORMANT: '#94a3b8',
-  FROZEN: '#3b82f6',
-  CLOSED: '#ef4444',
-  BLOCKED: '#f97316',
+/* ------------------------------------------------------------------ */
+/* Tones — every chip carries its text label, colour is never the only  */
+/* signal. Backgrounds use translucent rgba() so both themes work.      */
+/* ------------------------------------------------------------------ */
+
+type Tone = 'neutral' | 'positive' | 'warning' | 'negative' | 'accent';
+
+const TONE_BG: Record<Tone, string> = {
+  neutral: 'rgba(127,127,127,0.12)',
+  positive: 'rgba(16,185,129,0.14)',
+  warning: 'rgba(245,158,11,0.16)',
+  negative: 'rgba(239,68,68,0.14)',
+  accent: 'var(--rm-accent-muted)',
 };
-const getStatusColor = (s: string) => STATUS_COLOR[s] || '#94a3b8';
 
-const CATEGORY_COLOR: Record<string, string> = {
-  DEPOSIT: '#10b981',
-  CREDIT: '#8b5cf6',
-  OPERATIONAL: '#6366f1',
+const TONE_DOT: Record<Tone, string> = {
+  neutral: 'var(--rm-text-muted)',
+  positive: '#10b981',
+  warning: '#f59e0b',
+  negative: '#ef4444',
+  accent: 'var(--rm-accent)',
 };
-const getCategoryColor = (c: string) => CATEGORY_COLOR[c] || '#94a3b8';
 
-const AVATAR_GRADIENTS = [
-  'linear-gradient(135deg,#0ea5e9,#2563eb)',
-  'linear-gradient(135deg,#8b5cf6,#6366f1)',
-  'linear-gradient(135deg,#10b981,#059669)',
-  'linear-gradient(135deg,#f59e0b,#f97316)',
-  'linear-gradient(135deg,#ec4899,#db2777)',
-  'linear-gradient(135deg,#14b8a6,#0891b2)',
-];
-function avatarGradient(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
-}
-
-function symbolFor(currency?: string): string {
-  try {
-    const parts = new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD' }).formatToParts(0);
-    return parts.find(p => p.type === 'currency')?.value || (currency || '$');
-  } catch {
-    return currency || '$';
+const statusTone = (s: string): Tone => {
+  switch ((s || '').toUpperCase()) {
+    case 'ACTIVE':
+      return 'positive';
+    case 'PENDING':
+    case 'DORMANT':
+      return 'warning';
+    case 'FROZEN':
+      return 'accent';
+    case 'CLOSED':
+    case 'BLOCKED':
+      return 'negative';
+    default:
+      return 'neutral';
   }
-}
-function compact(n: number, currency?: string): string {
-  const s = symbolFor(currency);
-  const a = Math.abs(n);
-  if (a >= 1e9) return `${s}${(n / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `${s}${(n / 1e6).toFixed(1)}M`;
-  if (a >= 1e3) return `${s}${(n / 1e3).toFixed(0)}K`;
-  return `${s}${n.toFixed(0)}`;
-}
-
-/* ------------------------------------------------------------------ */
-/* KPI stat card                                                       */
-/* ------------------------------------------------------------------ */
-function StatCard({ label, value, sub, tint, icon }: { label: string; value: string; sub?: string; tint: string; icon: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-medium" style={{ color: 'var(--rm-text-muted)' }}>{label}</span>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full shrink-0" style={{ backgroundColor: `${tint}1a`, color: tint }}>
-          {icon}
-        </div>
-      </div>
-      <p className="text-2xl font-bold leading-tight" style={{ color: 'var(--rm-text)' }}>{value}</p>
-      {sub && <p className="text-[11px] font-medium mt-1" style={{ color: 'var(--rm-text-muted)' }}>{sub}</p>}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Donut chart                                                         */
-/* ------------------------------------------------------------------ */
-function Donut({ segments, total }: { segments: { label: string; value: number; color: string }[]; total: number }) {
-  const r = 30;
-  const circ = 2 * Math.PI * r;
-  let offset = 0;
-  return (
-    <div className="relative w-28 h-28 shrink-0">
-      <svg viewBox="0 0 80 80" className="w-28 h-28 -rotate-90">
-        <circle cx="40" cy="40" r={r} fill="none" strokeWidth="10" style={{ stroke: 'var(--rm-input)' }} />
-        {total > 0 && segments.map(s => {
-          const len = (s.value / total) * circ;
-          const el = (
-            <circle key={s.label} cx="40" cy="40" r={r} fill="none" strokeWidth="10"
-              stroke={s.color} strokeDasharray={`${len} ${circ - len}`} strokeDashoffset={-offset} />
-          );
-          offset += len;
-          return el;
-        })}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-lg font-bold" style={{ color: 'var(--rm-text)' }}>{total}</span>
-        <span className="text-[9px]" style={{ color: 'var(--rm-text-muted)' }}>Accounts</span>
-      </div>
-    </div>
-  );
-}
-
-const I = {
-  wallet: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" /></svg>,
-  bank: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m-1 4h1m4-4h1m-1 4h1" /></svg>,
-  card: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3M3.75 5.25h16.5c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125H3.75c-.621 0-1.125-.504-1.125-1.125V6.375c0-.621.504-1.125 1.125-1.125z" /></svg>,
-  gauge: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>,
-  warn: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>,
-  snow: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18m0-18l-3 3m3-3l3 3m-3 12l-3-3m3 3l3-3M3 12h18M3 12l3-3m-3 3l3 3m12-3l3-3m-3 3l3 3" /></svg>,
-  moon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>,
 };
+
+const categoryTone = (c: string): Tone => {
+  switch ((c || '').toUpperCase()) {
+    case 'DEPOSIT':
+      return 'positive';
+    case 'CREDIT':
+      return 'accent';
+    default:
+      return 'neutral';
+  }
+};
+
+function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium whitespace-nowrap"
+      style={{ backgroundColor: TONE_BG[tone], color: 'var(--rm-text)' }}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full shrink-0"
+        style={{ backgroundColor: TONE_DOT[tone] }}
+        aria-hidden="true"
+      />
+      {children}
+    </span>
+  );
+}
+
+/** Amounts are shown in full — no lossy abbreviations of real balances. */
+function money(n: number, currency?: string): string {
+  return formatCurrency(n, currency);
+}
+
+/* Row view-model so the shared sorter can address derived values. */
+type AccountRow = AccountSummaryResponse & {
+  rowHolder: string;
+  rowAccountName: string;
+  rowType: string;
+  rowStatus: string;
+  rowBalance: number;
+};
+
+const SORT_CLASS = '!px-5 !text-sm !normal-case !tracking-normal !font-medium';
 
 /* ------------------------------------------------------------------ */
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 export default function AccountsPage() {
+  const router = useRouter();
   const { user } = useAppSelector(state => state.auth);
   const [accounts, setAccounts] = useState<AccountSummaryResponse[]>([]);
   const [allAccounts, setAllAccounts] = useState<AccountSummaryResponse[]>([]);
   const [stats, setStats] = useState<AccountStatsResponse | null>(null);
+  const [statsUnavailable, setStatsUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -157,9 +145,13 @@ export default function AccountsPage() {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AccountSummaryResponse | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [sortBy, setSortBy] = useState<'balance' | 'name' | 'status'>('balance');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    field: 'rowBalance',
+    direction: 'desc',
+  });
 
   const getBankId = useCallback((): string => {
     if (user?.bankId) return user.bankId;
@@ -167,62 +159,60 @@ export default function AccountsPage() {
       const userDataStr = localStorage.getItem(config.auth.userKey);
       if (userDataStr) {
         try {
-          const userData = JSON.parse(userDataStr);
-          return userData.bankId || '123e4567-e89b-12d3-a456-426614174000';
+          return JSON.parse(userDataStr).bankId || config.bank.defaultBankId;
         } catch {
-          return '123e4567-e89b-12d3-a456-426614174000';
+          return config.bank.defaultBankId;
         }
       }
     }
-    return '123e4567-e89b-12d3-a456-426614174000';
+    return config.bank.defaultBankId;
   }, [user?.bankId]);
 
   const loadAccounts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const bankId = getBankId();
+      const response = searchTerm
+        ? await accountService.searchAccounts(bankId, searchTerm, page, PAGE_SIZE)
+        : statusFilter !== 'all'
+          ? await accountService.getAccountsByStatus(statusFilter, bankId, page, PAGE_SIZE)
+          : categoryFilter !== 'all'
+            ? await accountService.getAccountsByCategory(categoryFilter, bankId, page, PAGE_SIZE)
+            : await accountService.getAccounts(bankId, page, PAGE_SIZE);
 
-      let response;
-      if (searchTerm) {
-        response = await accountService.searchAccounts(bankId, searchTerm, page, 20);
-      } else if (statusFilter !== 'all') {
-        response = await accountService.getAccountsByStatus(statusFilter, bankId, page, 20);
-      } else if (categoryFilter !== 'all') {
-        response = await accountService.getAccountsByCategory(categoryFilter, bankId, page, 20);
-      } else {
-        response = await accountService.getAccounts(bankId, page, 20);
-      }
-
-      setAccounts(response.content);
-      setTotalPages(response.totalPages);
-      setTotalElements(response.totalElements);
+      setAccounts(response.content || []);
+      setTotalPages(response.totalPages || 0);
+      setTotalElements(response.totalElements || 0);
     } catch (err) {
       console.error('Failed to load accounts:', err);
-      setError('Failed to load accounts. Please try again later.');
+      setError('We could not load the accounts. Please try again.');
     } finally {
       setLoading(false);
     }
   }, [getBankId, page, searchTerm, statusFilter, categoryFilter]);
 
+  /* Secondary loads — a failure here must never blank the page. */
   const loadStats = useCallback(async () => {
     try {
-      const bankId = getBankId();
-      const statsData = await accountService.getAccountStats(bankId);
-      setStats(statsData);
+      setStats(await accountService.getAccountStats(getBankId()));
+      setStatsUnavailable(false);
     } catch (err) {
       console.error('Failed to load account stats:', err);
+      setStats(null);
+      setStatsUnavailable(true);
     }
   }, [getBankId]);
 
-  /* Full list for financial aggregates (bank has a modest number of accounts) */
   const loadAggregate = useCallback(async () => {
     try {
-      const bankId = getBankId();
-      const res = await accountService.getAccounts(bankId, 0, 500);
-      setAllAccounts(res.content);
+      const res = await accountService.getAccounts(getBankId(), 0, 500);
+      setAllAccounts(res.content || []);
+      setStatsUnavailable(false);
     } catch (err) {
       console.error('Failed to load aggregate accounts:', err);
+      setAllAccounts([]);
+      setStatsUnavailable(true);
     }
   }, [getBankId]);
 
@@ -239,17 +229,19 @@ export default function AccountsPage() {
     setPage(0);
   }, [statusFilter, categoryFilter, searchTerm]);
 
-  const handleDelete = async (accountId: string) => {
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      setDeleting(true);
-      await accountService.deleteAccount(accountId);
-      setAccounts(accounts.filter(a => a.accountId !== accountId));
-      setDeleteConfirm(null);
+      await accountService.deleteAccount(deleteTarget.accountId);
+      setAccounts(prev => prev.filter(a => a.accountId !== deleteTarget.accountId));
+      setDeleteTarget(null);
       loadStats();
       loadAggregate();
     } catch (err) {
       console.error('Failed to delete account:', err);
-      setError('Failed to delete account. Please try again.');
+      setDeleteError('We could not delete this account. Nothing was changed — please try again.');
     } finally {
       setDeleting(false);
     }
@@ -263,62 +255,59 @@ export default function AccountsPage() {
 
   const currency = allAccounts[0]?.currency;
 
-  /* Financial aggregates derived from real account data */
+  /* Financial aggregates derived from the real account records. */
   const agg = useMemo(() => {
     const deposits = allAccounts.filter(a => a.accountCategory === 'DEPOSIT');
     const credits = allAccounts.filter(a => a.accountCategory === 'CREDIT');
     const operational = allAccounts.filter(a => a.accountCategory === 'OPERATIONAL');
-    const totalBalances = deposits.reduce((s, a) => s + (a.availableBalance || 0), 0)
-      + operational.reduce((s, a) => s + (a.availableBalance || 0), 0);
     const depositBalance = deposits.reduce((s, a) => s + (a.availableBalance || 0), 0);
     const operationalBalance = operational.reduce((s, a) => s + (a.availableBalance || 0), 0);
+    const totalBalances = depositBalance + operationalBalance;
     const exposure = credits.reduce((s, a) => s + Math.max(0, -(a.currentBalance || 0)), 0);
     const availableLimits = credits.reduce((s, a) => s + (a.availableBalance || 0), 0);
-    const utilisation = exposure + availableLimits > 0 ? (exposure / (exposure + availableLimits)) * 100 : 0;
+    const utilisation =
+      exposure + availableLimits > 0 ? (exposure / (exposure + availableLimits)) * 100 : null;
     return { totalBalances, depositBalance, operationalBalance, exposure, availableLimits, utilisation };
   }, [allAccounts]);
 
   const attentionCount = (stats?.frozenAccounts ?? 0) + (stats?.dormantAccounts ?? 0);
 
-  const kpiCards = [
-    { label: 'Total Balances', value: compact(agg.totalBalances, currency), sub: 'Deposit + operational', tint: '#14b8a6', icon: I.wallet },
-    { label: 'Lending Exposure', value: compact(agg.exposure, currency), sub: 'Drawn credit', tint: '#6366f1', icon: I.bank },
-    { label: 'Available Limits', value: compact(agg.availableLimits, currency), sub: 'Undrawn credit', tint: '#0ea5e9', icon: I.card },
-    { label: 'Utilisation Rate', value: `${agg.utilisation.toFixed(0)}%`, sub: 'Credit facilities', tint: '#8b5cf6', icon: I.gauge },
-    { label: 'Attention Accounts', value: attentionCount.toLocaleString(), sub: 'Frozen / dormant', tint: '#ef4444', icon: I.warn },
-  ];
+  const rows = useMemo<AccountRow[]>(
+    () =>
+      accounts.map(a => ({
+        ...a,
+        rowHolder: a.primaryOwnerName || a.accountName,
+        rowAccountName: a.accountName,
+        rowType: a.accountTypeDisplay || accountTypeLabels[a.accountType] || a.accountType,
+        rowStatus: a.statusDisplay || accountStatusLabels[a.status],
+        rowBalance: a.availableBalance || 0,
+      })),
+    [accounts]
+  );
 
-  /* Client-side sort of the current page */
-  const sorted = useMemo(() => {
-    return [...accounts].sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return (a.primaryOwnerName || a.accountName).localeCompare(b.primaryOwnerName || b.accountName);
-        case 'status':
-          return a.status.localeCompare(b.status);
-        case 'balance':
-        default:
-          return (b.availableBalance || 0) - (a.availableBalance || 0);
-      }
-    });
-  }, [accounts, sortBy]);
+  const sorted = useMemo(() => sortData(rows, sortConfig), [rows, sortConfig]);
+  const handleSort = (field: string) => setSortConfig(handleSortToggle(field, sortConfig));
 
-  const donutSegments = stats
+  const categoryBreakdown = stats
     ? [
-        { label: 'Deposit', value: stats.depositAccounts, color: '#10b981' },
-        { label: 'Credit', value: stats.creditAccounts, color: '#8b5cf6' },
-        { label: 'Operational', value: stats.operationalAccounts, color: '#6366f1' },
+        { label: accountCategoryLabels.DEPOSIT, value: stats.depositAccounts, tone: 'positive' as Tone },
+        { label: accountCategoryLabels.CREDIT, value: stats.creditAccounts, tone: 'accent' as Tone },
+        {
+          label: accountCategoryLabels.OPERATIONAL,
+          value: stats.operationalAccounts,
+          tone: 'neutral' as Tone,
+        },
       ]
     : [];
 
   const balanceBreakdown = [
-    { label: 'Deposits', value: agg.depositBalance, color: '#10b981' },
-    { label: 'Credit (drawn)', value: agg.exposure, color: '#8b5cf6' },
-    { label: 'Operational', value: agg.operationalBalance, color: '#6366f1' },
+    { label: 'Deposits', value: agg.depositBalance },
+    { label: 'Credit drawn', value: agg.exposure },
+    { label: 'Operational', value: agg.operationalBalance },
   ];
   const balanceMax = Math.max(...balanceBreakdown.map(b => b.value), 1);
 
-  const hasFilters = searchTerm || statusFilter !== 'all' || categoryFilter !== 'all';
+  const hasFilters = !!searchTerm || statusFilter !== 'all' || categoryFilter !== 'all';
   const resetFilters = () => {
     setSearchTerm('');
     setStatusFilter('all');
@@ -326,325 +315,938 @@ export default function AccountsPage() {
     setPage(0);
   };
 
-  const selectStyle: React.CSSProperties = {
+  const fieldStyle: React.CSSProperties = {
     backgroundColor: 'var(--rm-input)',
     color: 'var(--rm-text)',
     border: '1px solid var(--rm-border)',
   };
+  const cardStyle: React.CSSProperties = { backgroundColor: 'var(--rm-card)' };
+
+  const firstShown = totalElements === 0 ? 0 : page * PAGE_SIZE + 1;
+  const lastShown = Math.min((page + 1) * PAGE_SIZE, totalElements);
 
   return (
-    <div className="space-y-5">
-      {/* Page header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--rm-text)' }}>Accounts</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--rm-text-secondary)' }}>
-            Manage customer accounts, exposures and facility performance
+    <div className="space-y-6">
+      {/* ══ Header ══ */}
+      <header className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Accounts
+          </h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+            {loading
+              ? 'Loading accounts…'
+              : error
+                ? 'Accounts unavailable'
+                : `${totalElements.toLocaleString()} account${totalElements === 1 ? '' : 's'} across deposits, credit and operational books`}
           </p>
         </div>
-        <Link href="/dashboard/accounts/new"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90"
-          style={{ backgroundColor: '#0ea5e9' }}>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-          New Account
+        <Link
+          href="/dashboard/accounts/new"
+          className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          style={{ backgroundColor: 'var(--rm-accent)' }}
+        >
+          Open account
         </Link>
-      </div>
+      </header>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value as CategoryFilter)}
-          className="px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30" style={selectStyle}>
-          {ACCOUNT_CATEGORIES.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
-        </select>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-          className="px-3 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30" style={selectStyle}>
-          {ACCOUNT_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}
-        </select>
-        <div className="relative flex-1 min-w-[200px]">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--rm-text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input type="text" placeholder="Search by account number, name, or IBAN..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30" style={selectStyle} />
+      {/* ══ Filters ══ */}
+      <section aria-label="Account filters" className="rounded-3xl p-6" style={cardStyle}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label
+              htmlFor="account-search"
+              className="block text-sm mb-1.5"
+              style={{ color: 'var(--rm-text-secondary)' }}
+            >
+              Search
+            </label>
+            <input
+              id="account-search"
+              type="search"
+              placeholder="Account number, name or IBAN"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl px-4 py-2.5 text-sm"
+              style={fieldStyle}
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="account-category"
+              className="block text-sm mb-1.5"
+              style={{ color: 'var(--rm-text-secondary)' }}
+            >
+              Category
+            </label>
+            <select
+              id="account-category"
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value as CategoryFilter)}
+              className="w-full rounded-xl px-4 py-2.5 text-sm"
+              style={fieldStyle}
+            >
+              {CATEGORY_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="account-status"
+              className="block text-sm mb-1.5"
+              style={{ color: 'var(--rm-text-secondary)' }}
+            >
+              Status
+            </label>
+            <select
+              id="account-status"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+              className="w-full rounded-xl px-4 py-2.5 text-sm"
+              style={fieldStyle}
+            >
+              {STATUS_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        {hasFilters && (
-          <button onClick={resetFilters} className="text-xs font-semibold px-2" style={{ color: 'var(--rm-accent)' }}>Reset</button>
+
+        <div className="mt-5 flex items-center gap-3 flex-wrap">
+          <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+            {loading ? 'Loading…' : `${totalElements.toLocaleString()} matching accounts`}
+          </p>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="ml-auto rounded-full px-4 py-2 text-sm font-medium hover:underline"
+              style={{ color: 'var(--rm-accent)' }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* ══ Portfolio figures ══ */}
+      <section aria-label="Portfolio figures" className="rounded-3xl p-6" style={cardStyle}>
+        {statsUnavailable && allAccounts.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }} role="status">
+            Portfolio figures are unavailable right now. The account list below is unaffected.
+          </p>
+        ) : (
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-5">
+            <Figure
+              label="Deposit and operational balances"
+              value={loading ? '—' : money(agg.totalBalances, currency)}
+            />
+            <Figure
+              label="Lending exposure"
+              value={loading ? '—' : money(agg.exposure, currency)}
+            />
+            <Figure
+              label="Available credit limits"
+              value={loading ? '—' : money(agg.availableLimits, currency)}
+            />
+            <Figure
+              label="Credit utilisation"
+              value={
+                loading ? '—' : agg.utilisation === null ? '—' : `${agg.utilisation.toFixed(0)}%`
+              }
+            />
+            <Figure
+              label="Frozen or dormant"
+              value={loading ? '—' : attentionCount.toLocaleString()}
+            />
+          </dl>
         )}
-      </div>
+      </section>
 
-      {/* KPI stat cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {kpiCards.map(c => <StatCard key={c.label} {...c} />)}
-      </div>
-
-      {/* Main content + sidebar */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5 items-start">
-        {/* Left column */}
-        <div className="space-y-4 min-w-0">
-          {/* Error */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
+        {/* ══ Left column ══ */}
+        <div className="space-y-6 min-w-0">
           {error && (
-            <div className="rounded-2xl px-5 py-4 flex items-center gap-3 text-sm" style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
-              <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-              <span>{error}</span>
-              <button onClick={loadAccounts} className="ml-auto font-semibold hover:underline">Retry</button>
-            </div>
+            <section
+              role="alert"
+              className="rounded-3xl p-6 flex items-start gap-4 flex-wrap"
+              style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
+            >
+              <svg
+                className="w-5 h-5 mt-0.5 shrink-0 text-red-600 dark:text-red-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                strokeWidth={1.8}
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                />
+              </svg>
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  {error}
+                </p>
+                <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+                  Your filters are still applied.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadAccounts}
+                className="rounded-full px-4 py-2 text-sm font-semibold"
+                style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }}
+              >
+                Retry
+              </button>
+            </section>
           )}
 
-          {/* Loading */}
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center">
-                <div className="w-10 h-10 rounded-full border-4 border-cyan-500/20 border-t-cyan-500 animate-spin mx-auto mb-3" />
-                <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>Loading accounts...</p>
+            <TableSkeleton />
+          ) : !error && accounts.length === 0 ? (
+            <div className="rounded-3xl py-16 px-6 text-center" style={cardStyle}>
+              <div
+                className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+                style={{ backgroundColor: 'var(--rm-input)' }}
+              >
+                <svg
+                  className="w-7 h-7"
+                  style={{ color: 'var(--rm-text-muted)' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"
+                  />
+                </svg>
               </div>
-            </div>
-          ) : accounts.length === 0 ? (
-            <div className="rounded-2xl py-20 text-center" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl mx-auto mb-3" style={{ backgroundColor: 'var(--rm-input)' }}>
-                <svg className="w-7 h-7" style={{ color: 'var(--rm-text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-              </div>
-              <p className="font-semibold" style={{ color: 'var(--rm-text)' }}>No accounts found</p>
-              <p className="text-sm mt-1 mb-4" style={{ color: 'var(--rm-text-muted)' }}>
-                {hasFilters ? 'Try adjusting your filters' : 'Get started by creating your first account'}
+              <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                {hasFilters ? 'No accounts match these filters' : 'No accounts yet'}
               </p>
-              {!hasFilters && (
-                <Link href="/dashboard/accounts/new" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: '#0ea5e9' }}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                  Create Account
+              <p className="text-sm mt-1 mb-4" style={{ color: 'var(--rm-text-muted)' }}>
+                {hasFilters
+                  ? 'Try a different search term, category or status.'
+                  : 'Open the first account to get started.'}
+              </p>
+              {hasFilters ? (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-full px-4 py-2 text-sm font-medium hover:underline"
+                  style={{ color: 'var(--rm-accent)' }}
+                >
+                  Clear filters
+                </button>
+              ) : (
+                <Link
+                  href="/dashboard/accounts/new"
+                  className="rounded-full px-4 py-2 text-sm font-medium hover:underline"
+                  style={{ color: 'var(--rm-accent)' }}
+                >
+                  Open account
                 </Link>
               )}
             </div>
-          ) : (
-            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-              <div className="flex items-center justify-between px-5 py-3.5 flex-wrap gap-2" style={{ borderBottom: '1px solid var(--rm-border)' }}>
-                <span className="text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>
-                  {totalElements} account{totalElements !== 1 ? 's' : ''}
-                </span>
-                <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
-                  Sort by
-                  <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold focus:outline-none" style={selectStyle}>
-                    <option value="balance">Balance</option>
-                    <option value="name">Holder</option>
-                    <option value="status">Status</option>
-                  </select>
-                </label>
+          ) : accounts.length > 0 ? (
+            <section className="rounded-3xl overflow-hidden" style={cardStyle}>
+              <div
+                className="flex items-center justify-between gap-3 flex-wrap px-5 py-4"
+                style={{ borderBottom: '1px solid var(--rm-border)' }}
+              >
+                <h2
+                  className="text-xl font-semibold tracking-tight"
+                  style={{ color: 'var(--rm-text)' }}
+                >
+                  Accounts
+                </h2>
+                <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                  {firstShown}–{lastShown} of {totalElements.toLocaleString()} · sorting applies to
+                  this page
+                </p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+
+              <div
+                role="region"
+                aria-label="Accounts, horizontally scrollable"
+                tabIndex={0}
+                className="overflow-x-auto"
+              >
+                <table className="w-full" aria-label="Accounts">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--rm-border)', backgroundColor: 'rgba(148,163,184,0.06)' }}>
-                      {['Customer / Holder', 'Type', 'Account No.', 'Balance', 'Status', ''].map(h => (
-                        <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--rm-text-muted)' }}>{h}</th>
-                      ))}
+                    <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                      <SortableHeader
+                        label="Holder"
+                        field="rowHolder"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                        className={SORT_CLASS}
+                      />
+                      <SortableHeader
+                        label="Type"
+                        field="rowType"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                        className={SORT_CLASS}
+                      />
+                      <SortableHeader
+                        label="Account number"
+                        field="accountNumber"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                        className={SORT_CLASS}
+                      />
+                      <SortableHeader
+                        label="Available balance"
+                        field="rowBalance"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                        align="right"
+                        className={SORT_CLASS}
+                      />
+                      <SortableHeader
+                        label="Status"
+                        field="rowStatus"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                        className={SORT_CLASS}
+                      />
+                      <th
+                        scope="col"
+                        className="px-5 py-3.5 text-right text-sm font-medium whitespace-nowrap"
+                        style={{ color: 'var(--rm-text-muted)' }}
+                      >
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sorted.map(account => {
-                      const statusColor = getStatusColor(account.status);
-                      const catColor = getCategoryColor(account.accountCategory);
-                      const holder = account.primaryOwnerName || account.accountName;
-                      return (
-                        <tr key={account.accountId} className="transition-colors hover:bg-white/[0.03] cursor-pointer" style={{ borderBottom: '1px solid var(--rm-border)' }}
-                          onClick={() => { window.location.href = `/dashboard/accounts/${account.accountId}`; }}>
-                          {/* Customer / Holder */}
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: avatarGradient(holder) }}>
-                                {holder.charAt(0).toUpperCase() || '?'}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-semibold truncate" style={{ color: 'var(--rm-text)' }}>{holder}</p>
-                                <p className="text-[10px] truncate" style={{ color: 'var(--rm-text-muted)' }}>{account.accountName}</p>
-                              </div>
-                            </div>
-                          </td>
-                          {/* Type */}
-                          <td className="px-5 py-3.5">
-                            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${catColor}22`, color: catColor }}>
-                              {accountCategoryLabels[account.accountCategory]}
+                    {sorted.map(account => (
+                      <tr
+                        key={account.accountId}
+                        className="cursor-pointer transition-colors"
+                        style={{ borderBottom: '1px solid var(--rm-border)' }}
+                        onMouseEnter={e =>
+                          (e.currentTarget.style.backgroundColor = 'rgba(127,127,127,0.06)')
+                        }
+                        onMouseLeave={e =>
+                          (e.currentTarget.style.backgroundColor = 'transparent')
+                        }
+                        onClick={() => router.push(`/dashboard/accounts/${account.accountId}`)}
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+                              style={{
+                                backgroundColor: 'var(--rm-accent-muted)',
+                                color: 'var(--rm-accent)',
+                              }}
+                              aria-hidden="true"
+                            >
+                              {(account.rowHolder.charAt(0) || '?').toUpperCase()}
                             </span>
-                            <p className="text-[10px] mt-1" style={{ color: 'var(--rm-text-muted)' }}>{account.accountTypeDisplay || accountTypeLabels[account.accountType]}</p>
-                          </td>
-                          {/* Account No. */}
-                          <td className="px-5 py-3.5">
-                            <p className="text-xs font-mono" style={{ color: 'var(--rm-text-secondary)' }}>{account.accountNumber}</p>
-                            {account.primaryIban && <p className="text-[10px] font-mono truncate" style={{ color: 'var(--rm-text-muted)' }}>{account.primaryIban}</p>}
-                          </td>
-                          {/* Balance */}
-                          <td className="px-5 py-3.5">
-                            <p className="text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>{formatCurrency(account.availableBalance, account.currency)}</p>
-                            <p className="text-[10px]" style={{ color: 'var(--rm-text-muted)' }}>Current: {formatCurrency(account.currentBalance, account.currency)}</p>
-                          </td>
-                          {/* Status */}
-                          <td className="px-5 py-3.5">
-                            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ backgroundColor: `${statusColor}22`, color: statusColor }}>
-                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
-                              {account.statusDisplay || account.status}
+                            <span className="min-w-0">
+                              <Link
+                                href={`/dashboard/accounts/${account.accountId}`}
+                                onClick={e => e.stopPropagation()}
+                                className="block truncate text-base font-medium hover:underline"
+                                style={{ color: 'var(--rm-text)' }}
+                              >
+                                {account.rowHolder}
+                              </Link>
+                              <span
+                                className="block truncate text-sm"
+                                style={{ color: 'var(--rm-text-muted)' }}
+                              >
+                                {account.rowAccountName}
+                              </span>
                             </span>
-                          </td>
-                          {/* Actions */}
-                          <td className="px-5 py-3.5 text-right">
-                            <div className="flex justify-end items-center gap-1">
-                              <Link href={`/dashboard/accounts/${account.accountId}`} onClick={e => e.stopPropagation()}
-                                className="p-1.5 rounded-lg transition-colors hover:bg-white/[0.06]" style={{ color: 'var(--rm-accent)' }} title="View">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                              </Link>
-                              <Link href={`/dashboard/accounts/${account.accountId}/edit`} onClick={e => e.stopPropagation()}
-                                className="p-1.5 rounded-lg transition-colors hover:bg-white/[0.06]" style={{ color: 'var(--rm-text-muted)' }} title="Edit">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                              </Link>
-                              {isBankSuperAdmin && (
-                                <button onClick={e => { e.stopPropagation(); setDeleteConfirm(account.accountId); }}
-                                  className="p-1.5 rounded-lg transition-colors hover:bg-white/[0.06]" style={{ color: '#ef4444' }} title="Delete">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <Pill tone={categoryTone(account.accountCategory)}>
+                            {accountCategoryLabels[account.accountCategory]}
+                          </Pill>
+                          <p className="text-sm mt-1.5" style={{ color: 'var(--rm-text-muted)' }}>
+                            {account.rowType}
+                          </p>
+                        </td>
+                        <td className="px-5 py-4">
+                          <p
+                            className="text-sm tabular-nums"
+                            style={{ color: 'var(--rm-text-secondary)' }}
+                          >
+                            {account.accountNumber}
+                          </p>
+                          {account.primaryIban && (
+                            <p
+                              className="text-sm truncate max-w-[220px] tabular-nums"
+                              style={{ color: 'var(--rm-text-muted)' }}
+                            >
+                              {account.primaryIban}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-right whitespace-nowrap">
+                          <p
+                            className="text-base font-medium tabular-nums"
+                            style={{ color: 'var(--rm-text)' }}
+                          >
+                            {formatCurrency(account.availableBalance || 0, account.currency)}
+                          </p>
+                          <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                            Current{' '}
+                            {formatCurrency(account.currentBalance || 0, account.currency)}
+                          </p>
+                        </td>
+                        <td className="px-5 py-4">
+                          <Pill tone={statusTone(account.status)}>
+                            {account.statusDisplay || accountStatusLabels[account.status]}
+                          </Pill>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex justify-end items-center gap-1.5">
+                            <Link
+                              href={`/dashboard/accounts/${account.accountId}`}
+                              onClick={e => e.stopPropagation()}
+                              aria-label={`View ${account.rowAccountName}`}
+                              className="rounded-full p-2 transition-opacity hover:opacity-80"
+                              style={{
+                                backgroundColor: 'var(--rm-input)',
+                                color: 'var(--rm-text-secondary)',
+                              }}
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                strokeWidth={1.8}
+                                aria-hidden="true"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                              </svg>
+                            </Link>
+                            <Link
+                              href={`/dashboard/accounts/${account.accountId}/edit`}
+                              onClick={e => e.stopPropagation()}
+                              aria-label={`Edit ${account.rowAccountName}`}
+                              className="rounded-full p-2 transition-opacity hover:opacity-80"
+                              style={{
+                                backgroundColor: 'var(--rm-input)',
+                                color: 'var(--rm-text-secondary)',
+                              }}
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                strokeWidth={1.8}
+                                aria-hidden="true"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"
+                                />
+                              </svg>
+                            </Link>
+                            {isBankSuperAdmin && (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setDeleteError(null);
+                                  setDeleteTarget(account);
+                                }}
+                                aria-label={`Delete ${account.rowAccountName}`}
+                                className="rounded-full p-2 text-red-600 dark:text-red-400 transition-opacity hover:opacity-80"
+                                style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  strokeWidth={1.8}
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                                  />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
 
               {/* Pagination */}
-              <div className="px-5 py-3 flex items-center justify-between flex-wrap gap-2" style={{ borderTop: '1px solid var(--rm-border)' }}>
-                <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
-                  Showing {sorted.length} of {totalElements} accounts
+              <div
+                className="flex items-center justify-between gap-3 flex-wrap px-5 py-4"
+                style={{ borderTop: '1px solid var(--rm-border)' }}
+              >
+                <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                  Showing {sorted.length} of {totalElements.toLocaleString()} accounts
                 </p>
                 {totalPages > 1 && (
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => setPage(page - 1)} disabled={page === 0}
-                      className="p-2 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors" style={{ color: 'var(--rm-text-muted)' }}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  <nav aria-label="Account pages" className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      aria-label="Previous page"
+                      className="rounded-full p-2 transition-opacity hover:opacity-80 disabled:opacity-40"
+                      style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                      </svg>
                     </button>
                     {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => (
-                      <button key={i} onClick={() => setPage(i)}
-                        className="min-w-[34px] h-8 rounded-lg text-sm font-medium transition-all"
-                        style={page === i ? { backgroundColor: '#0ea5e9', color: '#fff' } : { color: 'var(--rm-text-secondary)' }}>
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setPage(i)}
+                        aria-label={`Page ${i + 1}`}
+                        aria-current={page === i ? 'page' : undefined}
+                        className="min-w-[36px] h-9 rounded-full text-sm font-medium tabular-nums transition-opacity hover:opacity-90"
+                        style={{
+                          backgroundColor: page === i ? 'var(--rm-accent-muted)' : 'transparent',
+                          color: page === i ? 'var(--rm-accent)' : 'var(--rm-text-secondary)',
+                        }}
+                      >
                         {i + 1}
                       </button>
                     ))}
-                    <button onClick={() => setPage(page + 1)} disabled={page >= totalPages - 1}
-                      className="p-2 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors" style={{ color: 'var(--rm-text-muted)' }}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                    <button
+                      type="button"
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={page >= totalPages - 1}
+                      aria-label="Next page"
+                      className="rounded-full p-2 transition-opacity hover:opacity-80 disabled:opacity-40"
+                      style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
                     </button>
-                  </div>
+                  </nav>
                 )}
               </div>
-            </div>
-          )}
+            </section>
+          ) : null}
         </div>
 
-        {/* Right sidebar */}
-        <aside className="space-y-4">
-          {/* Account Insights */}
-          {stats && (
-            <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-              <h3 className="text-sm font-bold mb-3" style={{ color: 'var(--rm-text)' }}>Account Insights</h3>
-              <div className="space-y-2.5">
-                <button onClick={() => setStatusFilter('FROZEN')} className="w-full text-left rounded-xl p-3 flex items-center justify-between" style={{ backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
-                  <div>
-                    <p className="text-xs font-bold" style={{ color: '#60a5fa' }}>Frozen Accounts</p>
-                    <p className="text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>Restricted access</p>
-                  </div>
-                  <span className="text-lg font-bold" style={{ color: '#60a5fa' }}>{stats.frozenAccounts}</span>
-                </button>
-                <button onClick={() => setStatusFilter('DORMANT')} className="w-full text-left rounded-xl p-3 flex items-center justify-between" style={{ backgroundColor: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.25)' }}>
-                  <div>
-                    <p className="text-xs font-bold" style={{ color: 'var(--rm-text-secondary)' }}>Dormant Accounts</p>
-                    <p className="text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>Inactive — review</p>
-                  </div>
-                  <span className="text-lg font-bold" style={{ color: 'var(--rm-text-secondary)' }}>{stats.dormantAccounts}</span>
-                </button>
-                <button onClick={() => setCategoryFilter('CREDIT')} className="w-full text-left rounded-xl p-3 flex items-center justify-between" style={{ backgroundColor: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
-                  <div>
-                    <p className="text-xs font-bold" style={{ color: '#a78bfa' }}>Credit Facilities</p>
-                    <p className="text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>Lending exposure</p>
-                  </div>
-                  <span className="text-lg font-bold" style={{ color: '#a78bfa' }}>{stats.creditAccounts}</span>
-                </button>
-                <button onClick={() => setCategoryFilter('DEPOSIT')} className="w-full text-left rounded-xl p-3 flex items-center justify-between" style={{ backgroundColor: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                  <div>
-                    <p className="text-xs font-bold" style={{ color: '#34d399' }}>Deposit Accounts</p>
-                    <p className="text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>Funding base</p>
-                  </div>
-                  <span className="text-lg font-bold" style={{ color: '#34d399' }}>{stats.depositAccounts}</span>
-                </button>
+        {/* ══ Sidebar ══ */}
+        <aside className="space-y-6" aria-label="Account insights">
+          <section className="rounded-3xl p-6" style={cardStyle}>
+            <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Needs attention
+            </h2>
+            <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+              Select a filter to narrow the account list.
+            </p>
+            {statsUnavailable && !stats ? (
+              <p className="text-sm mt-4" style={{ color: 'var(--rm-text-muted)' }} role="status">
+                Counts are unavailable right now.
+              </p>
+            ) : stats ? (
+              <ul className="mt-4 space-y-2.5">
+                <FilterTile
+                  label="Frozen accounts"
+                  hint="Access restricted"
+                  count={stats.frozenAccounts}
+                  pressed={statusFilter === 'FROZEN'}
+                  onClick={() =>
+                    setStatusFilter(statusFilter === 'FROZEN' ? 'all' : ('FROZEN' as StatusFilter))
+                  }
+                />
+                <FilterTile
+                  label="Dormant accounts"
+                  hint="Inactive — worth a review"
+                  count={stats.dormantAccounts}
+                  pressed={statusFilter === 'DORMANT'}
+                  onClick={() =>
+                    setStatusFilter(
+                      statusFilter === 'DORMANT' ? 'all' : ('DORMANT' as StatusFilter)
+                    )
+                  }
+                />
+                <FilterTile
+                  label="Credit facilities"
+                  hint="Lending exposure"
+                  count={stats.creditAccounts}
+                  pressed={categoryFilter === 'CREDIT'}
+                  onClick={() =>
+                    setCategoryFilter(
+                      categoryFilter === 'CREDIT' ? 'all' : ('CREDIT' as CategoryFilter)
+                    )
+                  }
+                />
+                <FilterTile
+                  label="Deposit accounts"
+                  hint="Funding base"
+                  count={stats.depositAccounts}
+                  pressed={categoryFilter === 'DEPOSIT'}
+                  onClick={() =>
+                    setCategoryFilter(
+                      categoryFilter === 'DEPOSIT' ? 'all' : ('DEPOSIT' as CategoryFilter)
+                    )
+                  }
+                />
+              </ul>
+            ) : (
+              <div className="mt-4 space-y-2.5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-16 animate-pulse rounded-2xl"
+                    style={{ backgroundColor: 'var(--rm-input)' }}
+                  />
+                ))}
               </div>
-            </div>
-          )}
+            )}
+          </section>
 
-          {/* Accounts by Category donut */}
-          {stats && (
-            <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-              <h3 className="text-sm font-bold mb-3" style={{ color: 'var(--rm-text)' }}>Accounts by Category</h3>
-              <div className="flex items-center gap-4">
-                <Donut segments={donutSegments} total={stats.totalAccounts} />
-                <div className="space-y-1.5 flex-1">
-                  {donutSegments.map(s => {
-                    const pct = stats.totalAccounts ? Math.round((s.value / stats.totalAccounts) * 100) : 0;
-                    return (
-                      <div key={s.label} className="flex items-center justify-between text-[11px]">
-                        <span className="flex items-center gap-1.5" style={{ color: 'var(--rm-text-secondary)' }}>
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+          <section className="rounded-3xl p-6" style={cardStyle}>
+            <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Accounts by category
+            </h2>
+            {!stats ? (
+              <p className="text-sm mt-3" style={{ color: 'var(--rm-text-muted)' }}>
+                {statsUnavailable ? 'Category counts are unavailable.' : 'Loading counts…'}
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-4">
+                {categoryBreakdown.map(s => {
+                  const pct = stats.totalAccounts
+                    ? Math.round((s.value / stats.totalAccounts) * 100)
+                    : 0;
+                  return (
+                    <li key={s.label}>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="flex items-center gap-2" style={{ color: 'var(--rm-text-secondary)' }}>
+                          <span
+                            className="h-2 w-2 rounded-full shrink-0"
+                            style={{ backgroundColor: TONE_DOT[s.tone] }}
+                            aria-hidden="true"
+                          />
                           {s.label}
                         </span>
-                        <span style={{ color: 'var(--rm-text-muted)' }}>{s.value} ({pct}%)</span>
+                        <span className="tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
+                          {s.value} · {pct}%
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+                      <div
+                        className="mt-2 h-1.5 rounded-full overflow-hidden"
+                        style={{ backgroundColor: 'var(--rm-input)' }}
+                        aria-hidden="true"
+                      >
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, backgroundColor: TONE_DOT[s.tone] }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+                <li className="text-sm tabular-nums pt-1" style={{ color: 'var(--rm-text-muted)' }}>
+                  {stats.totalAccounts.toLocaleString()} accounts in total
+                </li>
+              </ul>
+            )}
+          </section>
 
-          {/* Portfolio balance breakdown */}
-          <div className="rounded-2xl p-4" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-            <h3 className="text-sm font-bold mb-3" style={{ color: 'var(--rm-text)' }}>Portfolio Balance</h3>
-            <div className="space-y-3">
-              {balanceBreakdown.map(b => (
-                <div key={b.label}>
-                  <div className="flex items-center justify-between text-[11px] mb-1">
-                    <span className="font-semibold" style={{ color: 'var(--rm-text-secondary)' }}>{b.label}</span>
-                    <span style={{ color: 'var(--rm-text-muted)' }}>{compact(b.value, currency)}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--rm-input)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${(b.value / balanceMax) * 100}%`, backgroundColor: b.color }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <section className="rounded-3xl p-6" style={cardStyle}>
+            <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Portfolio balance
+            </h2>
+            {allAccounts.length === 0 ? (
+              <p className="text-sm mt-3" style={{ color: 'var(--rm-text-muted)' }}>
+                {statsUnavailable
+                  ? 'Balances are unavailable right now.'
+                  : 'No balances recorded yet.'}
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-4">
+                {balanceBreakdown.map(b => (
+                  <li key={b.label}>
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span style={{ color: 'var(--rm-text-secondary)' }}>{b.label}</span>
+                      <span
+                        className="text-base font-medium tabular-nums"
+                        style={{ color: 'var(--rm-text)' }}
+                      >
+                        {money(b.value, currency)}
+                      </span>
+                    </div>
+                    <div
+                      className="mt-2 h-1.5 rounded-full overflow-hidden"
+                      style={{ backgroundColor: 'var(--rm-input)' }}
+                      aria-hidden="true"
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${(b.value / balanceMax) * 100}%`,
+                          backgroundColor: 'var(--rm-accent)',
+                        }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </aside>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl" style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}>
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}>
-              <svg className="w-6 h-6" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            </div>
-            <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--rm-text)' }}>Delete Account</h3>
-            <p className="text-sm mb-6" style={{ color: 'var(--rm-text-muted)' }}>
-              Are you sure you want to delete this account? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setDeleteConfirm(null)} disabled={deleting}
-                className="px-4 py-2 font-medium rounded-xl transition-colors" style={{ color: 'var(--rm-text-secondary)', backgroundColor: 'var(--rm-input)' }}>
-                Cancel
-              </button>
-              <button onClick={() => handleDelete(deleteConfirm)} disabled={deleting}
-                className="px-4 py-2 text-white font-medium rounded-xl disabled:opacity-50 transition-colors" style={{ backgroundColor: '#dc2626' }}>
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {loading && (
+        <p role="status" className="sr-only">
+          Loading accounts
+        </p>
       )}
+
+      {/* ══ Delete confirmation ══ */}
+      {deleteTarget && (
+        <Dialog
+          title="Delete account"
+          onClose={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
+        >
+          <p className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+            <strong style={{ color: 'var(--rm-text)' }}>{deleteTarget.accountName}</strong> (
+            {deleteTarget.accountNumber}) will be deleted. This cannot be undone.
+          </p>
+
+          {deleteError && (
+            <p
+              role="alert"
+              className="mt-4 rounded-2xl px-5 py-4 text-sm"
+              style={{ backgroundColor: 'rgba(239,68,68,0.12)', color: 'var(--rm-text)' }}
+            >
+              {deleteError}
+            </p>
+          )}
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+              className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
+            >
+              Keep account
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: 'rgba(220,38,38,1)' }}
+            >
+              {deleting ? 'Deleting…' : 'Delete account'}
+            </button>
+          </div>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Pieces                                                              */
+/* ------------------------------------------------------------------ */
+
+function Figure({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {label}
+      </dt>
+      <dd
+        className="mt-1 text-xl font-semibold tabular-nums"
+        style={{ color: 'var(--rm-text)' }}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function FilterTile({
+  label,
+  hint,
+  count,
+  pressed,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  count: number;
+  pressed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={pressed}
+        className="w-full text-left rounded-2xl px-5 py-4 transition-opacity hover:opacity-90"
+        style={{ backgroundColor: pressed ? 'var(--rm-accent-muted)' : 'var(--rm-input)' }}
+      >
+        <span className="flex items-center justify-between gap-3">
+          <span className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+            {label}
+          </span>
+          <span
+            className="text-base font-semibold tabular-nums"
+            style={{ color: 'var(--rm-text)' }}
+          >
+            {count}
+          </span>
+        </span>
+        <span className="block text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint} · {pressed ? 'filter applied' : 'not filtered'}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div className="rounded-3xl overflow-hidden" style={{ backgroundColor: 'var(--rm-card)' }}>
+      <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--rm-border)' }}>
+        <div
+          className="h-5 w-32 rounded-full animate-pulse"
+          style={{ backgroundColor: 'var(--rm-input)' }}
+        />
+      </div>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 px-5 py-4"
+          style={{ borderBottom: '1px solid var(--rm-border)' }}
+        >
+          <div
+            className="h-10 w-10 rounded-full animate-pulse shrink-0"
+            style={{ backgroundColor: 'var(--rm-input)' }}
+          />
+          <div className="flex-1 space-y-2">
+            <div
+              className="h-4 w-1/3 rounded-full animate-pulse"
+              style={{ backgroundColor: 'var(--rm-input)' }}
+            />
+            <div
+              className="h-3 w-1/5 rounded-full animate-pulse"
+              style={{ backgroundColor: 'var(--rm-input)' }}
+            />
+          </div>
+          <div
+            className="h-6 w-24 rounded-full animate-pulse shrink-0"
+            style={{ backgroundColor: 'var(--rm-input)' }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Dialog({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const titleId = `dialog-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+  useEffect(() => {
+    ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(2,6,23,0.55)' }}
+      onClick={onClose}
+    >
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="w-full max-w-md rounded-3xl p-7"
+        style={{ backgroundColor: 'var(--rm-card)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h2
+          id={titleId}
+          className="mb-4 text-xl font-semibold tracking-tight"
+          style={{ color: 'var(--rm-text)' }}
+        >
+          {title}
+        </h2>
+        {children}
+      </div>
     </div>
   );
 }

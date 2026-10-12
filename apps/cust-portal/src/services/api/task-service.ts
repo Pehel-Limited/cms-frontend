@@ -64,18 +64,18 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 export const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
-  OPEN: 'bg-amber-100 text-amber-800',
-  IN_PROGRESS: 'bg-blue-100 text-blue-800',
-  WAITING: 'bg-purple-100 text-purple-800',
-  DONE: 'bg-green-100 text-green-800',
-  CANCELLED: 'bg-gray-100 text-gray-600',
+  OPEN: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+  IN_PROGRESS: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
+  WAITING: 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300',
+  DONE: 'bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300',
+  CANCELLED: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-200',
 };
 
 export const TASK_PRIORITY_COLORS: Record<TaskPriority, string> = {
-  LOW: 'text-gray-500',
-  MEDIUM: 'text-blue-600',
-  HIGH: 'text-orange-600',
-  CRITICAL: 'text-red-600',
+  LOW: 'text-gray-500 dark:text-gray-400',
+  MEDIUM: 'text-blue-600 dark:text-blue-300',
+  HIGH: 'text-orange-600 dark:text-orange-300',
+  CRITICAL: 'text-red-600 dark:text-red-300',
 };
 
 export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {

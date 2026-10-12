@@ -3,7 +3,6 @@
 
 import { ApiClient } from './client';
 import {
-  LomsApplicationStatus,
   StatusInfo,
   WorkflowTask,
   Approval,
@@ -300,19 +299,6 @@ export class LomsService {
   }
 
   // ==================== Workflow Actions ====================
-
-  /**
-   * Submit application for processing
-   * This triggers KYC check → Decisioning flow
-   */
-  async submitForDecisioning(applicationId: string, userId: string): Promise<void> {
-    await this.transitionStatus(applicationId, {
-      currentStatus: 'SUBMITTED',
-      targetStatus: 'PENDING_CREDIT_CHECK',
-      actorId: userId,
-      reason: 'Submitting for credit decisioning',
-    });
-  }
 
   /**
    * Complete underwriting review

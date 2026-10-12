@@ -95,6 +95,84 @@ export interface PerformanceMetrics {
   rmUserId: string;
 }
 
+// ---- Admin cross-RM oversight ----
+
+export interface RmPortfolio {
+  rmUserId: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string | null;
+  department: string | null;
+  customersCount: number;
+  inProgressCount: number;
+  inProgressValue: number;
+  needsActionCount: number;
+  stuckAtRiskCount: number;
+  approvedThisMonthCount: number;
+  approvedThisMonthValue: number;
+  bookedThisMonthCount: number;
+  bookedThisMonthValue: number;
+  declinedThisMonthCount: number;
+  conversionRate30d: number;
+  bankId: string;
+}
+
+export interface AdminOversightSummary {
+  bankKpis: DashboardKpis;
+  rmPortfolios: RmPortfolio[];
+  bankId: string;
+}
+
+export interface AdminInsights {
+  performance: PerformanceMetrics;
+  missingItems: MissingItem[];
+  bankId: string;
+}
+
+/* One week of the volume/outcome series. Every count is derived from a real
+   timestamp on the application (submitted_at / decision_made_at). */
+export interface TrendPoint {
+  /** ISO date of the Monday that starts the week */
+  weekStart: string;
+  submittedCount: number;
+  submittedValue: number;
+  decidedCount: number;
+  approvedCount: number;
+  declinedCount: number;
+}
+
+/* A journey the customer started but never submitted. Channel work in progress —
+   deliberately not pipeline, because nothing here has reached the bank yet. */
+export interface ChannelJourney {
+  journeyId: string;
+  bankId: string;
+  rmUserId?: string;
+  customerId: string;
+  customerName: string;
+  customerNumber: string;
+  customerType: string;
+  status: string;
+  currentStage: string;
+  journeyVersion: number;
+  productCode?: string;
+  productName?: string;
+  applicationId?: string;
+  daysStalled: number;
+  pausedReason?: string;
+  lastActiveAt?: string;
+  createdAt?: string;
+  eligibilityChecks: number;
+  factCount: number;
+  facts?: Array<{
+    factKey: string;
+    value: unknown;
+    provenance?: string;
+    source?: string;
+    confirmedAt?: string;
+  }>;
+}
+
 export const dashboardService = {
   async getKpis(bankId: string): Promise<DashboardKpis> {
     return apiClient.get<DashboardKpis>(`/api/admin/dashboard/kpis?bankId=${bankId}`);
@@ -123,6 +201,81 @@ export const dashboardService = {
   async getPerformanceMetrics(bankId: string): Promise<PerformanceMetrics> {
     return apiClient.get<PerformanceMetrics>(
       `/api/admin/dashboard/performance-metrics?bankId=${bankId}`
+    );
+  },
+
+  async getTrends(bankId: string, weeks: number = 12): Promise<TrendPoint[]> {
+    return apiClient.get<TrendPoint[]>(
+      `/api/admin/dashboard/trends?bankId=${bankId}&weeks=${weeks}`
+    );
+  },
+
+  // ---- Admin cross-RM oversight (bank-wide) ----
+
+  async getOversightSummary(bankId: string): Promise<AdminOversightSummary> {
+    return apiClient.get<AdminOversightSummary>(
+      `/api/admin/dashboard/oversight/summary?bankId=${bankId}`
+    );
+  },
+
+  async getOversightPipeline(bankId: string): Promise<PipelineStage[]> {
+    return apiClient.get<PipelineStage[]>(
+      `/api/admin/dashboard/oversight/pipeline?bankId=${bankId}`
+    );
+  },
+
+  async getOversightAgingHeatmap(bankId: string): Promise<AgingHeatmapCell[]> {
+    return apiClient.get<AgingHeatmapCell[]>(
+      `/api/admin/dashboard/oversight/aging-heatmap?bankId=${bankId}`
+    );
+  },
+
+  async getOversightInsights(bankId: string): Promise<AdminInsights> {
+    return apiClient.get<AdminInsights>(
+      `/api/admin/dashboard/oversight/insights?bankId=${bankId}`
+    );
+  },
+
+  async getOversightWorklist(
+    bankId: string,
+    rmUserId?: string,
+    status?: string,
+    limit: number = 50
+  ): Promise<WorklistItem[]> {
+    const params = new URLSearchParams({ bankId, limit: limit.toString() });
+    if (rmUserId) params.append('rmUserId', rmUserId);
+    if (status) params.append('status', status);
+    return apiClient.get<WorklistItem[]>(
+      `/api/admin/dashboard/oversight/worklist?${params.toString()}`
+    );
+  },
+
+  async getOversightTrends(bankId: string, rmUserId?: string, weeks: number = 12): Promise<TrendPoint[]> {
+    const params = new URLSearchParams({ bankId, weeks: weeks.toString() });
+    if (rmUserId) params.append('rmUserId', rmUserId);
+    return apiClient.get<TrendPoint[]>(
+      `/api/admin/dashboard/oversight/trends?${params.toString()}`
+    );
+  },
+
+  /** Journeys belonging to the signed-in staff member's customers. */
+  async getJourneys(bankId: string, minDaysStalled?: number, limit = 50): Promise<ChannelJourney[]> {
+    const params = new URLSearchParams({ bankId, limit: limit.toString() });
+    if (minDaysStalled) params.append('minDaysStalled', minDaysStalled.toString());
+    return apiClient.get<ChannelJourney[]>(`/api/admin/dashboard/journeys?${params.toString()}`);
+  },
+
+  async getOversightJourneys(
+    bankId: string,
+    rmUserId?: string,
+    minDaysStalled?: number,
+    limit = 100
+  ): Promise<ChannelJourney[]> {
+    const params = new URLSearchParams({ bankId, limit: limit.toString() });
+    if (rmUserId) params.append('rmUserId', rmUserId);
+    if (minDaysStalled) params.append('minDaysStalled', minDaysStalled.toString());
+    return apiClient.get<ChannelJourney[]>(
+      `/api/admin/dashboard/oversight/journeys?${params.toString()}`
     );
   },
 };

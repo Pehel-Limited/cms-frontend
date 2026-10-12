@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -14,28 +14,32 @@ const SEGMENT_OPTIONS = [
   {
     value: 'INDIVIDUAL',
     label: 'Individual',
-    description: 'Natural person opening personal account',
+    description: 'Natural person opening a personal account',
   },
   {
     value: 'SOLE_TRADER',
-    label: 'Sole Trader',
-    description: 'Self-employed individual trading under own name',
+    label: 'Sole trader',
+    description: 'Self-employed individual trading under their own name',
   },
   {
     value: 'COMPANY',
-    label: 'Company (Ltd/PLC)',
+    label: 'Company (Ltd or PLC)',
     description: 'Private or public limited company',
   },
-  { value: 'PARTNERSHIP', label: 'Partnership', description: 'General or limited partnership' },
+  {
+    value: 'PARTNERSHIP',
+    label: 'Partnership',
+    description: 'General or limited partnership',
+  },
   { value: 'TRUST', label: 'Trust', description: 'Express trust or similar legal arrangement' },
   {
     value: 'CHARITY',
-    label: 'Charity/Non-Profit',
-    description: 'Registered charity or non-profit organization',
+    label: 'Charity or non-profit',
+    description: 'Registered charity or non-profit organisation',
   },
   {
     value: 'CLUB_ASSOCIATION',
-    label: 'Club/Association',
+    label: 'Club or association',
     description: 'Unincorporated association or club',
   },
 ];
@@ -48,13 +52,13 @@ const CASE_TYPE_OPTIONS = [
   },
   {
     value: 'PERIODIC_REVIEW',
-    label: 'Periodic Review',
+    label: 'Periodic review',
     description: 'Scheduled review based on risk tier',
   },
   {
     value: 'EVENT_DRIVEN',
-    label: 'Event Driven',
-    description: 'Triggered by suspicious activity or changes',
+    label: 'Event driven',
+    description: 'Triggered by unusual activity or a change in circumstances',
   },
   {
     value: 'REMEDIATION',
@@ -63,29 +67,31 @@ const CASE_TYPE_OPTIONS = [
   },
 ];
 
-const DILIGENCE_OPTIONS: { value: DiligenceLevel; label: string; description: string }[] = [
-  {
-    value: 'SDD',
-    label: 'Simplified Due Diligence',
-    description: 'Low-risk customers with minimal verification',
-  },
-  {
-    value: 'CDD',
-    label: 'Standard Customer Due Diligence',
-    description: 'Standard verification for most customers',
-  },
-  {
-    value: 'EDD',
-    label: 'Enhanced Due Diligence',
-    description: 'High-risk customers requiring additional checks',
-  },
+const DILIGENCE_OPTIONS: { value: DiligenceLevel; description: string }[] = [
+  { value: 'SDD', description: 'Low-risk customers with minimal verification' },
+  { value: 'CDD', description: 'Standard verification for most customers' },
+  { value: 'EDD', description: 'High-risk customers requiring additional checks' },
 ];
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message;
+  const apiMessage = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return apiMessage || fallback;
+}
 
 export default function NewKycCasePage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   const [formData, setFormData] = useState<CreateKycCaseRequest>({
@@ -95,42 +101,75 @@ export default function NewKycCasePage() {
     triggerReason: '',
   });
 
-  useEffect(() => {
-    if (customerSearch.length >= 2) {
-      searchCustomers();
-    }
-  }, [customerSearch]);
-
-  const searchCustomers = async () => {
+  const searchCustomers = async (term: string) => {
+    setSearching(true);
+    setSearchError(null);
     try {
-      const results = await customerService.searchCustomers({ searchTerm: customerSearch });
-      setCustomers(results);
+      const results = await customerService.searchCustomers({ searchTerm: term });
+      setCustomers(results ?? []);
+      setSearched(true);
     } catch (error) {
       console.error('Failed to search customers:', error);
+      setCustomers([]);
+      setSearched(true);
+      setSearchError(errorMessage(error, 'We could not search customers. Please try again.'));
+    } finally {
+      setSearching(false);
     }
   };
 
+  // Debounced search so every keystroke does not hit the API.
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const term = customerSearch.trim();
+    if (term.length < 2) {
+      setCustomers([]);
+      setSearched(false);
+      setSearchError(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimer.current = setTimeout(() => searchCustomers(term), 350);
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [customerSearch]);
+
+  const triggerReasonRequired = formData.caseType !== 'ONBOARDING';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+    setCustomerError(null);
+
     if (!selectedCustomer) {
-      alert('Please select a customer');
+      setCustomerError('Select the customer this case belongs to.');
+      setFormError('The case cannot be created until a customer is selected.');
+      document.getElementById('customer-search')?.focus();
+      return;
+    }
+    if (triggerReasonRequired && !formData.triggerReason?.trim()) {
+      setFormError('A trigger reason is required for this case type.');
+      document.getElementById('trigger-reason')?.focus();
       return;
     }
 
     try {
-      setLoading(true);
+      setSubmitting(true);
       const request: CreateKycCaseRequest = {
         ...formData,
+        triggerReason: formData.triggerReason?.trim() || undefined,
         customerId: selectedCustomer.customerId,
       };
-
       const kycCase = await kycService.createCase(request);
       router.push(`/dashboard/kyc/cases/${kycCase.caseId}`);
     } catch (error) {
       console.error('Failed to create KYC case:', error);
-      alert('Failed to create KYC case');
+      // Scoped to the form: everything the user typed stays put.
+      setFormError(errorMessage(error, 'We could not create the case. Please try again.'));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -138,325 +177,480 @@ export default function NewKycCasePage() {
     setFormData(prev => ({ ...prev, [field]: value || undefined }));
   };
 
+  const triggerReasonError =
+    triggerReasonRequired && formError?.includes('trigger reason') ? formError : null;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div>
-              <h1 className="text-2xl font-bold text-primary-600">Create KYC Case</h1>
-              <p className="text-sm text-gray-500">Initiate KYC/AML review for a customer</p>
-            </div>
-            <Link
-              href="/dashboard/kyc/cases"
-              className="text-sm text-gray-600 hover:text-primary-600 font-medium"
+    <div className="space-y-6" style={{ color: 'var(--rm-text)' }}>
+      {/* ══ Header ══ */}
+      <header className="flex flex-wrap items-start justify-between gap-6">
+        <div className="min-w-0">
+          <Link
+            href="/dashboard/kyc/cases"
+            className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+            style={{ color: 'var(--rm-text-muted)' }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
             >
-              Cancel
-            </Link>
-          </div>
+              <path d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to cases
+          </Link>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            New KYC case
+          </h1>
+          <p className="mt-1.5 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
+            Start an onboarding, periodic or event-driven KYC and AML review for a customer.
+          </p>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Customer Selection */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Customer</h2>
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+        {/* ══ Form-level error ══ */}
+        {formError && !triggerReasonError && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-3xl p-6"
+            style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
+          >
+            <svg
+              className="mt-0.5 h-5 w-5 shrink-0"
+              style={{ color: '#b91c1c' }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                {formError}
+              </p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                Nothing was saved — your answers are still here.
+              </p>
+            </div>
+          </div>
+        )}
 
-            {selectedCustomer ? (
-              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="font-medium text-gray-900">
-                      {customerService.getCustomerName(selectedCustomer)}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {selectedCustomer.customerNumber} | {selectedCustomer.primaryEmail}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Type: {selectedCustomer.customerType}
-                    </div>
-                  </div>
+        {/* ══ Customer ══ */}
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Customer
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            Required. The case is created against this customer record.
+          </p>
+
+          {selectedCustomer ? (
+            <div
+              className="mt-4 flex flex-wrap items-start justify-between gap-4 rounded-2xl p-5"
+              style={{ backgroundColor: 'var(--rm-accent-muted)' }}
+            >
+              <div className="min-w-0">
+                <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                  {customerService.getCustomerName(selectedCustomer)}
+                </p>
+                <p className="mt-0.5 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  {selectedCustomer.customerNumber}
+                  {selectedCustomer.primaryEmail ? ` · ${selectedCustomer.primaryEmail}` : ''}
+                </p>
+                <p className="mt-0.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  {selectedCustomer.customerType === 'INDIVIDUAL'
+                    ? 'Individual'
+                    : selectedCustomer.customerType === 'BUSINESS'
+                      ? 'Business'
+                      : 'Corporate'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCustomer(null);
+                  setCustomerError(null);
+                  setCustomerSearch('');
+                }}
+                className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+                style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text-secondary)' }}
+              >
+                Change customer
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <label
+                htmlFor="customer-search"
+                className="mb-1.5 block text-sm font-medium"
+                style={{ color: 'var(--rm-text-secondary)' }}
+              >
+                Search customers
+                <span aria-hidden="true" style={{ color: '#b91c1c' }}>
+                  {' '}
+                  *
+                </span>
+              </label>
+              <input
+                id="customer-search"
+                type="search"
+                value={customerSearch}
+                onChange={e => {
+                  setCustomerSearch(e.target.value);
+                  if (customerError) setCustomerError(null);
+                }}
+                placeholder="Name, email or customer number"
+                required
+                aria-required="true"
+                autoComplete="off"
+                aria-invalid={customerError ? true : undefined}
+                aria-describedby={
+                  customerError
+                    ? 'customer-search-error'
+                    : searching
+                      ? 'customer-search-status'
+                      : 'customer-search-hint'
+                }
+                className="w-full rounded-xl px-3.5 py-2.5 text-base"
+                style={{
+                  backgroundColor: 'var(--rm-input)',
+                  border: `1px solid ${customerError ? 'rgba(239,68,68,0.75)' : 'var(--rm-border)'}`,
+                  color: 'var(--rm-text)',
+                }}
+              />
+              <p id="customer-search-hint" className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                Type at least two characters to search.
+              </p>
+              {customerError && (
+                <p id="customer-search-error" role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+                  {customerError}
+                </p>
+              )}
+              <p id="customer-search-status" role="status" className="sr-only">
+                {searching ? 'Searching customers' : ''}
+              </p>
+
+              {searchError && (
+                <div
+                  role="alert"
+                  className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl p-4"
+                  style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
+                >
+                  <p className="min-w-0 flex-1 text-sm" style={{ color: 'var(--rm-text)' }}>
+                    {searchError}
+                  </p>
                   <button
                     type="button"
-                    onClick={() => setSelectedCustomer(null)}
-                    className="text-sm text-primary-600 hover:text-primary-700"
+                    onClick={() => searchCustomers(customerSearch.trim())}
+                    className="rounded-full px-4 py-2 text-sm font-semibold"
+                    style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }}
                   >
-                    Change
+                    Try again
                   </button>
                 </div>
-              </div>
-            ) : (
-              <div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search by name, email, or customer number..."
-                    value={customerSearch}
-                    onChange={e => setCustomerSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                  <svg
-                    className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              )}
+
+              {searching && !searchError && (
+                <ul className="mt-3 space-y-2" aria-hidden="true">
+                  {[0, 1, 2].map(i => (
+                    <li
+                      key={i}
+                      className="h-14 animate-pulse rounded-2xl"
+                      style={{ backgroundColor: 'var(--rm-card-hover)' }}
+                    />
+                  ))}
+                </ul>
+              )}
+
+              {!searching && !searchError && searched && customers.length === 0 && (
+                <p
+                  className="mt-3 rounded-2xl p-4 text-sm"
+                  style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-muted)' }}
+                >
+                  No customers match “{customerSearch.trim()}”. Try a different name, email or
+                  customer number.
+                </p>
+              )}
+
+              {!searching && customers.length > 0 && (
+                <>
+                  <p className="mt-3 text-sm tabular-nums" role="status" style={{ color: 'var(--rm-text-muted)' }}>
+                    {customers.length} match{customers.length === 1 ? '' : 'es'}
+                  </p>
+                  <ul
+                    id="customer-results"
+                    className="mt-2 max-h-72 space-y-2 overflow-y-auto"
+                    aria-label="Customer search results"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                    />
-                  </svg>
-                </div>
-
-                {customers.length > 0 && (
-                  <div className="mt-2 border border-gray-200 rounded-lg max-h-60 overflow-y-auto">
                     {customers.map(customer => (
-                      <button
-                        key={customer.customerId}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCustomer(customer);
-                          setCustomers([]);
-                          setCustomerSearch('');
-                          // Auto-set segment based on customer type
-                          if (customer.customerType === 'INDIVIDUAL') {
-                            handleChange('customerSegment', 'INDIVIDUAL');
-                          } else if (customer.customerType === 'BUSINESS') {
-                            handleChange('customerSegment', 'COMPANY');
-                          }
-                        }}
-                        className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                      >
-                        <div className="font-medium text-gray-900">
-                          {customerService.getCustomerName(customer)}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {customer.customerNumber} | {customer.primaryEmail}
-                        </div>
-                      </button>
+                      <li key={customer.customerId}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomer(customer);
+                            setCustomers([]);
+                            setSearched(false);
+                            setCustomerSearch('');
+                            setCustomerError(null);
+                            setFormError(null);
+                            // Segment follows the customer type so the two stay consistent.
+                            handleChange(
+                              'customerSegment',
+                              customer.customerType === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'COMPANY'
+                            );
+                          }}
+                          className="w-full rounded-2xl px-4 py-3 text-left transition-opacity hover:opacity-80"
+                          style={{ backgroundColor: 'var(--rm-input)' }}
+                        >
+                          <span className="block text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                            {customerService.getCustomerName(customer)}
+                          </span>
+                          <span className="mt-0.5 block text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                            {customer.customerNumber}
+                            {customer.primaryEmail ? ` · ${customer.primaryEmail}` : ''}
+                          </span>
+                        </button>
+                      </li>
                     ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Customer Segment */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer Segment</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Select the customer segment to determine the appropriate KYC requirements per EU/Irish
-              AML regulations.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {SEGMENT_OPTIONS.map(option => (
-                <label
-                  key={option.value}
-                  className={`relative flex cursor-pointer rounded-lg border p-4 hover:border-primary-500 ${
-                    formData.customerSegment === option.value
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="customerSegment"
-                    value={option.value}
-                    checked={formData.customerSegment === option.value}
-                    onChange={e => handleChange('customerSegment', e.target.value)}
-                    className="sr-only"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{option.label}</div>
-                    <div className="text-sm text-gray-500">{option.description}</div>
-                  </div>
-                  {formData.customerSegment === option.value && (
-                    <svg
-                      className="h-5 w-5 text-primary-600"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  )}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Case Type */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Case Type</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CASE_TYPE_OPTIONS.map(option => (
-                <label
-                  key={option.value}
-                  className={`relative flex cursor-pointer rounded-lg border p-4 hover:border-primary-500 ${
-                    formData.caseType === option.value
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="caseType"
-                    value={option.value}
-                    checked={formData.caseType === option.value}
-                    onChange={e => handleChange('caseType', e.target.value)}
-                    className="sr-only"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{option.label}</div>
-                    <div className="text-sm text-gray-500">{option.description}</div>
-                  </div>
-                  {formData.caseType === option.value && (
-                    <svg
-                      className="h-5 w-5 text-primary-600"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  )}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Required Diligence (Optional Override) */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Due Diligence Level</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Leave as &quot;Auto-determine&quot; to let the system calculate based on risk
-              assessment. Override only if you have specific regulatory requirements.
-            </p>
-
-            <div className="space-y-3">
-              <label
-                className={`relative flex cursor-pointer rounded-lg border p-4 hover:border-primary-500 ${
-                  !formData.requiredDiligence
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-200'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="requiredDiligence"
-                  value=""
-                  checked={!formData.requiredDiligence}
-                  onChange={() => handleChange('requiredDiligence', '')}
-                  className="sr-only"
-                />
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">Auto-determine</div>
-                  <div className="text-sm text-gray-500">
-                    System will determine appropriate level based on customer segment and risk
-                    factors
-                  </div>
-                </div>
-                {!formData.requiredDiligence && (
-                  <svg className="h-5 w-5 text-primary-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                )}
-              </label>
-
-              {DILIGENCE_OPTIONS.map(option => (
-                <label
-                  key={option.value}
-                  className={`relative flex cursor-pointer rounded-lg border p-4 hover:border-primary-500 ${
-                    formData.requiredDiligence === option.value
-                      ? 'border-primary-500 bg-primary-50'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="requiredDiligence"
-                    value={option.value}
-                    checked={formData.requiredDiligence === option.value}
-                    onChange={e => handleChange('requiredDiligence', e.target.value)}
-                    className="sr-only"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded ${kycService.getDiligenceColor(option.value)}`}
-                      >
-                        {option.value}
-                      </span>
-                      <span className="font-medium text-gray-900">{option.label}</span>
-                    </div>
-                    <div className="text-sm text-gray-500 mt-1">{option.description}</div>
-                  </div>
-                  {formData.requiredDiligence === option.value && (
-                    <svg
-                      className="h-5 w-5 text-primary-600"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  )}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Trigger Reason (for non-onboarding) */}
-          {formData.caseType !== 'ONBOARDING' && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Trigger Reason</h2>
-              <textarea
-                value={formData.triggerReason || ''}
-                onChange={e => handleChange('triggerReason', e.target.value)}
-                placeholder="Describe the reason for initiating this KYC review..."
-                rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
+                  </ul>
+                </>
+              )}
             </div>
           )}
+        </section>
 
-          {/* Submit */}
-          <div className="flex justify-end gap-4">
-            <Link
-              href="/dashboard/kyc/cases"
-              className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+        {/* ══ Segment ══ */}
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <fieldset>
+            <legend className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Customer segment
+            </legend>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Required. The segment drives the KYC requirements under EU and Irish AML rules.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {SEGMENT_OPTIONS.map(option => (
+                <RadioCard
+                  key={option.value}
+                  name="customerSegment"
+                  value={option.value}
+                  checked={formData.customerSegment === option.value}
+                  onChange={v => handleChange('customerSegment', v)}
+                  title={option.label}
+                  description={option.description}
+                />
+              ))}
+            </div>
+          </fieldset>
+        </section>
+
+        {/* ══ Case type ══ */}
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <fieldset>
+            <legend className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Case type
+            </legend>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Required. Why this review is being opened.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {CASE_TYPE_OPTIONS.map(option => (
+                <RadioCard
+                  key={option.value}
+                  name="caseType"
+                  value={option.value}
+                  checked={formData.caseType === option.value}
+                  onChange={v => handleChange('caseType', v)}
+                  title={option.label}
+                  description={option.description}
+                />
+              ))}
+            </div>
+          </fieldset>
+        </section>
+
+        {/* ══ Diligence ══ */}
+        <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+          <fieldset>
+            <legend className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Due diligence level
+            </legend>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Optional. Leave on auto-determine to let the risk assessment set the level; override
+              only where a specific regulatory requirement applies.
+            </p>
+            <div className="mt-4 space-y-3">
+              <RadioCard
+                name="requiredDiligence"
+                value=""
+                checked={!formData.requiredDiligence}
+                onChange={() => handleChange('requiredDiligence', '')}
+                title="Auto-determine"
+                description="Set from the customer segment and risk factors during assessment"
+              />
+              {DILIGENCE_OPTIONS.map(option => (
+                <RadioCard
+                  key={option.value}
+                  name="requiredDiligence"
+                  value={option.value}
+                  checked={formData.requiredDiligence === option.value}
+                  onChange={v => handleChange('requiredDiligence', v)}
+                  title={`${kycService.getDiligenceLabel(option.value)} (${option.value})`}
+                  description={option.description}
+                  badge={option.value}
+                  badgeClass={kycService.getDiligenceColor(option.value)}
+                />
+              ))}
+            </div>
+          </fieldset>
+        </section>
+
+        {/* ══ Trigger reason ══ */}
+        {triggerReasonRequired && (
+          <section className="rounded-3xl p-6 sm:p-7" style={{ backgroundColor: 'var(--rm-card)' }}>
+            <label
+              htmlFor="trigger-reason"
+              className="text-xl font-semibold tracking-tight"
+              style={{ color: 'var(--rm-text)' }}
             >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={loading || !selectedCustomer}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Creating...' : 'Create KYC Case'}
-            </button>
-          </div>
-        </form>
-      </main>
+              Trigger reason
+              <span aria-hidden="true" style={{ color: '#b91c1c' }}>
+                {' '}
+                *
+              </span>
+            </label>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Required for {formData.caseType === 'PERIODIC_REVIEW' ? 'periodic review' : formData.caseType === 'EVENT_DRIVEN' ? 'event driven' : 'remediation'} cases.
+            </p>
+            <textarea
+              id="trigger-reason"
+              name="triggerReason"
+              rows={3}
+              value={formData.triggerReason || ''}
+              onChange={e => {
+                handleChange('triggerReason', e.target.value);
+                if (formError) setFormError(null);
+              }}
+              required
+              aria-required="true"
+              aria-invalid={triggerReasonError ? true : undefined}
+              aria-describedby={triggerReasonError ? 'trigger-reason-error' : 'trigger-reason-hint'}
+              placeholder="Describe why this review is being opened"
+              className="mt-4 w-full rounded-xl px-3.5 py-2.5 text-base"
+              style={{
+                backgroundColor: 'var(--rm-input)',
+                border: `1px solid ${triggerReasonError ? 'rgba(239,68,68,0.75)' : 'var(--rm-border)'}`,
+                color: 'var(--rm-text)',
+              }}
+            />
+            {triggerReasonError ? (
+              <p id="trigger-reason-error" role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+                {triggerReasonError}
+              </p>
+            ) : (
+              <p id="trigger-reason-hint" className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                This is stored on the case audit trail.
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* ══ Submit ══ */}
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Link
+            href="/dashboard/kyc/cases"
+            className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text-secondary)' }}
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: 'var(--rm-accent)' }}
+          >
+            {submitting ? 'Creating…' : 'Create case'}
+          </button>
+        </div>
+        {!selectedCustomer && (
+          <p className="text-right text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            A customer must be selected before the case can be created.
+          </p>
+        )}
+      </form>
     </div>
+  );
+}
+
+// ============================================================================
+// Shared controls
+// ============================================================================
+
+function RadioCard({
+  name,
+  value,
+  checked,
+  onChange,
+  title,
+  description,
+  badge,
+  badgeClass,
+}: {
+  name: string;
+  value: string;
+  checked: boolean;
+  onChange: (value: string) => void;
+  title: string;
+  description: string;
+  badge?: string;
+  badgeClass?: string;
+}) {
+  const controlId = `${name}-${value || 'auto'}`;
+  return (
+    <label
+      htmlFor={controlId}
+      className="flex cursor-pointer items-start gap-3 rounded-2xl p-4 transition-colors"
+      style={{ backgroundColor: checked ? 'var(--rm-accent-muted)' : 'var(--rm-input)' }}
+    >
+      <input
+        id={controlId}
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={e => onChange(e.target.value)}
+        className="mt-1 h-4 w-4 shrink-0"
+        style={{ accentColor: 'var(--rm-accent)' }}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-2">
+          {badge && badgeClass && (
+            <span
+              className={`inline-flex rounded-full px-2.5 py-0.5 text-sm font-medium ${badgeClass}`}
+            >
+              {badge}
+            </span>
+          )}
+          <span className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+            {title}
+          </span>
+        </span>
+        <span className="mt-0.5 block text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {description}
+        </span>
+      </span>
+    </label>
   );
 }

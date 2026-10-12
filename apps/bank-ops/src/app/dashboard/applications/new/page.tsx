@@ -1,20 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { applicationService, CreateApplicationRequest } from '@/services/api/applicationService';
 import { productService, type Product } from '@/services/api/productService';
 import { customerService, type Customer } from '@/services/api/customerService';
 import ProductFormFields, {
   type ProductFormData,
-  type CustomerProfileSnapshot,
+  type ProductFormErrors,
   INITIAL_FORM_DATA,
   getProductCategory,
   getFieldLabels,
 } from './ProductFormFields';
+import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import config from '@/config';
 
-// Editable customer fields for verification step
+// Editable customer fields for the verification step
 interface CustomerEditData {
   firstName: string;
   middleName: string;
@@ -75,38 +76,204 @@ function customerToEditData(c: Customer): CustomerEditData {
   };
 }
 
+/* ── Wizard steps ───────────────────────────────────────────────────── */
+const STEPS = [
+  { id: 'product', label: 'Product' },
+  { id: 'customer', label: 'Customer' },
+  { id: 'verify', label: 'Verify' },
+  { id: 'details', label: 'Details' },
+] as const;
+
+/* ── Shared styling ─────────────────────────────────────────────────── */
+const fieldCls = 'w-full rounded-xl px-4 py-2.5 text-base transition-colors';
+const baseStyle: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  color: 'var(--rm-text)',
+  border: '1px solid var(--rm-border)',
+};
+const cardStyle: React.CSSProperties = { backgroundColor: 'var(--rm-card)' };
+
+const RISK_TONE_BY_NAME: Record<string, { bg: string; fg: string }> = {
+  green: { bg: 'rgba(16,185,129,0.14)', fg: '#047857' },
+  blue: { bg: 'rgba(14,165,233,0.14)', fg: '#0284c7' },
+  yellow: { bg: 'rgba(245,158,11,0.15)', fg: '#b45309' },
+  orange: { bg: 'rgba(249,115,22,0.15)', fg: '#c2410c' },
+  red: { bg: 'rgba(239,68,68,0.13)', fg: '#b91c1c' },
+  gray: { bg: 'rgba(127,127,127,0.14)', fg: 'var(--rm-text-secondary)' },
+};
+
+/* Control ids inside ProductFormFields — used to move focus to the first
+   invalid field after a failed submit. */
+const PRODUCT_FIELD_IDS: Partial<Record<keyof ProductFormData, string>> = {
+  loanAmount: 'pf-amount',
+  loanTerm: 'pf-term',
+  interestRate: 'pf-rate',
+  loanPurpose: 'pf-purpose',
+  propertyAddress: 'pf-property-address',
+  propertyCity: 'pf-property-city',
+  propertyState: 'pf-property-state',
+  propertyType: 'pf-property-type',
+  propertyValue: 'pf-property-value',
+  downPaymentAmount: 'pf-property-deposit',
+  vehicleMake: 'pf-vehicle-make',
+  vehicleModel: 'pf-vehicle-model',
+  vehicleYear: 'pf-vehicle-year',
+  vehicleCondition: 'pf-vehicle-condition',
+  vehicleValue: 'pf-vehicle-value',
+  assetDescription: 'pf-asset-description',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  TERM_LOAN: 'Loan',
+  MORTGAGE: 'Mortgage',
+  VEHICLE_FINANCE: 'Vehicle finance',
+  CREDIT_CARD: 'Credit card',
+  OVERDRAFT: 'Overdraft',
+  BNPL: 'Buy now pay later',
+  INVOICE_ASSET_FINANCE: 'Finance facility',
+};
+
+function RequiredMark() {
+  return (
+    <>
+      <span aria-hidden="true" style={{ color: '#dc2626' }}>
+        {' '}
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
+}
+
+function InlineAlert({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3"
+      style={{ backgroundColor: 'rgba(239,68,68,0.12)' }}
+    >
+      <svg className="h-5 w-5 shrink-0" style={{ color: '#dc2626' }} aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <p className="text-sm" style={{ color: '#b91c1c' }}>
+        {message}
+      </p>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="ml-auto text-sm font-medium hover:underline"
+          style={{ color: '#b91c1c' }}
+        >
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Customer verification field descriptors ────────────────────────── */
+interface CustomerFieldDef {
+  key: keyof CustomerEditData;
+  label: string;
+  required?: boolean;
+  type?: 'text' | 'email' | 'tel' | 'date' | 'number' | 'select';
+  options?: { value: string; label: string }[];
+  wide?: boolean;
+  format?: (value: string) => string;
+}
+
+const GENDER_OPTIONS = [
+  { value: 'MALE', label: 'Male' },
+  { value: 'FEMALE', label: 'Female' },
+  { value: 'OTHER', label: 'Other' },
+];
+const EMPLOYMENT_OPTIONS = [
+  { value: 'EMPLOYED', label: 'Employed' },
+  { value: 'SELF_EMPLOYED', label: 'Self-employed' },
+  { value: 'BUSINESS_OWNER', label: 'Business owner' },
+  { value: 'RETIRED', label: 'Retired' },
+  { value: 'STUDENT', label: 'Student' },
+  { value: 'UNEMPLOYED', label: 'Unemployed' },
+  { value: 'HOMEMAKER', label: 'Homemaker' },
+];
+const ID_TYPE_OPTIONS = [
+  { value: 'PASSPORT', label: 'Passport' },
+  { value: 'NATIONAL_ID', label: 'National ID' },
+  { value: 'DRIVERS_LICENSE', label: "Driver's licence" },
+  { value: 'PPS_NUMBER', label: 'PPS number' },
+  { value: 'TAX_ID', label: 'Tax ID' },
+];
+
+const optionLabel = (options: { value: string; label: string }[], value: string) =>
+  options.find(o => o.value === value)?.label || value || '—';
+
 export default function NewApplicationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const currencySymbol = getCurrencySymbol();
+
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const preselectedProductId = searchParams.get('productId');
   const preselectedCustomerId = searchParams.get('customerId');
   const bankId = config.bank?.defaultBankId || '123e4567-e89b-12d3-a456-426614174000';
 
+  /* Scoped error state — one failure never blanks the whole wizard. */
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
+  const [customerLoadError, setCustomerLoadError] = useState<string | null>(null);
+
   const [customerEditData, setCustomerEditData] = useState<CustomerEditData | null>(null);
   const [customerEdited, setCustomerEdited] = useState(false);
   const [savingCustomer, setSavingCustomer] = useState(false);
+  const [customerSaveError, setCustomerSaveError] = useState<string | null>(null);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
 
   const [formData, setFormData] = useState<ProductFormData>(INITIAL_FORM_DATA);
+  const [fieldErrors, setFieldErrors] = useState<ProductFormErrors>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const updateField = (field: keyof ProductFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    setFieldErrors(prev => (prev[field] ? { ...prev, [field]: undefined } : prev));
   };
+
+  const goToStep = (next: number) => {
+    setStep(next);
+    window.setTimeout(() => stepHeadingRef.current?.focus(), 0);
+  };
+
+  const loadProducts = useCallback(async () => {
+    try {
+      setProductsLoading(true);
+      setProductsError(null);
+      const data = await productService.getAllProducts(bankId);
+      setProducts(data);
+    } catch (err) {
+      console.error('Failed to load products:', err);
+      setProductsError(
+        err instanceof Error ? err.message : 'The product catalogue could not be loaded.'
+      );
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [bankId]);
 
   useEffect(() => {
     loadProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadProducts]);
 
   useEffect(() => {
     if (preselectedProductId && products.length > 0) {
@@ -119,57 +286,47 @@ export default function NewApplicationPage() {
           loanTerm: product.defaultTermMonths?.toString() || '',
           interestRate: product.defaultInterestRate?.toString() || '',
         }));
-        // Automatically move to step 2 (customer selection) when product is preselected
+        // Automatically move to customer selection when a product is preselected
         setStep(2);
       }
     }
   }, [preselectedProductId, products]);
 
+  const loadCustomerById = useCallback(
+    async (customerId: string) => {
+      try {
+        setCustomerLoadError(null);
+        const customer = await customerService.getCustomerById(customerId);
+        setSelectedCustomer(customer);
+        setCustomerEditData(customerToEditData(customer));
+      } catch (err) {
+        console.error('Failed to load customer:', err);
+        setCustomerLoadError('We could not load this customer. Search for them instead.');
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (preselectedCustomerId) {
       loadCustomerById(preselectedCustomerId);
     }
-  }, [preselectedCustomerId]);
-
-  const loadProducts = async () => {
-    try {
-      const data = await productService.getAllProducts(bankId);
-      setProducts(data);
-    } catch (err) {
-      console.error('Failed to load products:', err);
-      setError('Failed to load products');
-    }
-  };
-
-  const loadCustomerById = async (customerId: string) => {
-    try {
-      const customer = await customerService.getCustomerById(customerId);
-      setSelectedCustomer(customer);
-      setCustomerEditData(customerToEditData(customer));
-      // Only move to step 3 (verify customer) if a product is already selected
-      if (selectedProduct) {
-        setStep(3);
-      }
-    } catch (err) {
-      console.error('Failed to load customer:', err);
-    }
-  };
+  }, [preselectedCustomerId, loadCustomerById]);
 
   const searchCustomers = async (term: string) => {
     if (!term.trim()) {
       setCustomerSearchResults([]);
       return;
     }
-
     try {
       setSearchingCustomers(true);
-      console.log('Searching for customers with term:', term);
+      setCustomerSearchError(null);
       const results = await customerService.searchCustomers({ searchTerm: term });
-      console.log('Customer search results:', results);
       setCustomerSearchResults(results);
     } catch (err) {
       console.error('Failed to search customers:', err);
-      setError('Failed to search customers. Please try again.');
+      setCustomerSearchError('Customer search failed.');
+      setCustomerSearchResults([]);
     } finally {
       setSearchingCustomers(false);
     }
@@ -181,64 +338,156 @@ export default function NewApplicationPage() {
         searchCustomers(customerSearchTerm);
       }
     }, 300);
-
     return () => clearTimeout(delayDebounce);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerSearchTerm, step]);
 
-  const handleSubmit = async () => {
+  const selectCustomer = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setCustomerEditData(customerToEditData(customer));
+    setCustomerEdited(false);
+    setCustomerSaveError(null);
+    setIsEditingCustomer(false);
+    goToStep(3);
+  };
+
+  const selectProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setFormData({
+      ...INITIAL_FORM_DATA,
+      loanAmount: product.defaultLoanAmount?.toString() || '',
+      loanTerm: product.defaultTermMonths?.toString() || '',
+      interestRate: product.defaultInterestRate?.toString() || '',
+    });
+    setFieldErrors({});
+    setSubmitError(null);
+    goToStep(selectedCustomer ? 3 : 2);
+  };
+
+  /* ── Validation ──────────────────────────────────────────────────────
+     Every threshold below comes from the selected product record. */
+  const validateForm = (): ProductFormErrors => {
+    const errs: ProductFormErrors = {};
+    if (!selectedProduct) return errs;
+    const category = getProductCategory(selectedProduct.productType);
+    const needsTerm = getFieldLabels(category).termLabel !== '';
+    const isMortgage = category === 'MORTGAGE';
+
+    const amount = parseFloat(formData.loanAmount);
+    if (!formData.loanAmount.trim()) {
+      errs.loanAmount = 'Enter the amount being requested.';
+    } else if (Number.isNaN(amount) || amount <= 0) {
+      errs.loanAmount = 'Enter an amount greater than zero.';
+    } else {
+      if (selectedProduct.minLoanAmount && amount < selectedProduct.minLoanAmount)
+        errs.loanAmount = `The minimum for this product is ${formatCurrency(selectedProduct.minLoanAmount)}.`;
+      else if (selectedProduct.maxLoanAmount && amount > selectedProduct.maxLoanAmount)
+        errs.loanAmount = `The maximum for this product is ${formatCurrency(selectedProduct.maxLoanAmount)}.`;
+    }
+
+    if (needsTerm) {
+      const term = parseInt(formData.loanTerm, 10);
+      const minTerm = isMortgage
+        ? Math.round((selectedProduct.minTermMonths || 0) / 12)
+        : selectedProduct.minTermMonths || 0;
+      const maxTerm = isMortgage
+        ? Math.round((selectedProduct.maxTermMonths || 0) / 12)
+        : selectedProduct.maxTermMonths || 0;
+      const unit = isMortgage ? 'years' : 'months';
+      if (!formData.loanTerm.trim()) {
+        errs.loanTerm = `Enter the term in ${unit}.`;
+      } else if (Number.isNaN(term) || term <= 0) {
+        errs.loanTerm = `Enter a whole number of ${unit}.`;
+      } else if ((minTerm && term < minTerm) || (maxTerm && term > maxTerm)) {
+        errs.loanTerm = `The allowed term is ${minTerm} to ${maxTerm} ${unit}.`;
+      }
+    }
+
+    const rate = parseFloat(formData.interestRate);
+    if (!formData.interestRate.trim()) {
+      errs.interestRate = 'Enter the interest rate.';
+    } else if (Number.isNaN(rate) || rate < 0) {
+      errs.interestRate = 'Enter a rate of zero or more.';
+    } else if (
+      (selectedProduct.minInterestRate != null && rate < selectedProduct.minInterestRate) ||
+      (selectedProduct.maxInterestRate != null && rate > selectedProduct.maxInterestRate)
+    ) {
+      errs.interestRate = `The allowed rate is ${selectedProduct.minInterestRate?.toFixed(2)}% to ${selectedProduct.maxInterestRate?.toFixed(2)}%.`;
+    }
+
+    if (!formData.loanPurpose) errs.loanPurpose = 'Choose the purpose of the loan.';
+
+    if (category === 'MORTGAGE') {
+      if (!formData.propertyAddress.trim()) errs.propertyAddress = 'Enter the property address.';
+      if (!formData.propertyCity.trim()) errs.propertyCity = 'Enter the city.';
+      if (!formData.propertyState.trim()) errs.propertyState = 'Enter the county or region.';
+      if (!formData.propertyType) errs.propertyType = 'Choose the property type.';
+      const value = parseFloat(formData.propertyValue);
+      if (!formData.propertyValue.trim()) errs.propertyValue = 'Enter the estimated property value.';
+      else if (Number.isNaN(value) || value <= 0) errs.propertyValue = 'Enter a value greater than zero.';
+    }
+
+    if (category === 'VEHICLE_FINANCE') {
+      if (!formData.vehicleMake.trim()) errs.vehicleMake = 'Enter the vehicle make.';
+      if (!formData.vehicleModel.trim()) errs.vehicleModel = 'Enter the vehicle model.';
+      if (!formData.vehicleYear.trim()) errs.vehicleYear = 'Enter the vehicle year.';
+      if (!formData.vehicleCondition) errs.vehicleCondition = 'Choose the vehicle condition.';
+      const value = parseFloat(formData.vehicleValue);
+      if (!formData.vehicleValue.trim()) errs.vehicleValue = 'Enter the estimated vehicle value.';
+      else if (Number.isNaN(value) || value <= 0) errs.vehicleValue = 'Enter a value greater than zero.';
+    }
+
+    if (category === 'INVOICE_ASSET_FINANCE' && !formData.assetDescription.trim()) {
+      errs.assetDescription = 'Describe the invoices or assets being financed.';
+    }
+
+    return errs;
+  };
+
+  const focusFirstError = (errs: ProductFormErrors) => {
+    const key = (Object.keys(errs) as (keyof ProductFormData)[]).find(k => errs[k]);
+    if (!key) return;
+    const id = PRODUCT_FIELD_IDS[key];
+    if (!id) return;
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    (el as HTMLElement | null)?.focus();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+
     if (!selectedProduct || !selectedCustomer) {
-      setError('Please select both product and customer');
+      setSubmitError('Choose a product and a customer before creating the application.');
+      return;
+    }
+
+    const errs = validateForm();
+    setFieldErrors(errs);
+    const invalidKeys = (Object.keys(errs) as (keyof ProductFormData)[]).filter(k => errs[k]);
+    if (invalidKeys.length > 0) {
+      const count = invalidKeys.length;
+      setSubmitError(
+        `${count} field${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} attention before this application can be created.`
+      );
+      focusFirstError(errs);
       return;
     }
 
     const category = getProductCategory(selectedProduct.productType);
-    const labels = getFieldLabels(category);
-    const needsTerm = labels.termLabel !== '';
-
-    if (
-      !formData.loanAmount ||
-      (needsTerm && !formData.loanTerm) ||
-      !formData.interestRate ||
-      !formData.loanPurpose
-    ) {
-      setError('Please fill in all required fields');
-      return;
-    }
-
-    // Category-specific validation
-    if (
-      category === 'MORTGAGE' &&
-      (!formData.propertyAddress ||
-        !formData.propertyCity ||
-        !formData.propertyType ||
-        !formData.propertyValue)
-    ) {
-      setError('Please fill in all required property details');
-      return;
-    }
-    if (
-      category === 'VEHICLE_FINANCE' &&
-      (!formData.vehicleMake ||
-        !formData.vehicleModel ||
-        !formData.vehicleYear ||
-        !formData.vehicleCondition ||
-        !formData.vehicleValue)
-    ) {
-      setError('Please fill in all required vehicle details');
-      return;
-    }
+    const needsTerm = getFieldLabels(category).termLabel !== '';
 
     try {
-      setLoading(true);
-      setError(null);
+      setSubmitting(true);
 
-      // Convert mortgage term from years to months
-      // For revolving products (credit card, overdraft) with no term field, default to 12 months (annual review)
+      // Convert mortgage term from years to months.
+      // Revolving products (credit card, overdraft) have no term field: 12 months = annual review.
       const termMonths =
         category === 'MORTGAGE'
-          ? parseInt(formData.loanTerm) * 12
+          ? parseInt(formData.loanTerm, 10) * 12
           : needsTerm
-            ? parseInt(formData.loanTerm)
+            ? parseInt(formData.loanTerm, 10)
             : 12;
 
       const request: CreateApplicationRequest = {
@@ -251,7 +500,6 @@ export default function NewApplicationPage() {
         loanPurpose: formData.loanPurpose,
         loanPurposeDescription: formData.notes || undefined,
         channel: 'RELATIONSHIP_MANAGER',
-        // Employment & income (from customer profile)
         ...(customerEditData?.employmentStatus && {
           employmentStatus: customerEditData.employmentStatus,
         }),
@@ -259,7 +507,6 @@ export default function NewApplicationPage() {
         ...(customerEditData?.annualIncome && {
           statedAnnualIncome: parseFloat(customerEditData.annualIncome),
         }),
-        // Property (mortgage)
         ...(formData.propertyAddress && { propertyAddress: formData.propertyAddress }),
         ...(formData.propertyCity && { propertyCity: formData.propertyCity }),
         ...(formData.propertyState && { propertyState: formData.propertyState }),
@@ -269,279 +516,28 @@ export default function NewApplicationPage() {
         ...(formData.downPaymentAmount && {
           downPaymentAmount: parseFloat(formData.downPaymentAmount),
         }),
-        // Vehicle
         ...(formData.vehicleMake && { vehicleMake: formData.vehicleMake }),
         ...(formData.vehicleModel && { vehicleModel: formData.vehicleModel }),
-        ...(formData.vehicleYear && { vehicleYear: parseInt(formData.vehicleYear) }),
+        ...(formData.vehicleYear && { vehicleYear: parseInt(formData.vehicleYear, 10) }),
         ...(formData.vehicleCondition && { vehicleCondition: formData.vehicleCondition }),
         ...(formData.vehicleValue && { vehicleValue: parseFloat(formData.vehicleValue) }),
+        ...(formData.assetDescription && {
+          additionalData: { assetDescription: formData.assetDescription },
+        }),
       };
 
       const application = await applicationService.createApplication(request);
       router.push(`/dashboard/applications/${application.applicationId}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to create application:', err);
-      setError(err?.response?.data?.message || 'Failed to create application');
+      // Scoped: everything typed so far stays on screen.
+      setSubmitError(
+        err instanceof Error ? err.message : 'The application could not be created. Nothing was saved.'
+      );
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
-
-  const renderProductSelection = () => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Select Loan Product</h2>
-        <p className="text-gray-600">Choose the loan product for this application</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {products.map(product => (
-          <div
-            key={product.productId}
-            onClick={() => {
-              setSelectedProduct(product);
-              setFormData(prev => ({
-                ...INITIAL_FORM_DATA,
-                loanAmount: product.defaultLoanAmount?.toString() || '',
-                loanTerm: product.defaultTermMonths?.toString() || '',
-                interestRate: product.defaultInterestRate?.toString() || '',
-              }));
-              // If customer is already selected, go to verify step; otherwise go to customer selection
-              setStep(selectedCustomer ? 3 : 2);
-            }}
-            className={`cursor-pointer border-2 rounded-lg p-6 transition-all hover:shadow-lg ${
-              selectedProduct?.productId === product.productId
-                ? 'border-primary-600 bg-primary-50'
-                : 'border-gray-200 hover:border-primary-300'
-            }`}
-          >
-            <div className="flex items-start justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">{product.productName}</h3>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-4">{product.shortDescription}</p>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Interest Rate:</span>
-                <span className="font-medium">
-                  {productService.formatInterestRate(
-                    product.minInterestRate,
-                    product.maxInterestRate
-                  )}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Loan Amount:</span>
-                <span className="font-medium">
-                  {productService.formatLoanAmount(product.minLoanAmount, product.maxLoanAmount)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Tenure:</span>
-                <span className="font-medium">
-                  {productService.formatTenure(product.minTermMonths, product.maxTermMonths)}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderCustomerSelection = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Select Customer</h2>
-          <p className="text-gray-600">Search and select an existing customer</p>
-        </div>
-        <button onClick={() => setStep(1)} className="text-sm text-gray-600 hover:text-gray-900">
-          ← Back to Products
-        </button>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <div className="ml-3">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedProduct && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">
-                Selected Product: {selectedProduct.productName}
-              </h3>
-              <p className="mt-1 text-sm text-blue-700">{selectedProduct.shortDescription}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Search by name, email, phone, or customer number..."
-          value={customerSearchTerm}
-          onChange={e => setCustomerSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-lg"
-          autoFocus
-        />
-        <svg
-          className="absolute left-3 top-4 h-5 w-5 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200">
-        {searchingCustomers && (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-          </div>
-        )}
-
-        {!searchingCustomers && customerSearchTerm && customerSearchResults.length === 0 && (
-          <div className="text-center py-12">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No customers found</h3>
-            <p className="mt-1 text-sm text-gray-500">Try a different search term</p>
-          </div>
-        )}
-
-        {!searchingCustomers && !customerSearchTerm && (
-          <div className="text-center py-12">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Search for a customer</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Enter a name, email, or phone number to begin
-            </p>
-          </div>
-        )}
-
-        {!searchingCustomers && customerSearchResults.length > 0 && (
-          <div className="divide-y divide-gray-200">
-            {customerSearchResults.map(customer => (
-              <div
-                key={customer.customerId}
-                onClick={() => {
-                  setSelectedCustomer(customer);
-                  setCustomerEditData(customerToEditData(customer));
-                  setCustomerEdited(false);
-                  setStep(3);
-                }}
-                className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      <div className="h-12 w-12 rounded-full bg-primary-100 flex items-center justify-center">
-                        <span className="text-primary-600 font-semibold text-lg">
-                          {customerService.getCustomerName(customer).charAt(0)}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="text-base font-medium text-gray-900">
-                        {customerService.getCustomerName(customer)}
-                      </h4>
-                      <p className="text-sm text-gray-500">
-                        {customer.customerNumber} •{' '}
-                        {customerService.formatCustomerType(customer.customerType)}
-                      </p>
-                      <div className="flex items-center space-x-4 mt-1">
-                        <span className="text-sm text-gray-600">{customer.primaryEmail}</span>
-                        <span className="text-sm text-gray-600">{customer.primaryPhone}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {customer.riskRating && (
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-${customerService.getRiskRatingColor(
-                          customer.riskRating
-                        )}-100 text-${customerService.getRiskRatingColor(customer.riskRating)}-800`}
-                      >
-                        {customer.riskRating}
-                      </span>
-                    )}
-                    <svg
-                      className="h-5 w-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   const updateCustomerField = (field: keyof CustomerEditData, value: string) => {
     setCustomerEditData(prev => (prev ? { ...prev, [field]: value } : prev));
@@ -552,7 +548,7 @@ export default function NewApplicationPage() {
     if (!selectedCustomer || !customerEditData) return;
     try {
       setSavingCustomer(true);
-      setError(null);
+      setCustomerSaveError(null);
       const updatePayload: Partial<Customer> = {
         ...(customerEditData.firstName && { firstName: customerEditData.firstName }),
         ...(customerEditData.middleName && { middleName: customerEditData.middleName }),
@@ -597,236 +593,485 @@ export default function NewApplicationPage() {
       );
       setSelectedCustomer(updated);
       setCustomerEdited(false);
-    } catch (err: any) {
+      setIsEditingCustomer(false);
+    } catch (err: unknown) {
       console.error('Failed to update customer:', err);
-      setError(err?.response?.data?.message || 'Failed to update customer details');
+      // Scoped to the customer step — typed edits are kept.
+      setCustomerSaveError(
+        err instanceof Error ? err.message : 'Customer details could not be saved. Your edits are still here.'
+      );
     } finally {
       setSavingCustomer(false);
     }
   };
 
+  /* ── Step 1: product ──────────────────────────────────────────────── */
+  const renderProductSelection = () => (
+    <div className="space-y-6">
+      <div>
+        <h2
+          ref={stepHeadingRef}
+          tabIndex={-1}
+          className="text-xl font-semibold tracking-tight"
+          style={{ color: 'var(--rm-text)' }}
+        >
+          Select loan product
+        </h2>
+        <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          Choose the product this application will be raised against.
+        </p>
+      </div>
+
+      {productsError && <InlineAlert message={productsError} onRetry={loadProducts} />}
+
+      {productsLoading && (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="rounded-3xl p-6 sm:p-7" style={cardStyle}>
+              <div className="h-6 w-2/3 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+              <div className="mt-4 h-4 w-full rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+              <div className="mt-6 space-y-3">
+                <div className="h-4 w-1/2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+                <div className="h-4 w-2/3 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+                <div className="h-4 w-1/3 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-input)' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!productsLoading && !productsError && products.length === 0 && (
+        <div className="rounded-3xl py-20 text-center" style={cardStyle}>
+          <p className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            No products available
+          </p>
+          <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            Loan products must be published before an application can be raised.
+          </p>
+        </div>
+      )}
+
+      {!productsLoading && products.length > 0 && (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {products.map(product => {
+            const selected = selectedProduct?.productId === product.productId;
+            return (
+              <button
+                key={product.productId}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => selectProduct(product)}
+                className="rounded-3xl p-6 text-left transition-transform hover:-translate-y-0.5 sm:p-7"
+                style={{
+                  ...cardStyle,
+                  outline: selected ? '2px solid var(--rm-accent)' : undefined,
+                  outlineOffset: selected ? '-2px' : undefined,
+                }}
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
+                    {product.productName}
+                  </span>
+                  {selected && (
+                    <span
+                      className="shrink-0 rounded-full px-2.5 py-0.5 text-sm font-medium"
+                      style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+                    >
+                      Selected
+                    </span>
+                  )}
+                </span>
+
+                {product.shortDescription && (
+                  <span className="mt-2 block text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    {product.shortDescription}
+                  </span>
+                )}
+
+                <span className="mt-5 block space-y-2">
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Interest rate
+                    </span>
+                    <span className="text-base font-medium tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {productService.formatInterestRate(product.minInterestRate, product.maxInterestRate)}
+                    </span>
+                  </span>
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Loan amount
+                    </span>
+                    <span className="text-base font-medium tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {productService.formatLoanAmount(product.minLoanAmount, product.maxLoanAmount)}
+                    </span>
+                  </span>
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      Tenure
+                    </span>
+                    <span className="text-base font-medium tabular-nums" style={{ color: 'var(--rm-text)' }}>
+                      {productService.formatTenure(product.minTermMonths, product.maxTermMonths)}
+                    </span>
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  /* ── Step 2: customer ─────────────────────────────────────────────── */
+  const renderCustomerSelection = () => (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2
+            ref={stepHeadingRef}
+            tabIndex={-1}
+            className="text-xl font-semibold tracking-tight"
+            style={{ color: 'var(--rm-text)' }}
+          >
+            Select customer
+          </h2>
+          <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            Search for an existing customer to raise this application against.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => goToStep(1)}
+          className="text-sm font-medium hover:underline"
+          style={{ color: 'var(--rm-accent)' }}
+        >
+          Back to products
+        </button>
+      </div>
+
+      {selectedProduct && (
+        <div className="rounded-3xl p-6" style={{ backgroundColor: 'var(--rm-accent-muted)' }}>
+          <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            Selected product
+          </p>
+          <p className="mt-1 text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+            {selectedProduct.productName}
+          </p>
+          {selectedProduct.shortDescription && (
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+              {selectedProduct.shortDescription}
+            </p>
+          )}
+        </div>
+      )}
+
+      {customerLoadError && <InlineAlert message={customerLoadError} />}
+
+      <div className="rounded-3xl p-6 sm:p-7" style={cardStyle}>
+        <label htmlFor="customer-search" className="mb-1.5 block text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+          Search customers
+        </label>
+        <div className="relative">
+          <svg
+            className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2"
+            style={{ color: 'var(--rm-text-muted)' }}
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            id="customer-search"
+            type="search"
+            aria-describedby="customer-search-hint"
+            placeholder="Name, email, phone or customer number"
+            value={customerSearchTerm}
+            onChange={e => setCustomerSearchTerm(e.target.value)}
+            className={`${fieldCls} pl-11`}
+            style={baseStyle}
+          />
+        </div>
+        <p id="customer-search-hint" className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          Results appear as you type.
+        </p>
+
+        <div className="mt-6">
+          {customerSearchError && (
+            <InlineAlert
+              message={customerSearchError}
+              onRetry={() => searchCustomers(customerSearchTerm)}
+            />
+          )}
+
+          {searchingCustomers && (
+            <div className="space-y-3" aria-hidden="true">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ backgroundColor: 'var(--rm-input)' }}>
+                  <div className="h-11 w-11 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-card)' }} />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-1/3 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-card)' }} />
+                    <div className="h-3 w-1/4 rounded-full animate-pulse" style={{ backgroundColor: 'var(--rm-card)' }} />
+                  </div>
+                </div>
+              ))}
+              <p className="sr-only" role="status">
+                Searching customers
+              </p>
+            </div>
+          )}
+
+          {!searchingCustomers && !customerSearchTerm.trim() && (
+            <p className="py-8 text-center text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Enter a name, email or phone number to begin.
+            </p>
+          )}
+
+          {!searchingCustomers && customerSearchTerm.trim() && !customerSearchError && customerSearchResults.length === 0 && (
+            <p className="py-8 text-center text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              No customers match “{customerSearchTerm}”. Try a different search term.
+            </p>
+          )}
+
+          {!searchingCustomers && customerSearchResults.length > 0 && (
+            <>
+              <p role="status" className="mb-3 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                {customerSearchResults.length} customer{customerSearchResults.length === 1 ? '' : 's'} found
+              </p>
+              <ul className="space-y-2">
+                {customerSearchResults.map(customer => {
+                  const name = customerService.getCustomerName(customer);
+                  const tone = RISK_TONE_BY_NAME[customerService.getRiskRatingColor(customer.riskRating)] ||
+                    RISK_TONE_BY_NAME.gray;
+                  return (
+                    <li key={customer.customerId}>
+                      <button
+                        type="button"
+                        onClick={() => selectCustomer(customer)}
+                        className="flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition-colors hover:bg-slate-50"
+                        style={{ backgroundColor: 'var(--rm-input)' }}
+                      >
+                        <span className="flex min-w-0 items-center gap-4">
+                          <span
+                            aria-hidden="true"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-semibold"
+                            style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+                          >
+                            {name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                              {name}
+                            </span>
+                            <span className="block truncate text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                              {customer.customerNumber} · {customerService.formatCustomerType(customer.customerType)}
+                            </span>
+                            {(customer.primaryEmail || customer.primaryPhone) && (
+                              <span className="mt-0.5 block truncate text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                                {[customer.primaryEmail, customer.primaryPhone].filter(Boolean).join(' · ')}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-3">
+                          {customer.riskRating && (
+                            <span
+                              className="rounded-full px-3 py-1 text-sm font-medium"
+                              style={{ backgroundColor: tone.bg, color: tone.fg }}
+                            >
+                              {customer.riskRating.replace(/_/g, ' ')} risk
+                            </span>
+                          )}
+                          <svg className="h-4 w-4" style={{ color: 'var(--rm-text-muted)' }} aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ── Step 3: verify customer ──────────────────────────────────────── */
   const renderCustomerVerification = () => {
     if (!selectedCustomer || !customerEditData) return null;
     const isIndividual = selectedCustomer.customerType === 'INDIVIDUAL';
     const editing = isEditingCustomer;
 
-    const inputCls =
-      'w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all outline-none bg-white';
+    const moneyFormat = (value: string) =>
+      value ? `${currencySymbol}${Number(value).toLocaleString()}` : '';
 
-    const viewField = (label: string, value: string | undefined | null, required = false) => (
-      <div>
-        <p className="text-xs font-medium text-slate-500 mb-1">
-          {label}
-          {required && <span className="text-red-500 ml-0.5">*</span>}
-        </p>
-        <p className="text-sm text-slate-900 py-2">{value || '—'}</p>
-      </div>
-    );
-
-    const sectionTitle = (title: string, icon: React.ReactNode) => (
-      <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
-        {icon}
-        {title}
-      </h3>
-    );
-
-    const personIcon = (
-      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-        />
-      </svg>
-    );
-    const contactIcon = (
-      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-        />
-      </svg>
-    );
-    const addressIcon = (
-      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-        />
-      </svg>
-    );
-    const idIcon = (
-      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"
-        />
-      </svg>
-    );
-    const employmentIcon = (
-      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-        />
-      </svg>
-    );
-
-    const genderOptions = [
-      { value: 'MALE', label: 'Male' },
-      { value: 'FEMALE', label: 'Female' },
-      { value: 'OTHER', label: 'Other' },
-    ];
-    const employmentOptions = [
-      { value: 'EMPLOYED', label: 'Employed' },
-      { value: 'SELF_EMPLOYED', label: 'Self-Employed' },
-      { value: 'BUSINESS_OWNER', label: 'Business Owner' },
-      { value: 'RETIRED', label: 'Retired' },
-      { value: 'STUDENT', label: 'Student' },
-      { value: 'UNEMPLOYED', label: 'Unemployed' },
-      { value: 'HOMEMAKER', label: 'Homemaker' },
-    ];
-    const idTypeOptions = [
-      { value: 'PASSPORT', label: 'Passport' },
-      { value: 'NATIONAL_ID', label: 'National ID' },
-      { value: 'DRIVERS_LICENSE', label: "Driver's License" },
-      { value: 'PPS_NUMBER', label: 'PPS Number' },
-      { value: 'TAX_ID', label: 'Tax ID' },
+    const groups: { title: string; badge?: string; cols: string; fields: CustomerFieldDef[] }[] = [
+      {
+        title: isIndividual ? 'Personal information' : 'Business information',
+        cols: 'md:grid-cols-3',
+        fields: isIndividual
+          ? [
+              { key: 'firstName', label: 'First name', required: true },
+              { key: 'middleName', label: 'Middle name' },
+              { key: 'lastName', label: 'Last name', required: true },
+              { key: 'dateOfBirth', label: 'Date of birth', type: 'date' },
+              { key: 'gender', label: 'Gender', type: 'select', options: GENDER_OPTIONS },
+              { key: 'nationality', label: 'Nationality' },
+            ]
+          : [
+              { key: 'businessName', label: 'Business name', required: true },
+              { key: 'businessLegalName', label: 'Legal name' },
+            ],
+      },
+      {
+        title: 'Contact information',
+        cols: 'md:grid-cols-3',
+        fields: [
+          { key: 'primaryEmail', label: 'Primary email', required: true, type: 'email' },
+          { key: 'secondaryEmail', label: 'Secondary email', type: 'email' },
+          { key: 'primaryPhone', label: 'Primary phone', required: true, type: 'tel' },
+          { key: 'secondaryPhone', label: 'Secondary phone', type: 'tel' },
+          { key: 'mobilePhone', label: 'Mobile phone', type: 'tel' },
+        ],
+      },
+      {
+        title: 'Address',
+        cols: 'md:grid-cols-2',
+        fields: [
+          { key: 'addressLine1', label: 'Address line 1', wide: true },
+          { key: 'addressLine2', label: 'Address line 2', wide: true },
+          { key: 'city', label: 'City' },
+          { key: 'stateProvince', label: 'State or province' },
+          { key: 'postalCode', label: 'Postal code' },
+          { key: 'country', label: 'Country' },
+        ],
+      },
+      {
+        title: 'Identity documents',
+        cols: 'md:grid-cols-3',
+        fields: [
+          { key: 'primaryIdentityType', label: 'ID type', type: 'select', options: ID_TYPE_OPTIONS },
+          { key: 'primaryIdentityNumber', label: 'ID number' },
+          { key: 'taxIdNumber', label: 'Tax ID number' },
+        ],
+      },
+      {
+        title: 'Employment and income',
+        cols: 'md:grid-cols-3',
+        fields: [
+          { key: 'employmentStatus', label: 'Employment status', type: 'select', options: EMPLOYMENT_OPTIONS },
+          { key: 'employerName', label: 'Employer name' },
+          { key: 'occupation', label: 'Occupation' },
+          { key: 'annualIncome', label: `Annual income (${currencySymbol})`, type: 'number', format: moneyFormat },
+        ],
+      },
     ];
 
-    const getOptionLabel = (options: { value: string; label: string }[], val: string) =>
-      options.find(o => o.value === val)?.label || val || '—';
+    const displayName = isIndividual
+      ? `${customerEditData.firstName} ${customerEditData.lastName}`.trim()
+      : customerEditData.businessName;
 
     return (
       <div className="space-y-6">
-        {/* Header with single Edit toggle */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">Verify Customer Details</h2>
-            <p className="text-gray-600">
+            <h2
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="text-xl font-semibold tracking-tight"
+              style={{ color: 'var(--rm-text)' }}
+            >
+              Verify customer details
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
               {editing
-                ? 'Make changes to customer information below. Save before continuing.'
-                : 'Review customer information before proceeding.'}
+                ? 'Make your changes, then save before continuing.'
+                : 'Confirm the customer details are correct before continuing.'}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              aria-pressed={editing}
               onClick={() => {
                 if (editing) {
-                  // exit edit mode without saving (revert unsaved changes)
                   setCustomerEditData(customerToEditData(selectedCustomer));
                   setCustomerEdited(false);
                   setIsEditingCustomer(false);
+                  setCustomerSaveError(null);
                 } else {
                   setIsEditingCustomer(true);
                 }
               }}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                editing
-                  ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
-                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
-              }`}
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
             >
-              {editing ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                  Cancel
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                    />
-                  </svg>
-                  Edit Details
-                </>
-              )}
+              <svg className="w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d={
+                    editing
+                      ? 'M6 18L18 6M6 6l12 12'
+                      : 'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z'
+                  }
+                />
+              </svg>
+              {editing ? 'Cancel editing' : 'Edit details'}
             </button>
             <button
-              onClick={() => setStep(2)}
-              className="text-sm text-gray-600 hover:text-gray-900"
+              type="button"
+              onClick={() => goToStep(2)}
+              className="text-sm font-medium hover:underline"
+              style={{ color: 'var(--rm-accent)' }}
             >
-              ← Change Customer
+              Change customer
             </button>
           </div>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-            <div className="flex">
-              <svg
-                className="h-5 w-5 text-red-400 flex-shrink-0"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <p className="ml-3 text-sm text-red-800">{error}</p>
-            </div>
-          </div>
+        {customerSaveError && (
+          <InlineAlert message={`${customerSaveError} Your edits were kept.`} />
         )}
 
-        {/* Summary Banner */}
-        <div className="bg-gradient-to-r from-slate-50 to-blue-50 border border-slate-200 rounded-2xl p-5">
+        {/* Summary */}
+        <div className="rounded-3xl p-6 sm:p-7" style={cardStyle}>
           <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-xl">
-                {isIndividual
-                  ? customerEditData.firstName?.charAt(0) || '?'
-                  : customerEditData.businessName?.charAt(0) || '?'}
-              </span>
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-slate-900">
-                {isIndividual
-                  ? `${customerEditData.firstName} ${customerEditData.lastName}`.trim()
-                  : customerEditData.businessName}
+            <span
+              aria-hidden="true"
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-xl font-semibold"
+              style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+            >
+              {(isIndividual ? customerEditData.firstName : customerEditData.businessName)?.charAt(0) || '?'}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
+                {displayName || 'Unnamed customer'}
               </p>
-              <div className="flex items-center gap-3 mt-0.5">
-                <span className="text-sm text-slate-500">{selectedCustomer.customerNumber}</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                  {selectedCustomer.customerType}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  {selectedCustomer.customerNumber}
+                </span>
+                <span
+                  className="rounded-full px-3 py-0.5 text-sm font-medium"
+                  style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+                >
+                  {customerService.formatCustomerType(selectedCustomer.customerType)}
                 </span>
                 {selectedCustomer.customerStatus && (
                   <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    className="rounded-full px-3 py-0.5 text-sm font-medium"
+                    style={
                       selectedCustomer.customerStatus === 'ACTIVE'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
+                        ? { backgroundColor: 'rgba(16,185,129,0.14)', color: '#047857' }
+                        : { backgroundColor: 'rgba(127,127,127,0.14)', color: 'var(--rm-text-secondary)' }
+                    }
                   >
-                    {selectedCustomer.customerStatus}
+                    {selectedCustomer.customerStatus.replace(/_/g, ' ')}
                   </span>
                 )}
               </div>
@@ -834,610 +1079,303 @@ export default function NewApplicationPage() {
           </div>
         </div>
 
-        {/* Sections */}
-        <div className="space-y-5">
-          {/* ── Personal / Business Information ────────────────────── */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            {sectionTitle(
-              isIndividual ? 'Personal Information' : 'Business Information',
-              personIcon
-            )}
-            {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {isIndividual ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        First Name<span className="text-red-500 ml-0.5">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={customerEditData.firstName}
-                        onChange={e => updateCustomerField('firstName', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        Middle Name
-                      </label>
-                      <input
-                        type="text"
-                        value={customerEditData.middleName}
-                        onChange={e => updateCustomerField('middleName', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        Last Name<span className="text-red-500 ml-0.5">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={customerEditData.lastName}
-                        onChange={e => updateCustomerField('lastName', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        value={customerEditData.dateOfBirth}
-                        onChange={e => updateCustomerField('dateOfBirth', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        Gender
-                      </label>
-                      <select
-                        value={customerEditData.gender}
-                        onChange={e => updateCustomerField('gender', e.target.value)}
-                        className={inputCls}
-                      >
-                        <option value="">Select...</option>
-                        {genderOptions.map(o => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        Nationality
-                      </label>
-                      <input
-                        type="text"
-                        value={customerEditData.nationality}
-                        onChange={e => updateCustomerField('nationality', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        Business Name<span className="text-red-500 ml-0.5">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={customerEditData.businessName}
-                        onChange={e => updateCustomerField('businessName', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                        Legal Name
-                      </label>
-                      <input
-                        type="text"
-                        value={customerEditData.businessLegalName}
-                        onChange={e => updateCustomerField('businessLegalName', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                    <div />
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {isIndividual ? (
-                  <>
-                    {viewField('First Name', customerEditData.firstName, true)}
-                    {viewField('Middle Name', customerEditData.middleName)}
-                    {viewField('Last Name', customerEditData.lastName, true)}
-                    {viewField('Date of Birth', customerEditData.dateOfBirth)}
-                    {viewField('Gender', getOptionLabel(genderOptions, customerEditData.gender))}
-                    {viewField('Nationality', customerEditData.nationality)}
-                  </>
-                ) : (
-                  <>
-                    {viewField('Business Name', customerEditData.businessName, true)}
-                    {viewField('Legal Name', customerEditData.businessLegalName)}
-                    <div />
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+        {/* Detail sections */}
+        <div className="space-y-6">
+          {groups.map(group => (
+            <section key={group.title} className="rounded-3xl p-6 sm:p-7" style={cardStyle}>
+              <h3 className="mb-5 text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+                {group.title}
+              </h3>
 
-          {/* ── Contact Information ────────────────────────────────── */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            {sectionTitle('Contact Information', contactIcon)}
-            {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Primary Email<span className="text-red-500 ml-0.5">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={customerEditData.primaryEmail}
-                    onChange={e => updateCustomerField('primaryEmail', e.target.value)}
-                    className={inputCls}
-                  />
+              {editing ? (
+                <div className={`grid grid-cols-1 gap-5 ${group.cols}`}>
+                  {group.fields.map(f => {
+                    const id = `cust-${f.key}`;
+                    const value = customerEditData[f.key];
+                    return (
+                      <div key={f.key} className={f.wide ? 'md:col-span-2' : undefined}>
+                        <label htmlFor={id} className="mb-1.5 block text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                          {f.label}
+                          {f.required && <RequiredMark />}
+                        </label>
+                        {f.type === 'select' ? (
+                          <select
+                            id={id}
+                            required={f.required}
+                            aria-required={f.required || undefined}
+                            value={value}
+                            onChange={e => updateCustomerField(f.key, e.target.value)}
+                            className={fieldCls}
+                            style={baseStyle}
+                          >
+                            <option value="">Select…</option>
+                            {f.options?.map(o => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            id={id}
+                            type={f.type || 'text'}
+                            required={f.required}
+                            aria-required={f.required || undefined}
+                            inputMode={f.type === 'number' ? 'decimal' : undefined}
+                            value={value}
+                            onChange={e => updateCustomerField(f.key, e.target.value)}
+                            className={fieldCls}
+                            style={baseStyle}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Secondary Email
-                  </label>
-                  <input
-                    type="email"
-                    value={customerEditData.secondaryEmail}
-                    onChange={e => updateCustomerField('secondaryEmail', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Primary Phone<span className="text-red-500 ml-0.5">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    value={customerEditData.primaryPhone}
-                    onChange={e => updateCustomerField('primaryPhone', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Secondary Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={customerEditData.secondaryPhone}
-                    onChange={e => updateCustomerField('secondaryPhone', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Mobile Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={customerEditData.mobilePhone}
-                    onChange={e => updateCustomerField('mobilePhone', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {viewField('Primary Email', customerEditData.primaryEmail, true)}
-                {viewField('Secondary Email', customerEditData.secondaryEmail)}
-                {viewField('Primary Phone', customerEditData.primaryPhone, true)}
-                {viewField('Secondary Phone', customerEditData.secondaryPhone)}
-                {viewField('Mobile Phone', customerEditData.mobilePhone)}
-              </div>
-            )}
-          </div>
-
-          {/* ── Address ────────────────────────────────────────────── */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            {sectionTitle('Address', addressIcon)}
-            {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Address Line 1
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.addressLine1}
-                    onChange={e => updateCustomerField('addressLine1', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Address Line 2
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.addressLine2}
-                    onChange={e => updateCustomerField('addressLine2', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">City</label>
-                  <input
-                    type="text"
-                    value={customerEditData.city}
-                    onChange={e => updateCustomerField('city', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    State / Province
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.stateProvince}
-                    onChange={e => updateCustomerField('stateProvince', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Postal Code
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.postalCode}
-                    onChange={e => updateCustomerField('postalCode', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">Country</label>
-                  <input
-                    type="text"
-                    value={customerEditData.country}
-                    onChange={e => updateCustomerField('country', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  {viewField('Address Line 1', customerEditData.addressLine1)}
-                </div>
-                <div className="md:col-span-2">
-                  {viewField('Address Line 2', customerEditData.addressLine2)}
-                </div>
-                {viewField('City', customerEditData.city)}
-                {viewField('State / Province', customerEditData.stateProvince)}
-                {viewField('Postal Code', customerEditData.postalCode)}
-                {viewField('Country', customerEditData.country)}
-              </div>
-            )}
-          </div>
-
-          {/* ── Identity Documents ─────────────────────────────────── */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            {sectionTitle('Identity Documents', idIcon)}
-            {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">ID Type</label>
-                  <select
-                    value={customerEditData.primaryIdentityType}
-                    onChange={e => updateCustomerField('primaryIdentityType', e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">Select...</option>
-                    {idTypeOptions.map(o => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    ID Number
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.primaryIdentityNumber}
-                    onChange={e => updateCustomerField('primaryIdentityNumber', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Tax ID Number
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.taxIdNumber}
-                    onChange={e => updateCustomerField('taxIdNumber', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {viewField(
-                  'ID Type',
-                  getOptionLabel(idTypeOptions, customerEditData.primaryIdentityType)
-                )}
-                {viewField('ID Number', customerEditData.primaryIdentityNumber)}
-                {viewField('Tax ID Number', customerEditData.taxIdNumber)}
-              </div>
-            )}
-          </div>
-
-          {/* ── Employment & Income ────────────────────────────────── */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            {sectionTitle('Employment & Income', employmentIcon)}
-            {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Employment Status
-                  </label>
-                  <select
-                    value={customerEditData.employmentStatus}
-                    onChange={e => updateCustomerField('employmentStatus', e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">Select...</option>
-                    {employmentOptions.map(o => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Employer Name
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.employerName}
-                    onChange={e => updateCustomerField('employerName', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Occupation
-                  </label>
-                  <input
-                    type="text"
-                    value={customerEditData.occupation}
-                    onChange={e => updateCustomerField('occupation', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">
-                    Annual Income (€)
-                  </label>
-                  <input
-                    type="number"
-                    value={customerEditData.annualIncome}
-                    onChange={e => updateCustomerField('annualIncome', e.target.value)}
-                    placeholder="Enter gross annual income"
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {viewField(
-                  'Employment Status',
-                  getOptionLabel(employmentOptions, customerEditData.employmentStatus)
-                )}
-                {viewField('Employer Name', customerEditData.employerName)}
-                {viewField('Occupation', customerEditData.occupation)}
-                {viewField(
-                  'Annual Income (€)',
-                  customerEditData.annualIncome
-                    ? `€${Number(customerEditData.annualIncome).toLocaleString()}`
-                    : ''
-                )}
-              </div>
-            )}
-          </div>
+              ) : (
+                <dl className={`grid grid-cols-1 gap-5 ${group.cols}`}>
+                  {group.fields.map(f => {
+                    const raw = customerEditData[f.key];
+                    const shown = f.options
+                      ? optionLabel(f.options, raw)
+                      : f.format
+                        ? f.format(raw) || '—'
+                        : raw || '—';
+                    return (
+                      <div key={f.key} className={f.wide ? 'md:col-span-2' : undefined}>
+                        <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          {f.label}
+                        </dt>
+                        <dd className="mt-1 text-base font-medium break-words" style={{ color: 'var(--rm-text)' }}>
+                          {shown}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              )}
+            </section>
+          ))}
         </div>
 
-        {/* KYC/AML Status (always read-only) */}
+        {/* Compliance & credit — always read-only */}
         {(selectedCustomer.kycStatus ||
           selectedCustomer.amlCheckStatus ||
-          selectedCustomer.creditScore) && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            <h3 className="text-base font-semibold text-slate-900 mb-4">Compliance & Credit</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          selectedCustomer.creditScore != null ||
+          selectedCustomer.riskRating) && (
+          <section className="rounded-3xl p-6 sm:p-7" style={cardStyle}>
+            <h3 className="mb-5 text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Compliance and credit
+            </h3>
+            <dl className="grid grid-cols-2 gap-5 md:grid-cols-4">
               {selectedCustomer.kycStatus && (
                 <div>
-                  <p className="text-sm text-slate-500">KYC Status</p>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold mt-1 ${
-                      selectedCustomer.kycStatus === 'COMPLETED' ||
-                      selectedCustomer.kycStatus === 'VERIFIED'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {selectedCustomer.kycStatus}
-                  </span>
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    KYC status
+                  </dt>
+                  <dd className="mt-1">
+                    <span
+                      className="inline-flex rounded-full px-3 py-1 text-sm font-medium"
+                      style={
+                        selectedCustomer.kycStatus === 'COMPLETED' || selectedCustomer.kycStatus === 'VERIFIED'
+                          ? { backgroundColor: 'rgba(16,185,129,0.14)', color: '#047857' }
+                          : { backgroundColor: 'rgba(245,158,11,0.15)', color: '#b45309' }
+                      }
+                    >
+                      {selectedCustomer.kycStatus.replace(/_/g, ' ')}
+                    </span>
+                  </dd>
                 </div>
               )}
               {selectedCustomer.amlCheckStatus && (
                 <div>
-                  <p className="text-sm text-slate-500">AML Check</p>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold mt-1 ${
-                      selectedCustomer.amlCheckStatus === 'CLEAR' ||
-                      selectedCustomer.amlCheckStatus === 'COMPLETED'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {selectedCustomer.amlCheckStatus}
-                  </span>
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    AML check
+                  </dt>
+                  <dd className="mt-1">
+                    <span
+                      className="inline-flex rounded-full px-3 py-1 text-sm font-medium"
+                      style={
+                        selectedCustomer.amlCheckStatus === 'CLEAR' || selectedCustomer.amlCheckStatus === 'COMPLETED'
+                          ? { backgroundColor: 'rgba(16,185,129,0.14)', color: '#047857' }
+                          : { backgroundColor: 'rgba(245,158,11,0.15)', color: '#b45309' }
+                      }
+                    >
+                      {selectedCustomer.amlCheckStatus.replace(/_/g, ' ')}
+                    </span>
+                  </dd>
                 </div>
               )}
               {selectedCustomer.creditScore != null && (
                 <div>
-                  <p className="text-sm text-slate-500">Credit Score</p>
-                  <p className="text-slate-900 font-semibold mt-1">
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Credit score
+                  </dt>
+                  <dd className="mt-1 text-base font-semibold tabular-nums" style={{ color: 'var(--rm-text)' }}>
                     {selectedCustomer.creditScore}
-                  </p>
+                  </dd>
                 </div>
               )}
               {selectedCustomer.riskRating && (
                 <div>
-                  <p className="text-sm text-slate-500">Risk Rating</p>
-                  <p className="text-slate-900 font-semibold mt-1">{selectedCustomer.riskRating}</p>
+                  <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    Risk rating
+                  </dt>
+                  <dd className="mt-1 text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                    {selectedCustomer.riskRating.replace(/_/g, ' ')}
+                  </dd>
                 </div>
               )}
-            </div>
-          </div>
+            </dl>
+          </section>
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <button
+            type="button"
             onClick={() => {
               setSelectedCustomer(null);
               setCustomerEditData(null);
               setCustomerEdited(false);
               setIsEditingCustomer(false);
-              setStep(2);
+              setCustomerSaveError(null);
+              goToStep(2);
             }}
-            className="px-5 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+            className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
           >
-            Select Different Customer
+            Select a different customer
           </button>
-          <div className="flex items-center gap-3">
+
+          <div className="flex flex-wrap items-center gap-3">
             {editing && customerEdited && (
               <button
-                onClick={() => {
-                  handleSaveCustomer().then(() => {
-                    setIsEditingCustomer(false);
-                  });
-                }}
+                type="button"
+                onClick={handleSaveCustomer}
                 disabled={savingCustomer}
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text)' }}
               >
                 {savingCustomer && (
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
                 )}
-                Save Changes
+                {savingCustomer ? 'Saving…' : 'Save changes'}
               </button>
             )}
-            <button
-              onClick={() => setStep(4)}
-              disabled={customerEdited}
-              title={customerEdited ? 'Save your changes before continuing' : undefined}
-              className={`px-6 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm ${
-                customerEdited
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-primary-600 text-white hover:bg-primary-700'
-              }`}
-            >
-              Continue to Application Details →
-            </button>
+            <div>
+              <button
+                type="button"
+                onClick={() => goToStep(4)}
+                disabled={customerEdited}
+                aria-disabled={customerEdited}
+                className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ backgroundColor: 'var(--rm-accent)' }}
+              >
+                Continue to application details
+              </button>
+              {customerEdited && (
+                <p role="alert" className="mt-2 text-right text-sm" style={{ color: '#b45309' }}>
+                  Save your changes before continuing.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
+  /* ── Step 4: application details ──────────────────────────────────── */
   const renderApplicationForm = () => {
     if (!selectedProduct) return null;
     const category = getProductCategory(selectedProduct.productType);
-    const categoryLabel: Record<string, string> = {
-      TERM_LOAN: 'Loan',
-      MORTGAGE: 'Mortgage',
-      VEHICLE_FINANCE: 'Vehicle Finance',
-      CREDIT_CARD: 'Credit Card',
-      OVERDRAFT: 'Overdraft',
-      BNPL: 'Buy Now Pay Later',
-      INVOICE_ASSET_FINANCE: 'Finance Facility',
-    };
-    const label = categoryLabel[category] || 'Application';
+    const label = CATEGORY_LABELS[category] || 'Application';
+    const errorKeys = Object.keys(fieldErrors).filter(k => fieldErrors[k as keyof ProductFormData]);
 
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{label} Application</h2>
-            <p className="text-gray-600">
-              Complete the {label.toLowerCase()} application for {selectedProduct.productName}
+            <h2
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="text-xl font-semibold tracking-tight"
+              style={{ color: 'var(--rm-text)' }}
+            >
+              {label} application details
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Complete the {label.toLowerCase()} application for {selectedProduct.productName}.
             </p>
           </div>
-          <button onClick={() => setStep(3)} className="text-sm text-gray-600 hover:text-gray-900">
-            ← Back to Customer Verification
+          <button
+            type="button"
+            onClick={() => goToStep(3)}
+            className="text-sm font-medium hover:underline"
+            style={{ color: 'var(--rm-accent)' }}
+          >
+            Back to customer verification
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Product</h3>
-            <p className="text-lg font-semibold text-gray-900">{selectedProduct?.productName}</p>
-            <p className="text-sm text-gray-600 mt-1">{selectedProduct?.productCode}</p>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="rounded-3xl p-6" style={cardStyle}>
+            <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Selected product
+            </p>
+            <p className="mt-1 text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
+              {selectedProduct.productName}
+            </p>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              {selectedProduct.productCode}
+            </p>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Selected Customer</h3>
-            <p className="text-lg font-semibold text-gray-900">
-              {selectedCustomer && customerService.getCustomerName(selectedCustomer)}
+          <div className="rounded-3xl p-6" style={cardStyle}>
+            <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Selected customer
             </p>
-            <div className="flex items-center gap-3 mt-1">
-              <p className="text-sm text-gray-600">{selectedCustomer?.customerNumber}</p>
-              {selectedCustomer?.primaryEmail && (
-                <p className="text-sm text-gray-500">{selectedCustomer.primaryEmail}</p>
-              )}
-            </div>
+            <p className="mt-1 text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
+              {selectedCustomer ? customerService.getCustomerName(selectedCustomer) : '—'}
+            </p>
+            <p className="mt-1 truncate text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              {[selectedCustomer?.customerNumber, selectedCustomer?.primaryEmail]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex">
-                <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <div className="ml-3">
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
-              </div>
+        <form onSubmit={handleSubmit} noValidate className="rounded-3xl p-6 sm:p-7" style={cardStyle}>
+          {submitError && (
+            <div className="mb-6">
+              <InlineAlert message={submitError} />
+              {errorKeys.length > 0 && (
+                <ul className="mt-3 space-y-1 pl-1">
+                  {errorKeys.map(key => {
+                    const id = PRODUCT_FIELD_IDS[key as keyof ProductFormData];
+                    return (
+                      <li key={key} className="text-sm">
+                        <a
+                          href={id ? `#${id}` : undefined}
+                          onClick={e => {
+                            if (!id) return;
+                            e.preventDefault();
+                            const el = document.getElementById(id);
+                            el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                            el?.focus();
+                          }}
+                          className="font-medium hover:underline"
+                          style={{ color: '#b91c1c' }}
+                        >
+                          {fieldErrors[key as keyof ProductFormData]}
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           )}
 
@@ -1445,6 +1383,7 @@ export default function NewApplicationPage() {
             product={selectedProduct}
             formData={formData}
             onChange={updateField}
+            errors={fieldErrors}
             customerProfile={
               customerEditData
                 ? {
@@ -1457,44 +1396,37 @@ export default function NewApplicationPage() {
             }
           />
 
-          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+          <div
+            className="mt-8 flex flex-wrap items-center justify-end gap-4 pt-6"
+            style={{ borderTop: '1px solid var(--rm-border)' }}
+          >
             <button
+              type="button"
               onClick={() => router.push('/dashboard/applications')}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
-              disabled={loading}
+              disabled={submitting}
+              className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-secondary)' }}
             >
-              Cancel
+              Discard and exit
             </button>
             <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: 'var(--rm-accent)' }}
             >
-              {loading && (
-                <svg
-                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
+              {submitting && (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
               )}
-              {loading ? 'Creating...' : `Create ${label} Application`}
+              {submitting ? 'Creating…' : `Create ${label.toLowerCase()} application`}
             </button>
           </div>
-        </div>
+          {submitting && (
+            <p className="sr-only" role="status">
+              Creating the application
+            </p>
+          )}
+        </form>
       </div>
     );
   };
@@ -1515,51 +1447,80 @@ export default function NewApplicationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-primary-600">
-                New {selectedProduct ? selectedProduct.productName : ''} Application
-              </h1>
-              <div className="hidden sm:flex items-center space-x-2">
-                <span
-                  className={`text-sm font-medium ${step >= 1 ? 'text-primary-600' : 'text-gray-400'}`}
-                >
-                  1. Product
-                </span>
-                <span className="text-gray-400">→</span>
-                <span
-                  className={`text-sm font-medium ${step >= 2 ? 'text-primary-600' : 'text-gray-400'}`}
-                >
-                  2. Customer
-                </span>
-                <span className="text-gray-400">→</span>
-                <span
-                  className={`text-sm font-medium ${step >= 3 ? 'text-primary-600' : 'text-gray-400'}`}
-                >
-                  3. Verify
-                </span>
-                <span className="text-gray-400">→</span>
-                <span
-                  className={`text-sm font-medium ${step >= 4 ? 'text-primary-600' : 'text-gray-400'}`}
-                >
-                  4. Details
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="text-sm text-gray-600 hover:text-primary-600 font-medium"
-            >
-              ← Back to Dashboard
-            </button>
-          </div>
-        </div>
+    <div className="mx-auto max-w-6xl space-y-8">
+      {/* ── Header ── */}
+      <header className="rounded-3xl p-6 sm:p-7" style={cardStyle}>
+        <button
+          type="button"
+          onClick={() => router.push('/dashboard')}
+          className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+          style={{ color: 'var(--rm-text-muted)' }}
+        >
+          <svg className="w-4 h-4" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to dashboard
+        </button>
+
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+          New application
+        </h1>
+        <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {selectedProduct
+            ? `${selectedProduct.productName}${selectedCustomer ? ` · ${customerService.getCustomerName(selectedCustomer)}` : ''}`
+            : 'Raise a new loan application for an existing customer.'}
+        </p>
+
+        {/* Step position — stated as text so it is announced, not implied by colour */}
+        <p role="status" className="mt-5 text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>
+          Step {step} of {STEPS.length}: {STEPS[step - 1].label}
+        </p>
+
+        <nav aria-label="Progress" className="mt-3">
+          <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
+            {STEPS.map((s, i) => {
+              const index = i + 1;
+              const done = index < step;
+              const current = index === step;
+              return (
+                <li key={s.id} className="flex items-center gap-2">
+                  <span
+                    aria-current={current ? 'step' : undefined}
+                    className="flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium"
+                    style={{
+                      backgroundColor: current
+                        ? 'var(--rm-accent-muted)'
+                        : done
+                          ? 'var(--rm-input)'
+                          : 'transparent',
+                      color: current
+                        ? 'var(--rm-accent)'
+                        : done
+                          ? 'var(--rm-text-secondary)'
+                          : 'var(--rm-text-muted)',
+                    }}
+                  >
+                    <span className="tabular-nums" aria-hidden="true">
+                      {index}
+                    </span>
+                    {s.label}
+                    <span className="sr-only">
+                      {current ? ' (current step)' : done ? ' (completed)' : ' (not started)'}
+                    </span>
+                  </span>
+                  {index < STEPS.length && (
+                    <span aria-hidden="true" className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      ·
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
       </header>
 
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">{renderStep()}</main>
+      <div>{renderStep()}</div>
     </div>
   );
 }

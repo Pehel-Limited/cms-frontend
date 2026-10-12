@@ -633,41 +633,41 @@ class KycService {
 
   getStatusColor(status: KycCaseStatus): string {
     const colors: Record<KycCaseStatus, string> = {
-      DRAFT: 'bg-gray-100 text-gray-800',
-      PENDING_DOCUMENTS: 'bg-yellow-100 text-yellow-800',
-      UNDER_REVIEW: 'bg-blue-100 text-blue-800',
-      PENDING_VERIFICATION: 'bg-purple-100 text-purple-800',
-      PENDING_SCREENING: 'bg-indigo-100 text-indigo-800',
-      PENDING_RISK: 'bg-orange-100 text-orange-800',
-      PENDING_APPROVAL: 'bg-cyan-100 text-cyan-800',
-      ESCALATED: 'bg-red-100 text-red-800',
-      APPROVED: 'bg-green-100 text-green-800',
-      REJECTED: 'bg-red-100 text-red-800',
-      INCOMPLETE: 'bg-gray-100 text-gray-800',
-      ON_HOLD: 'bg-gray-100 text-gray-800',
+      DRAFT: 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-300',
+      PENDING_DOCUMENTS: 'bg-yellow-100 dark:bg-yellow-500/15 text-yellow-800 dark:text-yellow-300',
+      UNDER_REVIEW: 'bg-blue-100 dark:bg-blue-500/15 text-blue-800 dark:text-blue-300',
+      PENDING_VERIFICATION: 'bg-purple-100 dark:bg-purple-500/15 text-purple-800 dark:text-purple-300',
+      PENDING_SCREENING: 'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-800 dark:text-indigo-300',
+      PENDING_RISK: 'bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300',
+      PENDING_APPROVAL: 'bg-cyan-100 dark:bg-cyan-500/15 text-cyan-800 dark:text-cyan-300',
+      ESCALATED: 'bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300',
+      APPROVED: 'bg-green-100 dark:bg-green-500/15 text-green-800 dark:text-green-300',
+      REJECTED: 'bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300',
+      INCOMPLETE: 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-300',
+      ON_HOLD: 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-300',
     };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+    return colors[status] || 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-300';
   }
 
   getRiskTierColor(tier: RiskTier): string {
     const colors: Record<RiskTier, string> = {
-      LOW: 'bg-green-100 text-green-800',
-      MEDIUM_LOW: 'bg-lime-100 text-lime-800',
-      MEDIUM: 'bg-yellow-100 text-yellow-800',
-      MEDIUM_HIGH: 'bg-orange-100 text-orange-800',
-      HIGH: 'bg-red-100 text-red-800',
+      LOW: 'bg-green-100 dark:bg-green-500/15 text-green-800 dark:text-green-300',
+      MEDIUM_LOW: 'bg-lime-100 dark:bg-lime-500/15 text-lime-800 dark:text-lime-300',
+      MEDIUM: 'bg-yellow-100 dark:bg-yellow-500/15 text-yellow-800 dark:text-yellow-300',
+      MEDIUM_HIGH: 'bg-orange-100 dark:bg-orange-500/15 text-orange-800 dark:text-orange-300',
+      HIGH: 'bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300',
       PROHIBITED: 'bg-gray-900 text-white',
     };
-    return colors[tier] || 'bg-gray-100 text-gray-800';
+    return colors[tier] || 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-300';
   }
 
   getDiligenceColor(level: DiligenceLevel): string {
     const colors: Record<DiligenceLevel, string> = {
-      SDD: 'bg-green-100 text-green-800',
-      CDD: 'bg-blue-100 text-blue-800',
-      EDD: 'bg-red-100 text-red-800',
+      SDD: 'bg-green-100 dark:bg-green-500/15 text-green-800 dark:text-green-300',
+      CDD: 'bg-blue-100 dark:bg-blue-500/15 text-blue-800 dark:text-blue-300',
+      EDD: 'bg-red-100 dark:bg-red-500/15 text-red-800 dark:text-red-300',
     };
-    return colors[level] || 'bg-gray-100 text-gray-800';
+    return colors[level] || 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-300';
   }
 
   getDiligenceLabel(level: DiligenceLevel): string {

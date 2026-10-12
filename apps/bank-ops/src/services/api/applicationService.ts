@@ -82,6 +82,23 @@ export interface ApplicationResponse {
   downPaymentAmount?: number;
 
   assignedToUserId?: string;
+  relationshipManagerId?: string;
+  /** CCV borrower — the entity lent against. Staff-side only, never sent to the portal. */
+  borrowerId?: string;
+  borrower?: {
+    id: string;
+    borrowerType?: string;
+    legalName?: string;
+    crNumber?: string;
+    /** PROVISIONAL until a submitted application confirms it */
+    status?: string;
+    members?: Array<{
+      customerId: string;
+      /** BORROWER | CO_BORROWER — guarantors are not members of the borrowing entity */
+      capacity: string;
+      jointAndSeveral: boolean;
+    }>;
+  };
   assignedAt?: string;
   submittedAt?: string;
   reviewStartedAt?: string;
@@ -122,6 +139,16 @@ export interface ApplicationResponse {
   };
 
   assignedToUser?: {
+    userId: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    userType?: string;
+    roles?: string[];
+  };
+
+  relationshipManager?: {
     userId: string;
     username: string;
     firstName: string;

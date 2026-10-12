@@ -8,41 +8,41 @@ import { useAppSelector } from '@/store';
 import config from '@/config';
 
 const PRODUCT_CATEGORIES = [
-  { value: 'PERSONAL_CONSUMER', label: 'Personal & Consumer Products' },
-  { value: 'BUSINESS_SME', label: 'Business & SME Products' },
-  { value: 'SPECIALIZED_IRISH', label: 'Specialized Irish Products' },
+  { value: 'PERSONAL_CONSUMER', label: 'Personal & Consumer' },
+  { value: 'BUSINESS_SME', label: 'Business & SME' },
+  { value: 'SPECIALIZED_IRISH', label: 'Specialized Irish' },
 ];
 
 const PRODUCT_TYPES_BY_CATEGORY: Record<string, { value: string; label: string }[]> = {
   PERSONAL_CONSUMER: [
-    { value: 'PERSONAL_LOAN', label: 'Personal Loan' },
-    { value: 'PCP', label: 'Personal Contract Purchase (PCP)' },
-    { value: 'HIRE_PURCHASE', label: 'Hire Purchase (HP)' },
-    { value: 'CREDIT_CARD', label: 'Credit Card' },
+    { value: 'PERSONAL_LOAN', label: 'Personal loan' },
+    { value: 'PCP', label: 'Personal contract purchase (PCP)' },
+    { value: 'HIRE_PURCHASE', label: 'Hire purchase (HP)' },
+    { value: 'CREDIT_CARD', label: 'Credit card' },
     { value: 'OVERDRAFT', label: 'Overdraft' },
-    { value: 'BNPL', label: 'Buy Now Pay Later (BNPL)' },
+    { value: 'BNPL', label: 'Buy now pay later (BNPL)' },
     { value: 'MORTGAGE', label: 'Mortgage' },
   ],
   BUSINESS_SME: [
-    { value: 'SME_TERM_LOAN', label: 'SME Term Loan' },
-    { value: 'BUSINESS_OVERDRAFT', label: 'Business Overdraft' },
-    { value: 'INVOICE_FINANCE', label: 'Invoice Finance / Factoring' },
-    { value: 'BUSINESS_CREDIT_CARD', label: 'Business Credit Card' },
-    { value: 'COMMERCIAL_MORTGAGE', label: 'Commercial Mortgage' },
-    { value: 'ASSET_LEASING', label: 'Asset Leasing / Equipment Finance' },
+    { value: 'SME_TERM_LOAN', label: 'SME term loan' },
+    { value: 'BUSINESS_OVERDRAFT', label: 'Business overdraft' },
+    { value: 'INVOICE_FINANCE', label: 'Invoice finance / factoring' },
+    { value: 'BUSINESS_CREDIT_CARD', label: 'Business credit card' },
+    { value: 'COMMERCIAL_MORTGAGE', label: 'Commercial mortgage' },
+    { value: 'ASSET_LEASING', label: 'Asset leasing / equipment finance' },
   ],
   SPECIALIZED_IRISH: [
-    { value: 'AGRI_LOAN', label: 'Agri-Loans' },
-    { value: 'CREDIT_UNION_LOAN', label: 'Credit Union Loan' },
-    { value: 'GREEN_LOAN', label: 'Green Loans / Sustainable Finance' },
-    { value: 'MICROFINANCE', label: 'Microfinance / Micro-Loan' },
+    { value: 'AGRI_LOAN', label: 'Agri loan' },
+    { value: 'CREDIT_UNION_LOAN', label: 'Credit union loan' },
+    { value: 'GREEN_LOAN', label: 'Green loan / sustainable finance' },
+    { value: 'MICROFINANCE', label: 'Microfinance / micro loan' },
   ],
 };
 
 const INTEREST_TYPES = [
-  { value: 'FIXED', label: 'Fixed Rate' },
-  { value: 'VARIABLE', label: 'Variable Rate' },
-  { value: 'HYBRID', label: 'Hybrid (Fixed + Variable)' },
+  { value: 'FIXED', label: 'Fixed rate' },
+  { value: 'VARIABLE', label: 'Variable rate' },
+  { value: 'HYBRID', label: 'Hybrid (fixed and variable)' },
 ];
 
 const REPAYMENT_FREQUENCIES = [
@@ -60,18 +60,61 @@ const REGULATORY_BODIES = [
 ];
 
 const CUSTOMER_TYPES = [
-  { value: 'INDIVIDUAL', label: 'Individual Customers' },
-  { value: 'BUSINESS', label: 'Business Customers' },
+  { value: 'INDIVIDUAL', label: 'Individual customers' },
+  { value: 'BUSINESS', label: 'Business customers' },
 ];
+
+type TabId = 'basic' | 'financial' | 'eligibility' | 'features' | 'irish';
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'basic', label: 'Basic information' },
+  { id: 'financial', label: 'Pricing and terms' },
+  { id: 'eligibility', label: 'Eligibility' },
+  { id: 'features', label: 'Features' },
+  { id: 'irish', label: 'Irish and EU details' },
+];
+
+const inputStyle: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  border: '1px solid var(--rm-border)',
+  color: 'var(--rm-text)',
+};
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message;
+  const apiMessage = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return apiMessage || fallback;
+}
+
+/** Maps a field name back to the tab that renders it. */
+function tabForField(field: string): TabId {
+  if (
+    ['productCode', 'productName', 'productType', 'productCategory', 'eligibleCustomerTypes'].includes(
+      field
+    )
+  )
+    return 'basic';
+  if (
+    [
+      'minLoanAmount',
+      'maxLoanAmount',
+      'minInterestRate',
+      'maxInterestRate',
+      'minTermMonths',
+      'maxTermMonths',
+    ].includes(field)
+  )
+    return 'financial';
+  return 'basic';
+}
 
 export default function NewProductPage() {
   const router = useRouter();
   const { user } = useAppSelector(state => state.auth);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<
-    'basic' | 'financial' | 'eligibility' | 'features' | 'irish'
-  >('basic');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [activeTab, setActiveTab] = useState<TabId>('basic');
 
   const getBankId = (): string => {
     if (user?.bankId) return user.bankId;
@@ -80,13 +123,13 @@ export default function NewProductPage() {
       if (userDataStr) {
         try {
           const userData = JSON.parse(userDataStr);
-          return userData.bankId || '123e4567-e89b-12d3-a456-426614174000';
+          return userData.bankId || config.bank.defaultBankId;
         } catch {
-          return '123e4567-e89b-12d3-a456-426614174000';
+          return config.bank.defaultBankId;
         }
       }
     }
-    return '123e4567-e89b-12d3-a456-426614174000';
+    return config.bank.defaultBankId;
   };
 
   const [formData, setFormData] = useState<Partial<CreateProductRequest>>({
@@ -114,6 +157,12 @@ export default function NewProductPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value, type } = e.target;
+    setFieldErrors(prev => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
 
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
@@ -127,18 +176,19 @@ export default function NewProductPage() {
 
   const handleCustomerTypeChange = (type: string) => {
     const currentTypes = formData.eligibleCustomerTypes || [];
+    setFieldErrors(prev => {
+      if (!prev.eligibleCustomerTypes) return prev;
+      const next = { ...prev };
+      delete next.eligibleCustomerTypes;
+      return next;
+    });
     if (currentTypes.includes(type)) {
-      if (currentTypes.length > 1) {
-        setFormData(prev => ({
-          ...prev,
-          eligibleCustomerTypes: currentTypes.filter(t => t !== type),
-        }));
-      }
-    } else {
       setFormData(prev => ({
         ...prev,
-        eligibleCustomerTypes: [...currentTypes, type],
+        eligibleCustomerTypes: currentTypes.filter(t => t !== type),
       }));
+    } else {
+      setFormData(prev => ({ ...prev, eligibleCustomerTypes: [...currentTypes, type] }));
     }
   };
 
@@ -151,878 +201,1018 @@ export default function NewProductPage() {
     }));
   };
 
+  const validate = (): { errors: Record<string, string>; tab: TabId | null } => {
+    const errors: Record<string, string> = {};
+    let tab: TabId | null = null;
+    const add = (field: string, message: string, on: TabId) => {
+      if (!errors[field]) {
+        errors[field] = message;
+        if (!tab) tab = on;
+      }
+    };
+
+    if (!formData.productCode?.trim()) add('productCode', 'A product code is required.', 'basic');
+    if (!formData.productName?.trim()) add('productName', 'A product name is required.', 'basic');
+    if (!formData.productType) add('productType', 'Choose a product type.', 'basic');
+    if (!formData.eligibleCustomerTypes || formData.eligibleCustomerTypes.length === 0)
+      add('eligibleCustomerTypes', 'Select at least one eligible customer type.', 'basic');
+
+    if (formData.minLoanAmount == null)
+      add('minLoanAmount', 'A minimum loan amount is required.', 'financial');
+    if (formData.maxLoanAmount == null)
+      add('maxLoanAmount', 'A maximum loan amount is required.', 'financial');
+    if (
+      formData.minLoanAmount != null &&
+      formData.maxLoanAmount != null &&
+      formData.maxLoanAmount < formData.minLoanAmount
+    )
+      add('maxLoanAmount', 'The maximum must be greater than or equal to the minimum.', 'financial');
+
+    if (formData.minInterestRate == null)
+      add('minInterestRate', 'A minimum interest rate is required.', 'financial');
+    if (formData.maxInterestRate == null)
+      add('maxInterestRate', 'A maximum interest rate is required.', 'financial');
+    if (
+      formData.minInterestRate != null &&
+      formData.maxInterestRate != null &&
+      formData.maxInterestRate < formData.minInterestRate
+    )
+      add('maxInterestRate', 'The maximum rate must be greater than or equal to the minimum.', 'financial');
+
+    if (formData.minTermMonths == null)
+      add('minTermMonths', 'A minimum term is required.', 'financial');
+    if (formData.maxTermMonths == null)
+      add('maxTermMonths', 'A maximum term is required.', 'financial');
+    if (
+      formData.minTermMonths != null &&
+      formData.maxTermMonths != null &&
+      formData.maxTermMonths < formData.minTermMonths
+    )
+      add('maxTermMonths', 'The maximum term must be greater than or equal to the minimum.', 'financial');
+
+    return { errors, tab };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setFormError(null);
 
-    // Validation
-    if (!formData.productCode || !formData.productName) {
-      setError('Product code and name are required.');
-      return;
-    }
-
-    if (!formData.minLoanAmount || !formData.maxLoanAmount) {
-      setError('Loan amount range is required.');
-      return;
-    }
-
-    if (!formData.minInterestRate || !formData.maxInterestRate) {
-      setError('Interest rate range is required.');
-      return;
-    }
-
-    if (!formData.minTermMonths || !formData.maxTermMonths) {
-      setError('Term range is required.');
+    const { errors, tab } = validate();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      if (tab) setActiveTab(tab);
+      const firstField = Object.keys(errors)[0];
+      setFormError('Some details need attention before this product can be created.');
+      window.setTimeout(() => document.getElementById(firstField)?.focus(), 0);
       return;
     }
 
     try {
       setSaving(true);
-      await productService.createProduct(formData as CreateProductRequest);
+      await productService.createProduct({ ...formData, bankId: getBankId() } as CreateProductRequest);
       router.push('/dashboard/products');
     } catch (err) {
       console.error('Failed to create product:', err);
-      setError('Failed to create product. Please try again.');
+      // Scoped to the banner — every field keeps its typed value.
+      setFormError(errorMessage(err, 'We could not create the product. Please try again.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const tabs = [
-    { id: 'basic', label: 'Basic Info', icon: '📋' },
-    { id: 'financial', label: 'Financial', icon: '💰' },
-    { id: 'eligibility', label: 'Eligibility', icon: '✅' },
-    { id: 'features', label: 'Features', icon: '⚙️' },
-    { id: 'irish', label: 'Irish/EU Details', icon: '🇮🇪' },
-  ];
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let next: number | null = null;
+    if (e.key === 'ArrowRight') next = (index + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = TABS.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    setActiveTab(TABS[next].id);
+    document.getElementById(`new-product-tab-${TABS[next].id}`)?.focus();
+  };
+
+  const typeOptions = PRODUCT_TYPES_BY_CATEGORY[formData.productCategory || ''] || [];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div>
-              <h1 className="text-2xl font-bold text-primary-600">Create New Product</h1>
-              <p className="text-xs text-gray-600 mt-0.5">
-                Add a new loan product to your portfolio
-              </p>
-            </div>
-            <Link
-              href="/dashboard/products"
-              className="text-sm text-gray-600 hover:text-primary-600 font-medium"
-            >
-              ← Back to Products
-            </Link>
-          </div>
+    <div className="space-y-6" style={{ color: 'var(--rm-text)' }}>
+      {/* ══ Header ══ */}
+      <header className="flex flex-wrap items-start justify-between gap-6">
+        <div className="min-w-0">
+          <Link
+            href="/dashboard/products"
+            className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+            style={{ color: 'var(--rm-text-muted)' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to products
+          </Link>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            New product
+          </h1>
+          <p className="mt-1.5 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
+            Add a lending product to the catalogue. Fields marked with an asterisk are required.
+          </p>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <div className="flex">
-              <svg
-                className="h-5 w-5 text-red-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">{error}</h3>
-              </div>
+      <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        {/* ══ Errors ══ */}
+        {formError && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-3xl p-6"
+            style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
+          >
+            <svg
+              className="mt-0.5 h-5 w-5 shrink-0"
+              style={{ color: '#b91c1c' }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              strokeWidth={1.8}
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                {formError}
+              </p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                Nothing was created — everything you typed is still here.
+              </p>
             </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          {/* Tabs */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-            <div className="border-b border-gray-200">
-              <nav className="flex -mb-px">
-                {tabs.map(tab => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                    className={`px-6 py-4 text-sm font-medium border-b-2 ${
-                      activeTab === tab.id
-                        ? 'border-primary-600 text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <span className="mr-2">{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </nav>
+        {/* ══ Tabs ══ */}
+        <div
+          role="tablist"
+          aria-label="Product sections"
+          className="flex flex-wrap gap-1 rounded-full p-1"
+          style={{ backgroundColor: 'var(--rm-card)' }}
+        >
+          {TABS.map((tab, i) => {
+            const selected = activeTab === tab.id;
+            const errorCount = Object.keys(fieldErrors).filter(f => tabForField(f) === tab.id).length;
+            return (
+              <button
+                key={tab.id}
+                id={`new-product-tab-${tab.id}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={`new-product-panel-${tab.id}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={e => onTabKeyDown(e, i)}
+                className="rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors"
+                style={{
+                  backgroundColor: selected ? 'var(--rm-accent-muted)' : 'transparent',
+                  color: selected ? 'var(--rm-accent)' : 'var(--rm-text-muted)',
+                }}
+              >
+                {tab.label}
+                {errorCount > 0 && (
+                  <span className="ml-1.5 tabular-nums" style={{ color: '#b91c1c' }}>
+                    {errorCount} to fix
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ══ Panels ══ */}
+        <section
+          id={`new-product-panel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`new-product-tab-${activeTab}`}
+          tabIndex={0}
+          className="rounded-3xl p-6 sm:p-7"
+          style={{ backgroundColor: 'var(--rm-card)' }}
+        >
+          {activeTab === 'basic' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <TextField
+                  id="productCode"
+                  label="Product code"
+                  name="productCode"
+                  value={formData.productCode}
+                  onChange={handleInputChange}
+                  placeholder="e.g. PL-001"
+                  required
+                  error={fieldErrors.productCode}
+                />
+                <TextField
+                  id="productName"
+                  label="Product name"
+                  name="productName"
+                  value={formData.productName}
+                  onChange={handleInputChange}
+                  placeholder="e.g. Personal loan"
+                  required
+                  error={fieldErrors.productName}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <SelectField
+                  id="productCategory"
+                  label="Product category"
+                  name="productCategory"
+                  value={formData.productCategory}
+                  onChange={e => handleCategoryChange(e.target.value)}
+                  options={PRODUCT_CATEGORIES}
+                  required
+                />
+                <SelectField
+                  id="productType"
+                  label="Product type"
+                  name="productType"
+                  value={formData.productType}
+                  onChange={handleInputChange}
+                  options={typeOptions}
+                  required
+                  error={fieldErrors.productType}
+                  hint="Options follow the selected category"
+                />
+              </div>
+
+              <TextField
+                id="shortDescription"
+                label="Short description"
+                name="shortDescription"
+                value={formData.shortDescription}
+                onChange={handleInputChange}
+                placeholder="Brief description for product cards"
+                hint="Shown on product cards"
+              />
+
+              <TextAreaField
+                id="detailedDescription"
+                label="Detailed description"
+                name="detailedDescription"
+                value={formData.detailedDescription}
+                onChange={handleInputChange}
+                rows={4}
+                placeholder="Full product description"
+              />
+
+              <fieldset>
+                <legend className="mb-2 block text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>
+                  Eligible customer types
+                  <span aria-hidden="true" style={{ color: '#b91c1c' }}>
+                    {' '}
+                    *
+                  </span>
+                </legend>
+                <div className="flex flex-wrap gap-5">
+                  {CUSTOMER_TYPES.map(type => (
+                    <CheckboxField
+                      key={type.value}
+                      id={`customerType-${type.value}`}
+                      name={type.value}
+                      label={type.label}
+                      checked={formData.eligibleCustomerTypes?.includes(type.value) || false}
+                      onChange={() => handleCustomerTypeChange(type.value)}
+                    />
+                  ))}
+                </div>
+                {fieldErrors.eligibleCustomerTypes ? (
+                  <p role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+                    {fieldErrors.eligibleCustomerTypes}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    At least one customer type must be able to apply.
+                  </p>
+                )}
+              </fieldset>
             </div>
+          )}
 
-            <div className="p-6">
-              {/* Basic Info Tab */}
-              {activeTab === 'basic' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Product Code *
-                      </label>
-                      <input
-                        type="text"
-                        name="productCode"
-                        value={formData.productCode || ''}
-                        onChange={handleInputChange}
-                        placeholder="e.g., PL-001"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Product Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="productName"
-                        value={formData.productName || ''}
-                        onChange={handleInputChange}
-                        placeholder="e.g., Personal Loan"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                  </div>
+          {activeTab === 'financial' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                <TextField
+                  id="minLoanAmount"
+                  label="Minimum loan amount"
+                  name="minLoanAmount"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="100"
+                  value={formData.minLoanAmount}
+                  onChange={handleInputChange}
+                  required
+                  error={fieldErrors.minLoanAmount}
+                />
+                <TextField
+                  id="maxLoanAmount"
+                  label="Maximum loan amount"
+                  name="maxLoanAmount"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="100"
+                  value={formData.maxLoanAmount}
+                  onChange={handleInputChange}
+                  required
+                  error={fieldErrors.maxLoanAmount}
+                />
+                <TextField
+                  id="defaultLoanAmount"
+                  label="Default loan amount"
+                  name="defaultLoanAmount"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="100"
+                  value={formData.defaultLoanAmount}
+                  onChange={handleInputChange}
+                />
+              </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Product Category *
-                      </label>
-                      <select
-                        name="productCategory"
-                        value={formData.productCategory || ''}
-                        onChange={e => handleCategoryChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        {PRODUCT_CATEGORIES.map(cat => (
-                          <option key={cat.value} value={cat.value}>
-                            {cat.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Product Type *
-                      </label>
-                      <select
-                        name="productType"
-                        value={formData.productType || ''}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        {(PRODUCT_TYPES_BY_CATEGORY[formData.productCategory || ''] || []).map(
-                          type => (
-                            <option key={type.value} value={type.value}>
-                              {type.label}
-                            </option>
-                          )
-                        )}
-                      </select>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
+                <SelectField
+                  id="interestType"
+                  label="Interest type"
+                  name="interestType"
+                  value={formData.interestType}
+                  onChange={handleInputChange}
+                  options={INTEREST_TYPES}
+                  required
+                />
+                <TextField
+                  id="minInterestRate"
+                  label="Minimum interest rate (%)"
+                  name="minInterestRate"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.minInterestRate}
+                  onChange={handleInputChange}
+                  required
+                  error={fieldErrors.minInterestRate}
+                />
+                <TextField
+                  id="maxInterestRate"
+                  label="Maximum interest rate (%)"
+                  name="maxInterestRate"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.maxInterestRate}
+                  onChange={handleInputChange}
+                  required
+                  error={fieldErrors.maxInterestRate}
+                />
+                <TextField
+                  id="defaultInterestRate"
+                  label="Default interest rate (%)"
+                  name="defaultInterestRate"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.defaultInterestRate}
+                  onChange={handleInputChange}
+                />
+              </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Short Description
-                    </label>
-                    <input
-                      type="text"
-                      name="shortDescription"
-                      value={formData.shortDescription || ''}
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
+                <TextField
+                  id="minTermMonths"
+                  label="Minimum term (months)"
+                  name="minTermMonths"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={formData.minTermMonths}
+                  onChange={handleInputChange}
+                  required
+                  error={fieldErrors.minTermMonths}
+                />
+                <TextField
+                  id="maxTermMonths"
+                  label="Maximum term (months)"
+                  name="maxTermMonths"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={formData.maxTermMonths}
+                  onChange={handleInputChange}
+                  required
+                  error={fieldErrors.maxTermMonths}
+                />
+                <TextField
+                  id="defaultTermMonths"
+                  label="Default term (months)"
+                  name="defaultTermMonths"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={formData.defaultTermMonths}
+                  onChange={handleInputChange}
+                />
+                <SelectField
+                  id="repaymentFrequency"
+                  label="Repayment frequency"
+                  name="repaymentFrequency"
+                  value={formData.repaymentFrequency}
+                  onChange={handleInputChange}
+                  options={REPAYMENT_FREQUENCIES}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                <TextField
+                  id="processingFee"
+                  label="Processing fee"
+                  name="processingFee"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="1"
+                  value={formData.processingFee}
+                  onChange={handleInputChange}
+                />
+                <TextField
+                  id="processingFeePercentage"
+                  label="Processing fee (%)"
+                  name="processingFeePercentage"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.processingFeePercentage}
+                  onChange={handleInputChange}
+                />
+                <TextField
+                  id="latePaymentFee"
+                  label="Late payment fee"
+                  name="latePaymentFee"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="1"
+                  value={formData.latePaymentFee}
+                  onChange={handleInputChange}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'eligibility' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <TextField
+                  id="minCustomerAge"
+                  label="Minimum customer age"
+                  name="minCustomerAge"
+                  type="number"
+                  inputMode="numeric"
+                  min="18"
+                  max="100"
+                  value={formData.minCustomerAge}
+                  onChange={handleInputChange}
+                />
+                <TextField
+                  id="maxCustomerAge"
+                  label="Maximum customer age"
+                  name="maxCustomerAge"
+                  type="number"
+                  inputMode="numeric"
+                  min="18"
+                  max="100"
+                  value={formData.maxCustomerAge}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <TextField
+                  id="minCreditScore"
+                  label="Minimum credit score"
+                  name="minCreditScore"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="900"
+                  value={formData.minCreditScore}
+                  onChange={handleInputChange}
+                />
+                <TextField
+                  id="minAnnualIncome"
+                  label="Minimum annual income"
+                  name="minAnnualIncome"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="1000"
+                  value={formData.minAnnualIncome}
+                  onChange={handleInputChange}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <TextField
+                  id="minYearsInBusiness"
+                  label="Minimum years in business"
+                  name="minYearsInBusiness"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  value={formData.minYearsInBusiness}
+                  onChange={handleInputChange}
+                  hint="Applies to business lending"
+                />
+                <TextField
+                  id="minBusinessRevenue"
+                  label="Minimum business revenue"
+                  name="minBusinessRevenue"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="1000"
+                  value={formData.minBusinessRevenue}
+                  onChange={handleInputChange}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'features' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <fieldset>
+                  <legend className="mb-3 block text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                    Product features
+                  </legend>
+                  <div className="space-y-3">
+                    <CheckboxField
+                      id="prepaymentAllowed"
+                      name="prepaymentAllowed"
+                      label="Prepayment allowed"
+                      checked={formData.prepaymentAllowed || false}
                       onChange={handleInputChange}
-                      placeholder="Brief description for product cards"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <CheckboxField
+                      id="collateralRequired"
+                      name="collateralRequired"
+                      label="Collateral required"
+                      checked={formData.collateralRequired || false}
+                      onChange={handleInputChange}
+                    />
+                    <CheckboxField
+                      id="downPaymentRequired"
+                      name="downPaymentRequired"
+                      label="Down payment required"
+                      checked={formData.downPaymentRequired || false}
+                      onChange={handleInputChange}
+                    />
+                    <CheckboxField
+                      id="requiresGuarantor"
+                      name="requiresGuarantor"
+                      label="Guarantor required"
+                      checked={formData.requiresGuarantor || false}
+                      onChange={handleInputChange}
+                    />
+                    <CheckboxField
+                      id="isFeatured"
+                      name="isFeatured"
+                      label="Featured product"
+                      checked={formData.isFeatured || false}
+                      onChange={handleInputChange}
                     />
                   </div>
+                </fieldset>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Detailed Description
-                    </label>
-                    <textarea
-                      name="detailedDescription"
-                      value={formData.detailedDescription || ''}
+                <fieldset>
+                  <legend className="mb-3 block text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+                    Application settings
+                  </legend>
+                  <div className="space-y-3">
+                    <CheckboxField
+                      id="isOnlineApplicationEnabled"
+                      name="isOnlineApplicationEnabled"
+                      label="Online applications enabled"
+                      checked={formData.isOnlineApplicationEnabled || false}
                       onChange={handleInputChange}
-                      rows={4}
-                      placeholder="Full product description"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <CheckboxField
+                      id="autoApprovalEnabled"
+                      name="autoApprovalEnabled"
+                      label="Auto-approval enabled"
+                      checked={formData.autoApprovalEnabled || false}
+                      onChange={handleInputChange}
                     />
                   </div>
+                </fieldset>
+              </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Eligible Customer Types *
-                    </label>
-                    <div className="flex space-x-4">
-                      {CUSTOMER_TYPES.map(type => (
-                        <label key={type.value} className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={formData.eligibleCustomerTypes?.includes(type.value) || false}
-                            onChange={() => handleCustomerTypeChange(type.value)}
-                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">
-                            {type.value === 'INDIVIDUAL' ? '👤' : '🏢'} {type.label}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Select which customer types can apply for this product
-                    </p>
-                  </div>
-                </div>
-              )}
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                <TextField
+                  id="prepaymentPenaltyPercentage"
+                  label="Prepayment penalty (%)"
+                  name="prepaymentPenaltyPercentage"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={formData.prepaymentPenaltyPercentage}
+                  onChange={handleInputChange}
+                />
+                <TextField
+                  id="loanToValueRatio"
+                  label="Loan to value ratio (%)"
+                  name="loanToValueRatio"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={formData.loanToValueRatio}
+                  onChange={handleInputChange}
+                />
+                <TextField
+                  id="slaDays"
+                  label="Decision SLA (days)"
+                  name="slaDays"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  value={formData.slaDays}
+                  onChange={handleInputChange}
+                />
+              </div>
 
-              {/* Financial Tab */}
-              {activeTab === 'financial' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Min Loan Amount *
-                      </label>
-                      <input
-                        type="number"
-                        name="minLoanAmount"
-                        value={formData.minLoanAmount || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="100"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Max Loan Amount *
-                      </label>
-                      <input
-                        type="number"
-                        name="maxLoanAmount"
-                        value={formData.maxLoanAmount || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="100"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Default Loan Amount
-                      </label>
-                      <input
-                        type="number"
-                        name="defaultLoanAmount"
-                        value={formData.defaultLoanAmount || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="100"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Interest Type *
-                      </label>
-                      <select
-                        name="interestType"
-                        value={formData.interestType || ''}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        {INTEREST_TYPES.map(type => (
-                          <option key={type.value} value={type.value}>
-                            {type.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Min Interest Rate (%) *
-                      </label>
-                      <input
-                        type="number"
-                        name="minInterestRate"
-                        value={formData.minInterestRate || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Max Interest Rate (%) *
-                      </label>
-                      <input
-                        type="number"
-                        name="maxInterestRate"
-                        value={formData.maxInterestRate || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Default Interest Rate (%)
-                      </label>
-                      <input
-                        type="number"
-                        name="defaultInterestRate"
-                        value={formData.defaultInterestRate || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Min Term (months) *
-                      </label>
-                      <input
-                        type="number"
-                        name="minTermMonths"
-                        value={formData.minTermMonths || ''}
-                        onChange={handleInputChange}
-                        min="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Max Term (months) *
-                      </label>
-                      <input
-                        type="number"
-                        name="maxTermMonths"
-                        value={formData.maxTermMonths || ''}
-                        onChange={handleInputChange}
-                        min="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Default Term (months)
-                      </label>
-                      <input
-                        type="number"
-                        name="defaultTermMonths"
-                        value={formData.defaultTermMonths || ''}
-                        onChange={handleInputChange}
-                        min="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Repayment Frequency
-                      </label>
-                      <select
-                        name="repaymentFrequency"
-                        value={formData.repaymentFrequency || ''}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      >
-                        {REPAYMENT_FREQUENCIES.map(freq => (
-                          <option key={freq.value} value={freq.value}>
-                            {freq.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Processing Fee
-                      </label>
-                      <input
-                        type="number"
-                        name="processingFee"
-                        value={formData.processingFee || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Processing Fee (%)
-                      </label>
-                      <input
-                        type="number"
-                        name="processingFeePercentage"
-                        value={formData.processingFeePercentage || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Late Payment Fee
-                      </label>
-                      <input
-                        type="number"
-                        name="latePaymentFee"
-                        value={formData.latePaymentFee || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Eligibility Tab */}
-              {activeTab === 'eligibility' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Minimum Customer Age
-                      </label>
-                      <input
-                        type="number"
-                        name="minCustomerAge"
-                        value={formData.minCustomerAge || ''}
-                        onChange={handleInputChange}
-                        min="18"
-                        max="100"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Maximum Customer Age
-                      </label>
-                      <input
-                        type="number"
-                        name="maxCustomerAge"
-                        value={formData.maxCustomerAge || ''}
-                        onChange={handleInputChange}
-                        min="18"
-                        max="100"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Minimum Credit Score
-                      </label>
-                      <input
-                        type="number"
-                        name="minCreditScore"
-                        value={formData.minCreditScore || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="900"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Minimum Annual Income
-                      </label>
-                      <input
-                        type="number"
-                        name="minAnnualIncome"
-                        value={formData.minAnnualIncome || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="1000"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Min Years in Business (for business loans)
-                      </label>
-                      <input
-                        type="number"
-                        name="minYearsInBusiness"
-                        value={formData.minYearsInBusiness || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Min Business Revenue
-                      </label>
-                      <input
-                        type="number"
-                        name="minBusinessRevenue"
-                        value={formData.minBusinessRevenue || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="1000"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Features Tab */}
-              {activeTab === 'features' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-medium text-gray-900">Product Features</h3>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="prepaymentAllowed"
-                          checked={formData.prepaymentAllowed || false}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Prepayment Allowed</span>
-                      </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="collateralRequired"
-                          checked={formData.collateralRequired || false}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Collateral Required</span>
-                      </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="downPaymentRequired"
-                          checked={formData.downPaymentRequired || false}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Down Payment Required</span>
-                      </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="requiresGuarantor"
-                          checked={formData.requiresGuarantor || false}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Requires Guarantor</span>
-                      </label>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-medium text-gray-900">Application Settings</h3>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="isOnlineApplicationEnabled"
-                          checked={formData.isOnlineApplicationEnabled || false}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">
-                          Online Application Enabled
-                        </span>
-                      </label>
-
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          name="autoApprovalEnabled"
-                          checked={formData.autoApprovalEnabled || false}
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">Auto-Approval Enabled</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Prepayment Penalty (%)
-                      </label>
-                      <input
-                        type="number"
-                        name="prepaymentPenaltyPercentage"
-                        value={formData.prepaymentPenaltyPercentage || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Loan to Value Ratio (%)
-                      </label>
-                      <input
-                        type="number"
-                        name="loanToValueRatio"
-                        value={formData.loanToValueRatio || ''}
-                        onChange={handleInputChange}
-                        min="0"
-                        max="100"
-                        step="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        SLA Days
-                      </label>
-                      <input
-                        type="number"
-                        name="slaDays"
-                        value={formData.slaDays || ''}
-                        onChange={handleInputChange}
-                        min="1"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  {formData.autoApprovalEnabled && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-blue-50 rounded-lg">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Auto-Approval Max Amount
-                        </label>
-                        <input
-                          type="number"
-                          name="autoApprovalMaxAmount"
-                          value={formData.autoApprovalMaxAmount || ''}
-                          onChange={handleInputChange}
-                          min="0"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Auto-Approval Min Credit Score
-                        </label>
-                        <input
-                          type="number"
-                          name="autoApprovalMinCreditScore"
-                          value={formData.autoApprovalMinCreditScore || ''}
-                          onChange={handleInputChange}
-                          min="0"
-                          max="900"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Irish/EU Details Tab */}
-              {activeTab === 'irish' && (
-                <div className="space-y-6">
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                    <div className="flex">
-                      <span className="text-2xl mr-3">🇮🇪</span>
-                      <div>
-                        <h3 className="text-sm font-medium text-green-800">
-                          Irish/EU Banking Details
-                        </h3>
-                        <p className="text-xs text-green-700 mt-1">
-                          Specific fields for Irish and EU regulatory compliance
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Regulatory Body
-                    </label>
-                    <select
-                      name="regulatoryBody"
-                      value={formData.regulatoryBody || ''}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    >
-                      <option value="">Select Regulatory Body</option>
-                      {REGULATORY_BODIES.map(body => (
-                        <option key={body.value} value={body.value}>
-                          {body.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Interest Logic Description
-                    </label>
-                    <textarea
-                      name="interestLogicDescription"
-                      value={formData.interestLogicDescription || ''}
-                      onChange={handleInputChange}
-                      rows={3}
-                      placeholder="e.g., Simple interest, Flat rate calculation, Reducing balance method..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Describe how interest is calculated (reducing balance, flat rate, etc.)
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Principal Structure
-                    </label>
-                    <textarea
-                      name="principalStructure"
-                      value={formData.principalStructure || ''}
-                      onChange={handleInputChange}
-                      rows={3}
-                      placeholder="e.g., Equal monthly installments, Balloon payment at end, Interest-only period..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Describe how principal repayment is structured
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Marketing Description
-                    </label>
-                    <textarea
-                      name="marketingDescription"
-                      value={formData.marketingDescription || ''}
-                      onChange={handleInputChange}
-                      rows={3}
-                      placeholder="Marketing copy for product promotion..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Terms & Conditions
-                    </label>
-                    <textarea
-                      name="termsAndConditions"
-                      value={formData.termsAndConditions || ''}
-                      onChange={handleInputChange}
-                      rows={4}
-                      placeholder="Key terms and conditions for this product..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
+              {formData.autoApprovalEnabled && (
+                <div
+                  className="grid grid-cols-1 gap-5 rounded-2xl p-5 md:grid-cols-2"
+                  style={{ backgroundColor: 'var(--rm-input)' }}
+                >
+                  <TextField
+                    id="autoApprovalMaxAmount"
+                    label="Auto-approval maximum amount"
+                    name="autoApprovalMaxAmount"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={formData.autoApprovalMaxAmount}
+                    onChange={handleInputChange}
+                  />
+                  <TextField
+                    id="autoApprovalMinCreditScore"
+                    label="Auto-approval minimum credit score"
+                    name="autoApprovalMinCreditScore"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="900"
+                    value={formData.autoApprovalMinCreditScore}
+                    onChange={handleInputChange}
+                  />
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Form Actions */}
-          <div className="flex justify-end space-x-4">
-            <Link
-              href="/dashboard/products"
-              className="px-6 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {saving ? (
-                <span className="flex items-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Creating...
-                </span>
-              ) : (
-                'Create Product'
-              )}
-            </button>
-          </div>
-        </form>
-      </main>
+          {activeTab === 'irish' && (
+            <div className="space-y-6">
+              <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--rm-accent-muted)' }}>
+                <h2 className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
+                  Irish and EU banking details
+                </h2>
+                <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                  Fields used for Irish and EU regulatory disclosure on this product.
+                </p>
+              </div>
+
+              <SelectField
+                id="regulatoryBody"
+                label="Regulatory body"
+                name="regulatoryBody"
+                value={formData.regulatoryBody}
+                onChange={handleInputChange}
+                options={[{ value: '', label: 'Not set' }, ...REGULATORY_BODIES]}
+              />
+
+              <TextAreaField
+                id="interestLogicDescription"
+                label="Interest logic"
+                name="interestLogicDescription"
+                value={formData.interestLogicDescription}
+                onChange={handleInputChange}
+                rows={3}
+                placeholder="e.g. reducing balance, flat rate calculation"
+                hint="Describe how interest is calculated"
+              />
+
+              <TextAreaField
+                id="principalStructure"
+                label="Principal structure"
+                name="principalStructure"
+                value={formData.principalStructure}
+                onChange={handleInputChange}
+                rows={3}
+                placeholder="e.g. equal monthly instalments, balloon payment at the end"
+                hint="Describe how principal repayment is structured"
+              />
+
+              <TextAreaField
+                id="marketingDescription"
+                label="Marketing description"
+                name="marketingDescription"
+                value={formData.marketingDescription}
+                onChange={handleInputChange}
+                rows={3}
+                placeholder="Marketing copy for product promotion"
+              />
+
+              <TextAreaField
+                id="termsAndConditions"
+                label="Terms and conditions"
+                name="termsAndConditions"
+                value={formData.termsAndConditions}
+                onChange={handleInputChange}
+                rows={4}
+                placeholder="Key terms and conditions for this product"
+              />
+            </div>
+          )}
+        </section>
+
+        {/* ══ Actions ══ */}
+        <div className="flex flex-wrap justify-end gap-3">
+          <Link
+            href="/dashboard/products"
+            className="rounded-full px-5 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text-secondary)' }}
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: 'var(--rm-accent)' }}
+          >
+            {saving ? 'Creating…' : 'Create product'}
+          </button>
+        </div>
+      </form>
     </div>
+  );
+}
+
+// ============================================================================
+// Form controls — every one pairs a visible <label htmlFor> with its control
+// and wires errors through aria-describedby / aria-invalid.
+// ============================================================================
+
+function describedBy(id: string, error?: string, hint?: string): string | undefined {
+  if (error) return `${id}-error`;
+  if (hint) return `${id}-hint`;
+  return undefined;
+}
+
+function TextField({
+  id,
+  label,
+  name,
+  value,
+  onChange,
+  type = 'text',
+  required,
+  error,
+  hint,
+  min,
+  max,
+  step,
+  placeholder,
+  inputMode,
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string | number | undefined;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  type?: string;
+  required?: boolean;
+  error?: string;
+  hint?: string;
+  min?: string | number;
+  max?: string | number;
+  step?: string | number;
+  placeholder?: string;
+  inputMode?: 'numeric' | 'decimal' | 'text';
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>
+        {label}
+        {required && (
+          <span aria-hidden="true" style={{ color: '#b91c1c' }}>
+            {' '}
+            *
+          </span>
+        )}
+      </label>
+      <input
+        id={id}
+        name={name}
+        type={type}
+        value={value ?? ''}
+        onChange={onChange}
+        placeholder={placeholder}
+        min={min}
+        max={max}
+        step={step}
+        inputMode={inputMode}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, error, hint)}
+        className={`w-full rounded-xl px-3.5 py-2.5 text-base ${type === 'number' ? 'tabular-nums' : ''}`}
+        style={{ ...inputStyle, borderColor: error ? 'rgba(239,68,68,0.75)' : 'var(--rm-border)' }}
+      />
+      {error ? (
+        <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function SelectField({
+  id,
+  label,
+  name,
+  value,
+  onChange,
+  options,
+  required,
+  error,
+  hint,
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string | undefined;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  options: { value: string; label: string }[];
+  required?: boolean;
+  error?: string;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>
+        {label}
+        {required && (
+          <span aria-hidden="true" style={{ color: '#b91c1c' }}>
+            {' '}
+            *
+          </span>
+        )}
+      </label>
+      <select
+        id={id}
+        name={name}
+        value={value ?? ''}
+        onChange={onChange}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, error, hint)}
+        className="w-full rounded-xl px-3.5 py-2.5 text-base"
+        style={{ ...inputStyle, borderColor: error ? 'rgba(239,68,68,0.75)' : 'var(--rm-border)' }}
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {error ? (
+        <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function TextAreaField({
+  id,
+  label,
+  name,
+  value,
+  onChange,
+  rows = 3,
+  required,
+  error,
+  hint,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string | undefined;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  rows?: number;
+  required?: boolean;
+  error?: string;
+  hint?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--rm-text-secondary)' }}>
+        {label}
+        {required && (
+          <span aria-hidden="true" style={{ color: '#b91c1c' }}>
+            {' '}
+            *
+          </span>
+        )}
+      </label>
+      <textarea
+        id={id}
+        name={name}
+        rows={rows}
+        value={value ?? ''}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        aria-required={required || undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, error, hint)}
+        className="w-full rounded-xl px-3.5 py-2.5 text-base"
+        style={{ ...inputStyle, borderColor: error ? 'rgba(239,68,68,0.75)' : 'var(--rm-border)' }}
+      />
+      {error ? (
+        <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+          {error}
+        </p>
+      ) : hint ? (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CheckboxField({
+  id,
+  name,
+  label,
+  checked,
+  onChange,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  checked: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label htmlFor={id} className="flex cursor-pointer items-center gap-2.5 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
+      <input
+        id={id}
+        name={name}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="h-4 w-4"
+        style={{ accentColor: 'var(--rm-accent)' }}
+      />
+      {label}
+    </label>
   );
 }

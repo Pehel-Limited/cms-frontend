@@ -55,7 +55,15 @@ export interface Citation {
 }
 
 export interface KnowledgeSearchResponse {
+  /** ANSWERED | NOT_FOUND | INSUFFICIENT_EVIDENCE | FAILED */
   answerStatus: string;
+  /** Grounded answer prose; only present when answerStatus is ANSWERED. */
+  answer?: string | null;
+  answerModel?: string | null;
+  /** How many retrieved excerpts the answer was allowed to use. */
+  sourcesUsed?: number;
+  latencyMs?: number | null;
+  errorMessage?: string | null;
   results: Citation[];
 }
 

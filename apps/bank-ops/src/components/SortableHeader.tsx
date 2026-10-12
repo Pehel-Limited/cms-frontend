@@ -32,23 +32,28 @@ export function SortableHeader({
 
   return (
     <th
-      className={`px-6 py-3 ${textAlign} text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none transition-colors ${className}`}
+      className={`px-5 py-3.5 ${textAlign} text-sm font-medium cursor-pointer select-none transition-opacity hover:opacity-80 ${className}`}
+      style={{ color: 'var(--rm-text-muted)' }}
       onClick={() => onSort(field)}
     >
       <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
         <span>{label}</span>
         <span className="flex flex-col">
           <svg
-            className={`w-3 h-3 -mb-0.5 ${isActive && currentSort.direction === 'asc' ? 'text-blue-600' : 'text-gray-300'}`}
+            className={`w-3 h-3 -mb-0.5 ${isActive && currentSort.direction === 'asc' ? '' : 'opacity-40'}`}
+            style={{ color: isActive && currentSort.direction === 'asc' ? 'var(--rm-accent)' : 'var(--rm-text-muted)' }}
             viewBox="0 0 10 6"
             fill="currentColor"
+            aria-hidden="true"
           >
             <path d="M5 0L10 6H0L5 0Z" />
           </svg>
           <svg
-            className={`w-3 h-3 -mt-0.5 ${isActive && currentSort.direction === 'desc' ? 'text-blue-600' : 'text-gray-300'}`}
+            className={`w-3 h-3 -mt-0.5 ${isActive && currentSort.direction === 'desc' ? '' : 'opacity-40'}`}
+            style={{ color: isActive && currentSort.direction === 'desc' ? 'var(--rm-accent)' : 'var(--rm-text-muted)' }}
             viewBox="0 0 10 6"
             fill="currentColor"
+            aria-hidden="true"
           >
             <path d="M5 6L0 0H10L5 6Z" />
           </svg>

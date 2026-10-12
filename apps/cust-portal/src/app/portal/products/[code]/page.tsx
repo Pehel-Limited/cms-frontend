@@ -9,12 +9,13 @@ import {
   EligibilityCheck,
   PRODUCT_TYPE_LABELS,
 } from '@/services/api/product-service';
+import { quoteService, Quote } from '@/services/api/quote-service';
 import { formatCurrency } from '@/lib/format';
 
-/* ── SVG icon map ──────────────────────────────────────────── */
+/* ── SVG icon map (decorative — the container is aria-hidden) ── */
 const PRODUCT_SVG: Record<string, React.ReactNode> = {
   PERSONAL_LOAN: (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -24,7 +25,7 @@ const PRODUCT_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   MORTGAGE: (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -34,7 +35,7 @@ const PRODUCT_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   HOME_LOAN: (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -44,7 +45,7 @@ const PRODUCT_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   AUTO_LOAN: (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -54,7 +55,7 @@ const PRODUCT_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   BUSINESS_LOAN: (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -64,7 +65,7 @@ const PRODUCT_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   DEFAULT: (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -77,7 +78,7 @@ const PRODUCT_SVG: Record<string, React.ReactNode> = {
 
 const INFO_SVG: Record<string, React.ReactNode> = {
   amount: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -87,7 +88,7 @@ const INFO_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   rate: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -97,7 +98,7 @@ const INFO_SVG: Record<string, React.ReactNode> = {
     </svg>
   ),
   term: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -119,6 +120,7 @@ export default function ProductDetailPage() {
 
   const [eligibility, setEligibility] = useState<EligibilityCheck | null>(null);
   const [checkingEligibility, setCheckingEligibility] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
 
   useEffect(() => {
     loadProduct();
@@ -140,15 +142,14 @@ export default function ProductDetailPage() {
   const handleEligibilityCheck = async () => {
     try {
       setCheckingEligibility(true);
+      setEligibilityError(null);
       const result = await productService.checkEligibility(code);
       setEligibility(result);
     } catch {
-      setEligibility({
-        status: 'NEEDS_REVIEW',
-        summary: 'Could not complete eligibility check. You can still start an application.',
-        checks: [],
-        canApply: true,
-      });
+      // A check that never ran has no outcome. Claiming NEEDS_REVIEW here would
+      // read to the customer as a soft pass on criteria we never evaluated.
+      setEligibility(null);
+      setEligibilityError('We could not run the eligibility check just now.');
     } finally {
       setCheckingEligibility(false);
     }
@@ -160,20 +161,17 @@ export default function ProductDetailPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="rounded-2xl bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-8 animate-pulse">
-          <div className="h-5 bg-white/20 rounded-xl w-24 mb-4" />
-          <div className="h-7 bg-white/20 rounded-xl w-56" />
-          <div className="h-4 bg-white/10 rounded-xl w-80 mt-2" />
+        <div className="mesh-hero rounded-3xl p-6 sm:p-8">
+          <div className="skeleton h-4 w-24 bg-white/20" />
+          <div className="skeleton mt-4 h-8 w-56 bg-white/20" />
+          <div className="skeleton mt-2 h-4 w-80 bg-white/10" />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {[1, 2, 3].map(i => (
-            <div
-              key={i}
-              className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4 animate-pulse"
-            >
-              <div className="h-5 bg-slate-200/70 rounded-xl w-32" />
-              <div className="h-4 bg-slate-100 rounded-xl w-full" />
-              <div className="h-4 bg-slate-100 rounded-xl w-3/4" />
+            <div key={i} className="card space-y-4">
+              <div className="skeleton h-5 w-32" />
+              <div className="skeleton h-4 w-full" />
+              <div className="skeleton h-4 w-3/4" />
             </div>
           ))}
         </div>
@@ -184,30 +182,37 @@ export default function ProductDetailPage() {
   // ─── Error / Not Found ────────────────────────────
   if (error || !product) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center">
-        <div className="mx-auto w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-          <svg
-            className="w-8 h-8 text-slate-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 2a10 10 0 110 20 10 10 0 010-20z"
-            />
-          </svg>
+      <div className="mx-auto max-w-2xl py-10">
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 2a10 10 0 110 20 10 10 0 010-20z"
+              />
+            </svg>
+          </div>
+          <h1 className="empty-state-title">Product not found</h1>
+          <p className="empty-state-text">
+            {error || 'The requested product does not exist.'}
+          </p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            <button onClick={loadProduct} className="btn btn-secondary btn-sm">
+              Try again
+            </button>
+            <Link href="/portal/products" className="btn btn-primary btn-sm">
+              Back to products
+            </Link>
+          </div>
         </div>
-        <h2 className="text-lg font-semibold text-slate-900 mb-1">Product Not Found</h2>
-        <p className="text-slate-500 mb-4">{error || 'The requested product does not exist.'}</p>
-        <Link
-          href="/portal/products"
-          className="text-[#7f2b7b] hover:underline text-sm font-medium"
-        >
-          ← Back to Products
-        </Link>
       </div>
     );
   }
@@ -218,64 +223,86 @@ export default function ProductDetailPage() {
   return (
     <div className="space-y-6">
       {/* Hero Header */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7f2b7b] via-[#6b2568] to-[#4a1747] p-6 sm:p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-white/5 -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/4 w-40 h-40 rounded-full bg-white/5 translate-y-1/2" />
+      <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 text-white shadow-float sm:p-8">
+        <div
+          className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-3xl"
+          aria-hidden="true"
+        />
 
-        <div className="relative">
+        <div className="relative z-10">
           {/* Breadcrumb */}
-          <nav className="flex items-center gap-2 text-sm text-white/60 mb-4">
-            <Link href="/portal/products" className="hover:text-white/90 transition-colors">
+          <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-2 text-sm text-white/70">
+            <Link href="/portal/products" className="transition-colors hover:text-white">
               Products
             </Link>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
-            <span className="text-white/90">{product.productName}</span>
+            <span className="text-white" aria-current="page">
+              {product.productName}
+            </span>
           </nav>
 
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center text-white">
+              <div
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur"
+                aria-hidden="true"
+              >
                 {svgIcon}
               </div>
-              <div>
-                <div className="flex items-center gap-3 mb-1">
-                  <h1 className="text-2xl font-bold text-white">{product.productName}</h1>
+              <div className="min-w-0">
+                <div className="mb-1 flex flex-wrap items-center gap-3">
+                  <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">
+                    {product.productName}
+                  </h1>
                   {product.isFeatured && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-400/20 text-amber-200 text-xs font-medium rounded-full border border-amber-400/20">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/30 bg-amber-400/20 px-2.5 py-1 text-sm font-medium text-amber-100">
                       Featured
                     </span>
                   )}
                 </div>
-                <p className="text-white/60">
-                  {typeLabel} • {product.productCategory || 'General'}
+                <p className="mt-1.5 text-sm text-white/70">
+                  {typeLabel}
+                  {product.productCategory ? ` · ${product.productCategory}` : ''}
                 </p>
                 {product.shortDescription && (
-                  <p className="text-white/70 mt-2 max-w-xl">{product.shortDescription}</p>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-white/80">
+                    {product.shortDescription}
+                  </p>
+                )}
+                {/* Only asserted when the product actually carries an SLA */}
+                {product.slaDays != null && (
+                  <p className="mt-3 text-sm text-white/70">
+                    Decision target: {product.slaDays} business day
+                    {product.slaDays === 1 ? '' : 's'}
+                  </p>
                 )}
               </div>
             </div>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col gap-2 md:items-end shrink-0">
+            <div className="flex shrink-0 flex-col gap-2 md:items-end">
               <button
                 onClick={() =>
                   router.push(`/portal/applications/new?product=${product.productCode}`)
                 }
-                className="px-6 py-3 bg-white text-[#7f2b7b] rounded-xl font-semibold hover:bg-white/90 transition-colors text-center shadow-lg"
+                className="btn bg-white px-6 py-3 text-base text-[#7f2b7b] shadow-lg hover:bg-white/90"
               >
-                Start Application
+                Start application
               </button>
               <button
                 onClick={handleEligibilityCheck}
                 disabled={checkingEligibility}
-                className="px-6 py-2 border border-white/30 text-white rounded-xl text-sm font-medium hover:bg-white/10 transition-colors disabled:opacity-50 backdrop-blur"
+                className="btn border border-white/30 bg-white/10 px-6 py-2 text-white backdrop-blur hover:bg-white/20"
               >
-                {checkingEligibility ? 'Checking...' : 'Check My Eligibility'}
+                {checkingEligibility ? 'Checking…' : 'Check eligibility'}
               </button>
             </div>
           </div>
@@ -284,122 +311,143 @@ export default function ProductDetailPage() {
 
       {/* Eligibility Result */}
       {eligibility && <EligibilityResult eligibility={eligibility} />}
+      {eligibilityError && (
+        <EligibilityUnavailable
+          message={eligibilityError}
+          retrying={checkingEligibility}
+          onRetry={handleEligibilityCheck}
+        />
+      )}
 
       {/* Key Details Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <InfoCard title="Loan Amount" icon={INFO_SVG.amount}>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <InfoCard title="Loan amount" icon={INFO_SVG.amount}>
           <InfoRow label="Minimum" value={formatCurrency(product.minLoanAmount)} />
           <InfoRow label="Maximum" value={formatCurrency(product.maxLoanAmount)} />
-          {product.defaultLoanAmount && (
+          {product.defaultLoanAmount != null && (
             <InfoRow label="Typical" value={formatCurrency(product.defaultLoanAmount)} />
           )}
         </InfoCard>
 
-        <InfoCard title="Interest Rate" icon={INFO_SVG.rate}>
+        <InfoCard title="Interest rate" icon={INFO_SVG.rate}>
           <InfoRow label="Type" value={product.interestType || '—'} />
           <InfoRow label="From" value={formatRate(product.minInterestRate)} />
           <InfoRow label="To" value={formatRate(product.maxInterestRate)} />
-          {product.defaultInterestRate && (
+          {product.defaultInterestRate != null && (
             <InfoRow label="Typical" value={formatRate(product.defaultInterestRate)} />
           )}
         </InfoCard>
 
-        <InfoCard title="Term & Repayment" icon={INFO_SVG.term}>
-          <InfoRow label="Min Term" value={`${product.minTermMonths} months`} />
-          <InfoRow label="Max Term" value={`${product.maxTermMonths} months`} />
-          {product.defaultTermMonths && (
+        <InfoCard title="Term and repayment" icon={INFO_SVG.term}>
+          <InfoRow label="Minimum term" value={`${product.minTermMonths} months`} />
+          <InfoRow label="Maximum term" value={`${product.maxTermMonths} months`} />
+          {product.defaultTermMonths != null && (
             <InfoRow label="Typical" value={`${product.defaultTermMonths} months`} />
           )}
           <InfoRow label="Frequency" value={product.repaymentFrequency || 'Monthly'} />
         </InfoCard>
       </div>
 
+      {/* Indicative repayment — closed-form arithmetic over the product's own
+          published figures, with its assumptions and validity printed beside it
+          so it can never be mistaken for an offer. */}
+      <RepaymentEstimate product={product} />
+
       {/* Fees & Features */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Fees</h3>
-          <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Fees</h2>
+          </div>
+          <div className="space-y-3 p-5">
             {product.processingFee != null && (
-              <InfoRow label="Processing Fee" value={formatCurrency(product.processingFee)} />
+              <InfoRow label="Processing fee" value={formatCurrency(product.processingFee)} />
             )}
             {product.processingFeePercentage != null && (
-              <InfoRow label="Processing Fee %" value={`${product.processingFeePercentage}%`} />
+              <InfoRow label="Processing fee percentage" value={`${product.processingFeePercentage}%`} />
             )}
             {product.latePaymentFee != null && (
-              <InfoRow label="Late Payment Fee" value={formatCurrency(product.latePaymentFee)} />
+              <InfoRow label="Late payment fee" value={formatCurrency(product.latePaymentFee)} />
             )}
             {product.prepaymentPenaltyPercentage != null && (
               <InfoRow
-                label="Early Repayment Penalty"
+                label="Early repayment penalty"
                 value={`${product.prepaymentPenaltyPercentage}%`}
               />
             )}
-            {!product.processingFee &&
-              !product.processingFeePercentage &&
-              !product.latePaymentFee && (
-                <p className="text-sm text-slate-500">No fees specified</p>
+            {product.processingFee == null &&
+              product.processingFeePercentage == null &&
+              product.latePaymentFee == null &&
+              product.prepaymentPenaltyPercentage == null && (
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  No fees are published for this product.
+                </p>
               )}
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Requirements</h3>
-          <div className="space-y-3">
-            <FeatureRow label="Collateral Required" value={product.collateralRequired} />
-            {product.collateralRequired && product.loanToValueRatio && (
-              <InfoRow label="Loan-to-Value Ratio" value={`${product.loanToValueRatio}%`} />
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Requirements</h2>
+          </div>
+          <div className="space-y-3 p-5">
+            <FeatureRow label="Collateral required" value={product.collateralRequired} />
+            {product.collateralRequired && product.loanToValueRatio != null && (
+              <InfoRow label="Loan-to-value ratio" value={`${product.loanToValueRatio}%`} />
             )}
             {product.collateralTypes && product.collateralTypes.length > 0 && (
-              <InfoRow label="Accepted Collateral" value={product.collateralTypes.join(', ')} />
+              <InfoRow label="Accepted collateral" value={product.collateralTypes.join(', ')} />
             )}
-            <FeatureRow label="Down Payment Required" value={product.downPaymentRequired} />
-            {product.downPaymentRequired && product.minDownPaymentPercentage && (
-              <InfoRow label="Min Down Payment" value={`${product.minDownPaymentPercentage}%`} />
+            <FeatureRow label="Down payment required" value={product.downPaymentRequired} />
+            {product.downPaymentRequired && product.minDownPaymentPercentage != null && (
+              <InfoRow label="Minimum down payment" value={`${product.minDownPaymentPercentage}%`} />
             )}
-            <FeatureRow label="Guarantor Required" value={product.requiresGuarantor} />
-            {product.requiresGuarantor && product.minGuarantors && (
-              <InfoRow label="Min Guarantors" value={`${product.minGuarantors}`} />
+            <FeatureRow label="Guarantor required" value={product.requiresGuarantor} />
+            {product.requiresGuarantor && product.minGuarantors != null && (
+              <InfoRow label="Minimum guarantors" value={`${product.minGuarantors}`} />
             )}
-            <FeatureRow label="Early Repayment Allowed" value={product.prepaymentAllowed} />
+            <FeatureRow label="Early repayment allowed" value={product.prepaymentAllowed} />
           </div>
         </div>
       </div>
 
       {/* Eligibility Criteria */}
       {hasEligibilityCriteria(product) && (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Eligibility Criteria</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Eligibility criteria</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
             {product.eligibleCustomerTypes && product.eligibleCustomerTypes.length > 0 && (
               <CriterionBox
-                label="Customer Type"
+                label="Customer type"
                 value={product.eligibleCustomerTypes.join(', ')}
               />
             )}
-            {product.minCustomerAge && (
-              <CriterionBox label="Minimum Age" value={`${product.minCustomerAge} years`} />
+            {product.minCustomerAge != null && (
+              <CriterionBox label="Minimum age" value={`${product.minCustomerAge} years`} />
             )}
-            {product.maxCustomerAge && (
-              <CriterionBox label="Maximum Age" value={`${product.maxCustomerAge} years`} />
+            {product.maxCustomerAge != null && (
+              <CriterionBox label="Maximum age" value={`${product.maxCustomerAge} years`} />
             )}
-            {product.minCreditScore && (
-              <CriterionBox label="Min Credit Score" value={`${product.minCreditScore}`} />
+            {product.minCreditScore != null && (
+              <CriterionBox label="Minimum credit score" value={`${product.minCreditScore}`} />
             )}
-            {product.minAnnualIncome && (
+            {product.minAnnualIncome != null && (
               <CriterionBox
-                label="Min Annual Income"
+                label="Minimum annual income"
                 value={formatCurrency(product.minAnnualIncome)}
               />
             )}
-            {product.minYearsInBusiness && (
+            {product.minYearsInBusiness != null && (
               <CriterionBox
-                label="Min Years in Business"
+                label="Minimum years in business"
                 value={`${product.minYearsInBusiness} years`}
               />
             )}
-            {product.minBusinessRevenue && (
+            {product.minBusinessRevenue != null && (
               <CriterionBox
-                label="Min Business Revenue"
+                label="Minimum business revenue"
                 value={formatCurrency(product.minBusinessRevenue)}
               />
             )}
@@ -409,54 +457,133 @@ export default function ProductDetailPage() {
 
       {/* Detailed Description */}
       {product.detailedDescription && (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-3">About This Product</h3>
-          <p className="text-slate-600 whitespace-pre-line">{product.detailedDescription}</p>
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">About this product</h2>
+          </div>
+          <p className="whitespace-pre-line p-5 text-base leading-7" style={{ color: 'var(--text-secondary)' }}>
+            {product.detailedDescription}
+          </p>
         </div>
       )}
 
       {/* Terms & Conditions */}
       {product.termsAndConditions && (
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-3">Terms & Conditions</h3>
-          <p className="text-slate-600 text-sm whitespace-pre-line">{product.termsAndConditions}</p>
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Terms and conditions</h2>
+          </div>
+          <div
+            className="max-h-72 overflow-y-auto p-5"
+            role="region"
+            aria-label="Terms and conditions — scrollable"
+            tabIndex={0}
+          >
+            <p className="whitespace-pre-line text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+              {product.termsAndConditions}
+            </p>
+          </div>
         </div>
       )}
-
-      {/* Bottom CTA */}
-      <div className="bg-gradient-to-r from-[#7f2b7b]/5 via-[#a0369b]/5 to-[#7f2b7b]/5 rounded-2xl border border-[#7f2b7b]/10 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div>
-          <h3 className="font-semibold text-slate-900">Ready to apply?</h3>
-          <p className="text-sm text-slate-600">
-            Start your application online. Most applications are reviewed within{' '}
-            {product.slaDays || 5} business days.
-          </p>
-        </div>
-        <button
-          onClick={() => router.push(`/portal/applications/new?product=${product.productCode}`)}
-          className="px-6 py-3 bg-[#7f2b7b] text-white rounded-xl font-semibold hover:bg-[#6b2568] transition-colors whitespace-nowrap shadow-lg"
-        >
-          Start Application
-        </button>
-      </div>
     </div>
   );
 }
 
 // ─── Sub-Components ──────────────────────────────────────────────
 
+/**
+ * What a SKIPPED criterion actually needs from the customer. Criterion names
+ * must match bff-customer's ProductBffController exactly — an unknown name
+ * simply renders no guidance rather than guessing.
+ */
+const MISSING_EVIDENCE: Record<string, { what: string; action?: string; href?: string }> = {
+  'Customer Profile': {
+    what: 'Your login is not linked to a customer record yet.',
+    action: 'Complete your profile',
+    href: '/portal/profile',
+  },
+  'Customer Type': {
+    what: 'Your customer type is not recorded.',
+    action: 'Complete your profile',
+    href: '/portal/profile',
+  },
+  'Age Requirement': {
+    what: 'Your date of birth is not on file.',
+    action: 'Add your date of birth',
+    href: '/portal/profile',
+  },
+  'Minimum Income': {
+    what: 'Your annual income is not on file. A payslip can supply it during the application.',
+    action: 'Add your income',
+    href: '/portal/profile',
+  },
+  'Credit Score': {
+    what: 'No credit score is held against your profile. The bank retrieves this during assessment — there is nothing for you to upload.',
+  },
+  'Years in Business': {
+    what: 'Your business trading history is not on file.',
+    action: 'Add your business details',
+    href: '/portal/company',
+  },
+  'Business Revenue': {
+    what: 'Your annual revenue is not on file.',
+    action: 'Add your business details',
+    href: '/portal/company',
+  },
+};
+
+function EligibilityUnavailable({
+  message,
+  retrying,
+  onRetry,
+}: {
+  message: string;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="alert alert-warning" role="status" aria-live="polite">
+      <svg
+        className="h-5 w-5 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l3 3m-3-3l-3-3m0 0a9 9 0 1118 0 9 9 0 01-18 0z"
+        />
+      </svg>
+      <div className="flex-1">
+        <h2 className="text-base font-semibold">Eligibility check unavailable</h2>
+        <p className="mt-1 text-sm leading-6">{message} No criteria were evaluated, so we cannot tell you whether you meet them.</p>
+        <button
+          onClick={onRetry}
+          disabled={retrying}
+          className="btn mt-3 border border-current px-4 py-2 text-sm font-semibold disabled:opacity-60"
+        >
+          {retrying ? 'Checking…' : 'Try again'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
   const statusConfig = {
     ELIGIBLE: {
-      bg: 'bg-emerald-50 border-emerald-200/60',
-      dot: 'bg-emerald-500',
-      heading: 'text-emerald-800',
+      className: 'alert-success',
+      heading: 'You meet the published criteria',
       icon: (
         <svg
-          className="w-5 h-5 text-emerald-600"
+          className="h-5 w-5 shrink-0"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -468,11 +595,16 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
       ),
     },
     NOT_ELIGIBLE: {
-      bg: 'bg-red-50 border-red-200/60',
-      dot: 'bg-red-500',
-      heading: 'text-red-800',
+      className: 'alert-error',
+      heading: 'Some published criteria are not met',
       icon: (
-        <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg
+          className="h-5 w-5 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -483,15 +615,15 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
       ),
     },
     NEEDS_REVIEW: {
-      bg: 'bg-amber-50 border-amber-200/60',
-      dot: 'bg-amber-500',
-      heading: 'text-amber-800',
+      className: 'alert-warning',
+      heading: 'Some criteria could not be checked',
       icon: (
         <svg
-          className="w-5 h-5 text-amber-600"
+          className="h-5 w-5 shrink-0"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -509,20 +641,22 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
   const checkIcons: Record<string, React.ReactNode> = {
     PASS: (
       <svg
-        className="w-4 h-4 text-emerald-600 shrink-0"
+        className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
+        aria-hidden="true"
       >
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
       </svg>
     ),
     FAIL: (
       <svg
-        className="w-4 h-4 text-red-500 shrink-0"
+        className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
+        aria-hidden="true"
       >
         <path
           strokeLinecap="round"
@@ -534,10 +668,12 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
     ),
     SKIPPED: (
       <svg
-        className="w-4 h-4 text-slate-400 shrink-0"
+        className="h-4 w-4 shrink-0"
+        style={{ color: 'var(--text-muted)' }}
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
+        aria-hidden="true"
       >
         <path
           strokeLinecap="round"
@@ -549,38 +685,313 @@ function EligibilityResult({ eligibility }: { eligibility: EligibilityCheck }) {
     ),
   };
 
+  const RESULT_LABELS: Record<string, string> = {
+    PASS: 'Met',
+    FAIL: 'Not met',
+    SKIPPED: 'Missing evidence',
+  };
+
   return (
-    <div className={`rounded-2xl border p-6 ${cfg.bg}`}>
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5">{cfg.icon}</div>
-        <div className="flex-1">
-          <h3 className={`font-semibold ${cfg.heading}`}>
-            {eligibility.status === 'ELIGIBLE' && 'You are eligible!'}
-            {eligibility.status === 'NOT_ELIGIBLE' && 'You may not be eligible'}
-            {eligibility.status === 'NEEDS_REVIEW' && 'Eligibility under review'}
-          </h3>
-          <p className="text-sm text-slate-700 mt-1">{eligibility.summary}</p>
+    <div className={`alert ${cfg.className}`} role="status" aria-live="polite">
+      {cfg.icon}
+      <div className="flex-1">
+        <h2 className="text-base font-semibold">{cfg.heading}</h2>
+        <p className="mt-1 text-sm leading-6">{eligibility.summary}</p>
 
-          {eligibility.checks.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {eligibility.checks.map((check, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm">
-                  <span className="mt-0.5">{checkIcons[check.result] || checkIcons.SKIPPED}</span>
-                  <div>
-                    <span className="font-medium text-slate-900">{check.criterion}: </span>
-                    <span className="text-slate-600">{check.detail}</span>
+        {eligibility.checks.length > 0 && (
+          <ul className="mt-4 space-y-3">
+            {eligibility.checks.map((check, i) => {
+              const missing =
+                check.result === 'SKIPPED' ? MISSING_EVIDENCE[check.criterion] : undefined;
+              return (
+                <li key={i} className="text-sm">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5">{checkIcons[check.result] || checkIcons.SKIPPED}</span>
+                    <span>
+                      <span className="font-medium">{check.criterion}: </span>
+                      {check.detail}
+                      <span className="ml-1.5 font-medium">
+                        ({RESULT_LABELS[check.result] || check.result})
+                      </span>
+                    </span>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  {missing && (
+                    <div className="mt-1 pl-6">
+                      <p className="text-sm opacity-80">{missing.what}</p>
+                      {missing.href && missing.action && (
+                        <Link
+                          href={missing.href}
+                          className="mt-1 inline-block text-sm font-semibold underline underline-offset-4"
+                        >
+                          {missing.action}
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-          {eligibility.canApply && eligibility.status !== 'ELIGIBLE' && (
-            <p className="text-xs text-slate-500 mt-3 italic">
-              You can still start a draft application — it will be reviewed by our team.
+        {eligibility.canApply && eligibility.status !== 'ELIGIBLE' && (
+          <p className="mt-3 text-sm italic opacity-80">
+            You can still start a draft application — it will be reviewed by our team.
+          </p>
+        )}
+
+        <p className="mt-4 text-sm opacity-80">
+          This is a pre-check against the criteria the bank publishes for this product. It is not a
+          lending decision, a credit assessment, or a guarantee that an offer will be made.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const fmt2 = (n: number) =>
+  new Intl.NumberFormat('en-IE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+  }).format(n);
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Indicative repayment, issued by the bank.
+ *
+ * The customer moves the inputs; the figures come back as a stored quote snapshot the
+ * bank can reproduce, labelled illustrative, with the rate that was applied and where
+ * it came from. If the quote service is unreachable this says so and offers a retry —
+ * it never falls back to arithmetic done in the browser, because a number the bank
+ * cannot reproduce is not a quote.
+ */
+function RepaymentEstimate({ product }: { product: LoanProduct }) {
+  const [amountText, setAmountText] = useState(
+    String(product.defaultLoanAmount ?? product.minLoanAmount)
+  );
+  const [termText, setTermText] = useState(
+    String(product.defaultTermMonths ?? product.minTermMonths)
+  );
+
+  const amount = Number(amountText);
+  const termMonths = Number(termText);
+  const amountValid =
+    Number.isFinite(amount) && amount >= product.minLoanAmount && amount <= product.maxLoanAmount;
+  const termValid =
+    Number.isInteger(termMonths) &&
+    termMonths >= product.minTermMonths &&
+    termMonths <= product.maxTermMonths;
+
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!amountValid || !termValid) {
+      setQuote(null);
+      setQuoteError(null);
+      return;
+    }
+
+    // Debounced, and superseded responses are discarded so a slow first request
+    // cannot overwrite the quote the customer is looking at.
+    let cancelled = false;
+    setQuoting(true);
+    setQuoteError(null);
+    const handle = window.setTimeout(() => {
+      quoteService
+        .issue({ productCode: product.productCode, requestedAmount: amount, termMonths })
+        .then(issued => {
+          if (!cancelled) setQuote(issued);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setQuote(null);
+            setQuoteError('We could not get a quote for those figures.');
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setQuoting(false);
+        });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [amountValid, termValid, amount, termMonths, product.productCode]);
+
+  const retryQuote = () => {
+    if (!amountValid || !termValid) return;
+    setQuoting(true);
+    setQuoteError(null);
+    quoteService
+      .issue({ productCode: product.productCode, requestedAmount: amount, termMonths })
+      .then(setQuote)
+      .catch(() => setQuoteError('We could not get a quote for those figures.'))
+      .finally(() => setQuoting(false));
+  };
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">Indicative repayment</h2>
+        <span className="chip">Not an offer</span>
+      </div>
+      <div className="space-y-5 p-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="field-label" htmlFor="estimate-amount">
+              Amount you want to borrow
+            </label>
+            <input
+              id="estimate-amount"
+              type="number"
+              className={`input ${amountValid ? '' : 'input-error'}`}
+              min={product.minLoanAmount}
+              max={product.maxLoanAmount}
+              step={500}
+              value={amountText}
+              onChange={event => setAmountText(event.target.value)}
+              onBlur={() =>
+                setAmountText(
+                  String(
+                    clamp(
+                      Number.isFinite(amount) ? amount : product.minLoanAmount,
+                      product.minLoanAmount,
+                      product.maxLoanAmount
+                    )
+                  )
+                )
+              }
+            />
+            <p className="field-hint">
+              This product lends between {formatCurrency(product.minLoanAmount)} and{' '}
+              {formatCurrency(product.maxLoanAmount)}.
             </p>
-          )}
+          </div>
+          <div>
+            <label className="field-label" htmlFor="estimate-term">
+              Term in months
+            </label>
+            <input
+              id="estimate-term"
+              type="number"
+              className={`input ${termValid ? '' : 'input-error'}`}
+              min={product.minTermMonths}
+              max={product.maxTermMonths}
+              step={1}
+              value={termText}
+              onChange={event => setTermText(event.target.value)}
+              onBlur={() =>
+                setTermText(
+                  String(
+                    Math.round(
+                      clamp(
+                        Number.isFinite(termMonths) ? termMonths : product.minTermMonths,
+                        product.minTermMonths,
+                        product.maxTermMonths
+                      )
+                    )
+                  )
+                )
+              }
+            />
+            <p className="field-hint">
+              Between {product.minTermMonths} and {product.maxTermMonths} months.
+            </p>
+          </div>
         </div>
+
+        {quote ? (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="stat-tile">
+                <p className="stat-label">Monthly payment</p>
+                <p className="stat-value">{fmt2(quote.monthlyRepayment)}</p>
+              </div>
+              <div className="stat-tile">
+                <p className="stat-label">Total cost of credit</p>
+                <p className="stat-value">{fmt2(quote.costOfCredit)}</p>
+              </div>
+              <div className="stat-tile">
+                <p className="stat-label">Total repayable</p>
+                <p className="stat-value">{fmt2(quote.totalRepayable)}</p>
+              </div>
+            </div>
+
+            <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>Interest rate</dt>
+                <dd className="font-medium tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.calculatedRatePct}% {quote.rateType ? `(${quote.rateType.toLowerCase()})` : ''}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>Rate source</dt>
+                <dd className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.rateProvenance === 'PRODUCT_RATE_PLAN'
+                    ? 'a published rate plan'
+                    : 'the product’s standard rate'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>APRC</dt>
+                <dd className="font-medium tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.aprcAvailable ? `${quote.aprcPct}%` : 'Not published for this product'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt style={{ color: 'var(--text-muted)' }}>Repayments</dt>
+                <dd className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  {quote.repaymentFrequency.toLowerCase()} ·{' '}
+                  {quote.repaymentStructure === 'EQUAL_INSTALMENT'
+                    ? 'equal amount each time'
+                    : 'interest each time, balance repaid at the end'}
+                </dd>
+              </div>
+            </dl>
+
+            <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
+              Quote {quote.quoteId.slice(0, 8)} is illustrative, not an offer. Based on the rate published
+              today, it holds until{' '}
+              {new Date(quote.expiresAt).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+              .
+            </p>
+          </>
+        ) : quoting ? (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }} role="status" aria-live="polite">
+            Getting a quote from the bank…
+          </p>
+        ) : quoteError ? (
+          <div className="alert alert-warning" role="alert">
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{quoteError}</p>
+              <p className="mt-1 text-sm">
+                We only show repayments the bank has calculated, so nothing is estimated here in the
+                meantime.
+              </p>
+              <button
+                onClick={retryQuote}
+                className="btn mt-3 border border-current px-4 py-2 text-sm font-semibold"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Enter an amount and term within this product&apos;s limits to see a quote.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -596,35 +1007,47 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 p-6">
-      <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#7f2b7b]/10 to-[#a0369b]/10 flex items-center justify-center text-[#7f2b7b]">
+    <div className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">{title}</h2>
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+          style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+          aria-hidden="true"
+        >
           {icon}
-        </div>
-        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+        </span>
       </div>
-      <div className="space-y-3">{children}</div>
+      <div className="space-y-3 p-5">{children}</div>
     </div>
   );
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-sm font-medium text-slate-900">{value}</span>
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+        {label}
+      </span>
+      <span
+        className="text-base font-semibold tabular-nums"
+        style={{ color: 'var(--text-primary)' }}
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
 function FeatureRow({ label, value }: { label: string; value?: boolean }) {
   return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm text-slate-500">{label}</span>
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+        {label}
+      </span>
       <span
-        className={`inline-flex items-center gap-1.5 text-sm font-medium ${value ? 'text-amber-600' : 'text-emerald-600'}`}
+        className={`badge ${value ? 'badge-warning' : 'badge-success'}`}
       >
-        <span className={`w-1.5 h-1.5 rounded-full ${value ? 'bg-amber-500' : 'bg-emerald-500'}`} />
         {value ? 'Yes' : 'No'}
       </span>
     </div>
@@ -633,9 +1056,19 @@ function FeatureRow({ label, value }: { label: string; value?: boolean }) {
 
 function CriterionBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-slate-50/50 rounded-xl p-3">
-      <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
-      <p className="text-sm font-medium text-slate-900 mt-0.5">{value}</p>
+    <div
+      className="rounded-xl p-3.5"
+      style={{ backgroundColor: 'var(--surface-input)' }}
+    >
+      <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </p>
+      <p
+        className="mt-0.5 text-base font-semibold tabular-nums"
+        style={{ color: 'var(--text-primary)' }}
+      >
+        {value}
+      </p>
     </div>
   );
 }

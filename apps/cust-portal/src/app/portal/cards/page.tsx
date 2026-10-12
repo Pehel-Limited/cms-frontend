@@ -1,204 +1,663 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CARDS, getAccount, type PaymentCard } from '@/lib/banking-data';
-import { BankCard } from '@/components/banking/BankCard';
+import {
+  CARDS,
+  TRANSACTIONS,
+  bucketDaily,
+  dailyCardSpend,
+  getAccount,
+  type PaymentCard,
+  type Transaction,
+} from '@/lib/banking-data';
+import { BankCard, DotMatrix } from '@/components/banking/BankCard';
+import Glyph, { glyphFor, GlyphTile } from '@/components/ui/Glyph';
 
-function fmt(n: number) {
-  return new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(n);
+function fmt(n: number, currency = 'EUR') {
+  return new Intl.NumberFormat('en-IE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
 }
 
-const CARD_TRANSACTIONS: Record<string, { merchant: string; glyph: string; amount: number; dir: 'IN' | 'OUT'; date: string; category: string }[]> = {
-  'card-1': [
-    { merchant: 'Amazon.co.uk', glyph: '📦', amount: 58.99, dir: 'OUT', date: '24 May 2025', category: 'Shopping' },
-    { merchant: 'Tesco Stores', glyph: '🛒', amount: 74.31, dir: 'OUT', date: '23 May 2025', category: 'Groceries' },
-    { merchant: 'Uber Technologies', glyph: '🚗', amount: 18.40, dir: 'OUT', date: '23 May 2025', category: 'Transport' },
-    { merchant: 'Pret A Manger', glyph: '☕', amount: 11.83, dir: 'OUT', date: '22 May 2025', category: 'Dining Out' },
-  ],
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+const WINDOW_DAYS = 30;
+
+type ControlKey = 'online' | 'contactless';
+
+const SCHEME_LABEL: Record<PaymentCard['scheme'], string> = {
+  VISA: 'Visa',
+  MASTERCARD: 'Mastercard',
 };
 
-const CARD_CONTROLS = [
-  { id: 'online', label: 'Online payments', desc: 'Allow card to be used for online purchases', enabled: true },
-  { id: 'contactless', label: 'Contactless payments', desc: 'Tap to pay at terminals', enabled: true },
-  { id: 'international', label: 'International use', desc: 'Use card abroad', enabled: false },
-  { id: 'atm', label: 'ATM withdrawals', desc: 'Withdraw cash from ATMs', enabled: true },
+const TYPE_LABEL: Record<PaymentCard['type'], string> = {
+  DEBIT: 'debit card',
+  CREDIT: 'credit card',
+};
+
+/** The three switches the card model actually carries. There is no ATM or
+    international control behind these accounts, so none is offered. */
+const CONTROLS: { key: ControlKey; label: string; desc: string; icon: string }[] = [
+  { key: 'online', label: 'Online payments', desc: 'Use this card for online and in-app purchases', icon: 'globe' },
+  { key: 'contactless', label: 'Contactless payments', desc: 'Tap to pay at terminals without entering your PIN', icon: 'contactless' },
 ];
 
-export default function CardsPage() {
-  const [activeCardIdx, setActiveCardIdx] = useState(0);
-  const [controls, setControls] = useState(Object.fromEntries(CARD_CONTROLS.map(c => [c.id, c.enabled])));
-  const [frozen, setFrozen] = useState(false);
+/* ──────────────────────────────────────────────────────────────────
+ * Data resolution
+ *
+ * Every figure on this page is summed from the card's own transactions over an
+ * explicitly labelled window, so the headline total, the dot matrix and the payment
+ * count can never disagree with each other.
+ * ────────────────────────────────────────────────────────────────── */
 
-  const card = CARDS[activeCardIdx];
-  const account = card ? getAccount(card.linkedAccountId) : null;
-  const txns = CARD_TRANSACTIONS[card?.id] ?? CARD_TRANSACTIONS['card-1'] ?? [];
+type LoadState = 'loading' | 'ready' | 'error';
+
+/** The dot matrix, the headline total and the day count all come out of this one
+    series, so they cannot drift apart. The chart draws three-day buckets of it. */
+function useCardSeries(cardId: string | undefined) {
+  const series = useMemo(() => dailyCardSpend(WINDOW_DAYS, cardId), [cardId]);
+  /* Three-day totals: the panel is a narrow column, and 30 columns of dots in it
+     renders each one too small to compare. */
+  const chartSeries = useMemo(() => bucketDaily(series, 3), [series]);
+  const total = series.reduce((sum, d) => sum + d.total, 0);
+  const activeDays = series.filter(d => d.total > 0).length;
+  const peak = series.reduce((m, d) => Math.max(m, d.total), 0);
+  const from = series.length ? series[0].date : null;
+  const to = series.length ? series[series.length - 1].date : null;
+  const range = from && to ? `${shortDate(from)} – ${shortDate(to)}` : `last ${WINDOW_DAYS} days`;
+  return { series, chartSeries, total, activeDays, peak, range };
+}
+
+interface CardsData {
+  cards: PaymentCard[];
+  transactionsByCard: Record<string, Transaction[]>;
+}
+
+function resolveCards(): CardsData {
+  if (!CARDS.length) throw new Error('No cards returned');
+  const transactionsByCard: Record<string, Transaction[]> = {};
+  CARDS.forEach(c => {
+    transactionsByCard[c.id] = TRANSACTIONS.filter(t => t.cardId === c.id).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  });
+  return { cards: CARDS, transactionsByCard };
+}
+
+function useCardsData() {
+  const [data, setData] = useState<CardsData | null>(null);
+  const [state, setState] = useState<LoadState>('loading');
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setState('loading');
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+      try {
+        setData(resolveCards());
+        setState('ready');
+      } catch {
+        setData(null);
+        setState('error');
+      }
+    }, 220);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [attempt]);
+
+  const retry = useCallback(() => setAttempt(a => a + 1), []);
+  return { data, state, retry };
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+
+function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="glass-body">
+      <div className="empty-state">
+        <div className="empty-state-icon">
+          <Glyph name="alert" className="h-6 w-6" />
+        </div>
+        <p className="empty-state-title">We couldn&apos;t load your cards</p>
+        <p className="empty-state-text">
+          Something went wrong while reading your card data. Your card settings have not been changed.
+        </p>
+        <button type="button" onClick={onRetry} className="btn btn-primary btn-sm mt-4">
+          <Glyph name="subscription" className="h-3.5 w-3.5" />
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MiniPlastic({ card }: { card: PaymentCard }) {
+  return (
+    <span aria-hidden="true" className="mini-plastic" style={{ background: card.gradient }}>
+      <span className="mini-plastic-word">Rayva</span>
+      <span className="mini-plastic-chip" />
+      <span className="mini-plastic-scheme">{card.scheme === 'VISA' ? 'VISA' : 'MC'}</span>
+    </span>
+  );
+}
+
+function ControlSwitch({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      className="relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ backgroundColor: checked ? 'var(--brand)' : 'var(--hairline-strong)' }}
+    >
+      <span
+        aria-hidden="true"
+        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────── */
+
+export default function CardsPage() {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [overrides, setOverrides] = useState<Record<string, Partial<Pick<PaymentCard, 'frozen' | ControlKey>>>>({});
+  const [announcement, setAnnouncement] = useState('');
+  const { data, state, retry } = useCardsData();
+
+  const cards = useMemo(() => {
+    const base = data?.cards ?? [];
+    return base.map(c => ({ ...c, ...overrides[c.id] }));
+  }, [data, overrides]);
+
+  const card = cards[Math.min(activeIdx, Math.max(0, cards.length - 1))];
+  const linkedAccount = card ? getAccount(card.linkedAccountId) : undefined;
+
+  const cardTxns = useMemo(
+    () => (card ? (data?.transactionsByCard[card.id] ?? []).slice(0, 8) : []),
+    [card, data]
+  );
+
+  const { chartSeries, total: cardTotal, activeDays, peak, range } = useCardSeries(card?.id);
+
+  /* The book-wide figure is the same series without the card filter, so it can
+     never disagree with the per-card total above it. */
+  const book = useCardSeries(undefined);
+  const frozenCount = cards.filter(c => c.frozen).length;
+  const activeCount = cards.length - frozenCount;
+
+  const creditLimit = card?.creditLimit ?? 0;
+  const creditUsed = card?.creditUsed ?? 0;
+  const creditPct = creditLimit > 0 ? Math.min(100, Math.round((creditUsed / creditLimit) * 100)) : 0;
+
+  const setControl = useCallback(
+    (cardId: string, key: 'frozen' | ControlKey, value: boolean, announce: string) => {
+      setOverrides(prev => ({ ...prev, [cardId]: { ...prev[cardId], [key]: value } }));
+      setAnnouncement(announce);
+    },
+    []
+  );
+
+  if (state === 'error') {
+    return (
+      <div className="space-y-5">
+        <section className="glass-panel">
+          <div className="glass-head">
+            <h1 className="glass-title">Cards</h1>
+          </div>
+          <LoadError onRetry={retry} />
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Cards</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Manage your debit and credit cards.</p>
-        </div>
-        <button className="inline-flex items-center gap-2 rounded-xl bg-[#7f2b7b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#5e1f5b]">
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Apply for card
-        </button>
-      </div>
+      {/* Screen-reader announcement for card setting changes */}
+      <p className="sr-only" aria-live="polite">{announcement}</p>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
-        {/* Left: card list */}
-        <div className="xl:col-span-2 space-y-4">
-          {/* Card switcher */}
-          <div className="space-y-3">
-            {CARDS.map((c, i) => {
-              const acc = getAccount(c.linkedAccountId);
+      {/* ══ HERO: the plastic, and what it is doing ══ */}
+      <section className="glass-panel relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(38rem 22rem at 8% 0%, var(--brand-soft), transparent 62%), radial-gradient(30rem 20rem at 100% 100%, var(--tile-bg-hover), transparent 60%)',
+          }}
+        />
+        <div className="relative grid gap-8 p-6 sm:p-8 lg:grid-cols-2 lg:items-center">
+          <div className="card-fan overflow-hidden">
+            {cards.map((c, i) => {
+              let d = i - activeIdx;
+              if (d > cards.length / 2) d -= cards.length;
+              if (d < -cards.length / 2) d += cards.length;
+              const featured = d === 0;
               return (
                 <button
                   key={c.id}
-                  onClick={() => setActiveCardIdx(i)}
-                  className="w-full text-left rounded-2xl p-4 transition-all"
+                  type="button"
+                  onClick={() => setActiveIdx(i)}
+                  aria-label={c.label}
+                  aria-pressed={featured}
+                  className="fan-card"
                   style={{
-                    backgroundColor: activeCardIdx === i ? 'rgba(127,43,123,0.08)' : 'var(--surface-card)',
-                    border: `1px solid ${activeCardIdx === i ? '#7f2b7b' : 'var(--surface-border)'}`,
+                    transform: `translateX(calc(var(--fan-step) * ${d})) translateY(${
+                      featured ? 'var(--fan-lift)' : 'var(--fan-drop)'
+                    }) scale(${featured ? 1 : 0.9}) rotate(${d * -2}deg)`,
+                    zIndex: 30 - Math.abs(d) * 10,
+                    opacity: featured ? 1 : Math.abs(d) === 1 ? 0.62 : 0.32,
+                    filter: featured ? 'none' : 'saturate(0.65)',
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="shrink-0 w-14 h-9 rounded-lg overflow-hidden shadow" style={{ background: c.gradient }}>
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="w-5 h-3 rounded border-2 border-white/60" />
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{c.label}</p>
-                      <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>•••• {c.last4}</p>
-                    </div>
-                    {activeCardIdx === i && (
-                      <svg className="h-5 w-5 text-[#7f2b7b] shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                  </div>
-                  {acc && (
-                    <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-                      {acc.name} · Balance: {fmt(acc.balance)}
-                    </p>
-                  )}
+                  <BankCard card={c} />
                 </button>
               );
             })}
           </div>
 
-          {/* Full card render */}
-          {card && (
-            <div className="p-5 rounded-2xl" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-              <div className="mx-auto w-full max-w-[340px]">
-                <BankCard card={card} />
+          <div className="min-w-0">
+            <p
+              className="text-xs font-semibold uppercase tracking-widest"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              {state === 'loading' ? 'Loading cards' : `${cards.length} cards on your profile`}
+            </p>
+            <h1
+              className="serif mt-2 text-[30px] font-medium leading-tight tracking-tight sm:text-[36px]"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {card ? `${card.label}, on your terms.` : 'Your cards.'}
+            </h1>
+            {card && (
+              <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                {SCHEME_LABEL[card.scheme]} {TYPE_LABEL[card.type]} ending {card.last4} · expires {card.expiry}
+                {linkedAccount ? ` · linked to ${linkedAccount.name}` : ''}
+              </p>
+            )}
+
+            <div className="mt-6 space-y-2.5">
+              <div className="stat-row">
+                <span className="action-tile-icon h-9 w-9 rounded-xl">
+                  <Glyph name="current" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="num block text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {state === 'loading' ? '—' : activeCount}
+                  </span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {activeCount === 1 ? 'Card available' : 'Cards available'}
+                  </span>
+                </span>
               </div>
-              <div className="mx-auto mt-4 grid w-full max-w-[340px] grid-cols-3 gap-2">
-                {[
-                  { label: frozen ? 'Unfreeze' : 'Freeze', icon: '❄️', action: () => setFrozen(v => !v), danger: false },
-                  { label: 'PIN', icon: '🔐', action: () => {}, danger: false },
-                  { label: 'Report lost', icon: '🚫', action: () => {}, danger: true },
-                ].map(btn => (
+
+              <div className="stat-row">
+                <span className="action-tile-icon h-9 w-9 rounded-xl">
+                  <Glyph name="chart" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="num block text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {state === 'loading' ? '—' : fmt(book.total)}
+                  </span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Card spending · last {WINDOW_DAYS} days
+                  </span>
+                </span>
+              </div>
+
+              <div className="stat-row">
+                <span className="action-tile-icon h-9 w-9 rounded-xl">
+                  <Glyph name="snowflake" className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="num block text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {state === 'loading' ? '—' : frozenCount}
+                  </span>
+                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {frozenCount === 1 ? 'Card frozen' : 'Cards frozen'}
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ Cards list | controls + spending, then activity ══ */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        {/* Your cards */}
+        <section className="glass-panel flex flex-col xl:col-span-4" aria-label="Your cards">
+          <div className="glass-head">
+            <div>
+              <h2 className="glass-title">Your cards</h2>
+              <p className="glass-sub">Select one to control it.</p>
+            </div>
+            <Link
+              href="/portal/products"
+              className="ring-btn shrink-0 !h-9 !w-9"
+              aria-label="Explore other cards"
+            >
+              <Glyph name="plus" className="h-4 w-4" strokeWidth={2} />
+            </Link>
+          </div>
+
+          {state === 'loading' ? (
+            <div className="px-6 pb-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 py-3">
+                  <div className="skeleton h-11 w-[68px] rounded-lg" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-4 w-1/2" />
+                    <div className="skeleton h-3.5 w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div>
+              {cards.map((c, i) => {
+                const selected = card?.id === c.id;
+                const acc = getAccount(c.linkedAccountId);
+                return (
                   <button
-                    key={btn.label}
-                    onClick={btn.action}
-                    className="flex flex-col items-center gap-1.5 py-3 rounded-xl text-xs font-semibold transition-colors"
-                    style={{
-                      backgroundColor: 'var(--surface-input)',
-                      color: btn.danger ? '#ef4444' : 'var(--text-secondary)',
-                      border: btn.danger ? '1px solid rgba(239,68,68,0.2)' : '1px solid var(--surface-border)',
-                    }}
+                    key={c.id}
+                    type="button"
+                    onClick={() => setActiveIdx(i)}
+                    aria-pressed={selected}
+                    className="glass-row w-full text-left"
+                    style={selected ? { backgroundColor: 'var(--brand-soft)' } : undefined}
                   >
-                    <span className="text-base">{btn.icon}</span>
-                    {btn.label}
+                    <MiniPlastic card={c} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          {c.label}
+                        </span>
+                        {c.frozen && (
+                          <span className="badge badge-warning shrink-0 !py-0.5 !text-xs">Frozen</span>
+                        )}
+                      </span>
+                      <span className="num block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {SCHEME_LABEL[c.scheme]} {TYPE_LABEL[c.type]} · •••• {c.last4}
+                      </span>
+                      {acc && (
+                        <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Linked to {acc.name}
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0" style={{ color: 'var(--text-muted)' }}>
+                      <Glyph name="chevron" className="h-4 w-4 -rotate-90" strokeWidth={2} />
+                    </span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
           )}
-        </div>
 
-        {/* Right: controls + transactions */}
-        <div className="xl:col-span-3 space-y-4">
-          {/* Card controls */}
-          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Card controls</h2>
-            {frozen && (
-              <div className="mb-4 rounded-xl p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 flex items-center gap-2">
-                <span className="text-amber-600 dark:text-amber-400">⚠️</span>
-                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Card is frozen. All transactions are blocked.</p>
+          {card && linkedAccount && (
+            <div className="glass-foot mt-auto">
+              <Link href={`/portal/accounts/${linkedAccount.id}`} className="link-arrow text-xs">
+                {linkedAccount.name} · {fmt(linkedAccount.available, linkedAccount.currency)} available
+                <span data-arrow aria-hidden="true">
+                  →
+                </span>
+              </Link>
+            </div>
+          )}
+        </section>
+
+        <div className="flex flex-col gap-5 xl:col-span-8">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {/* Controls */}
+            <section className="glass-panel" aria-label="Card controls">
+              <div className="glass-head">
+                <div>
+                  <h2 className="glass-title">Card controls</h2>
+                  <p className="glass-sub">
+                    {card ? `${card.label} · •••• ${card.last4}` : 'Choose a card to change its settings.'}
+                  </p>
+                </div>
+              </div>
+
+              {card ? (
+                <div className="pb-2">
+                  {CONTROLS.map(c => {
+                    const enabled = Boolean(card[c.key]);
+                    return (
+                      <div key={c.key} className="glass-row">
+                        <span className="action-tile-icon h-9 w-9 shrink-0 rounded-xl">
+                          <Glyph name={c.icon} className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {c.label}
+                          </span>
+                          <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {card.frozen ? 'Unavailable while the card is frozen' : c.desc}
+                          </span>
+                        </span>
+                        <ControlSwitch
+                          label={c.label}
+                          checked={enabled}
+                          disabled={card.frozen}
+                          onChange={() =>
+                            setControl(card.id, c.key, !enabled, `${c.label} ${!enabled ? 'enabled' : 'disabled'}`)
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+
+                  <div className="glass-row">
+                    <span className="action-tile-icon h-9 w-9 shrink-0 rounded-xl">
+                      <Glyph name="snowflake" className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {card.frozen ? 'Unfreeze card' : 'Freeze card'}
+                      </span>
+                      <span className="block truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        Temporarily block all new payments on this card
+                      </span>
+                    </span>
+                    <ControlSwitch
+                      label="Freeze card"
+                      checked={card.frozen}
+                      disabled={false}
+                      onChange={() =>
+                        setControl(
+                          card.id,
+                          'frozen',
+                          !card.frozen,
+                          card.frozen ? `${card.label} unfrozen.` : `${card.label} frozen. New payments are blocked.`
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="glass-body">
+                  <div className="empty-state !py-8">
+                    <p className="empty-state-title">No card selected</p>
+                    <p className="empty-state-text">When a card is issued it will appear on the left.</p>
+                  </div>
+                </div>
+              )}
+
+              {card?.frozen && (
+                <p className="glass-foot">
+                  This card is frozen. Online and contactless payments stay off until you unfreeze it.
+                </p>
+              )}
+            </section>
+
+            {/* Spending */}
+            <section className="glass-panel" aria-label="Card spending">
+              <div className="glass-head">
+                <div>
+                  <h2 className="glass-title">Card spending</h2>
+                  <p className="glass-sub">{range}</p>
+                </div>
+                {card?.type === 'CREDIT' && typeof card.apr === 'number' && (
+                  <span className="chip num shrink-0">{card.apr}% APR</span>
+                )}
+              </div>
+
+              <div className="glass-body">
+                <p className="num text-[26px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                  {fmt(cardTotal)}
+                </p>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {activeDays
+                    ? `over ${activeDays} active day${activeDays === 1 ? '' : 's'}`
+                    : 'no completed card payments in this window'}
+                </p>
+
+                <div className="mt-5 flex items-end gap-3">
+                  <div className="min-w-0 flex-1">
+                    <DotMatrix
+                      data={chartSeries.map(d => d.total)}
+                      box={{ width: 160, height: 56 }}
+                      stretch
+                      label={`Card spending in three-day totals over ${WINDOW_DAYS} days`}
+                      format={(value, i) => `To ${shortDate(chartSeries[i].date)} · ${fmt(value)}`}
+                    />
+                  </div>
+                  {peak > 0 && (
+                    <div className="flex shrink-0 flex-col items-center gap-1">
+                      <span className="chart-marker">{fmt(peak)}</span>
+                      <span className="marker-leader h-8" aria-hidden="true" />
+                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        peak day
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {card?.type === 'CREDIT' && creditLimit > 0 && (
+                  <div
+                    className="mt-6"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={creditLimit}
+                    aria-valuenow={creditUsed}
+                    aria-label={`Credit used: ${fmt(creditUsed)} of a ${fmt(creditLimit)} limit`}
+                  >
+                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        Credit used
+                      </span>
+                      <span className="num text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {fmt(creditUsed)} of {fmt(creditLimit)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--tile-bg)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${creditPct}%`, backgroundColor: 'var(--brand)' }} />
+                    </div>
+                    <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {creditPct}% used · {fmt(Math.max(0, creditLimit - creditUsed))} available. The bank reports
+                      this balance; it is not derived from the payments above.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <p className="glass-foot">
+                {card?.type === 'CREDIT'
+                  ? 'Only payments made on this card are counted. Transfers and direct debits sit against the account, not the plastic.'
+                  : 'Only completed payments made on this card are counted. Pending and declined rows are in the activity list below.'}
+              </p>
+            </section>
+          </div>
+
+          {/* Activity */}
+          <section className="glass-panel" aria-label="Recent card activity">
+            <div className="glass-head">
+              <div>
+                <h2 className="glass-title">Recent card activity</h2>
+                <p className="glass-sub">
+                  {card ? `Everything posted or pending on •••• ${card.last4}.` : 'Payments made on your cards.'}
+                </p>
+              </div>
+              <Link href="/portal/transactions" className="pill-btn shrink-0 !px-3 !py-1.5 !text-xs">
+                View all
+              </Link>
+            </div>
+
+            {cardTxns.length === 0 ? (
+              <div className="glass-body">
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <Glyph name="current" className="h-6 w-6" />
+                  </div>
+                  <p className="empty-state-title">No activity on this card</p>
+                  <p className="empty-state-text">
+                    Payments made with {card ? `•••• ${card.last4}` : 'this card'} will appear here as soon as they post.
+                  </p>
+                  <Link href="/portal/transactions" className="btn btn-secondary btn-sm mt-4">
+                    Browse all transactions
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {cardTxns.map((t: Transaction) => (
+                  <div key={t.id} className="glass-row">
+                    <GlyphTile name={glyphFor(t.category)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {t.merchant}
+                      </p>
+                      <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {t.category} · {shortDate(t.date)}
+                      </p>
+                    </div>
+                    <span
+                      className="shrink-0 text-xs font-medium"
+                      style={{
+                        color:
+                          t.status === 'PENDING'
+                            ? 'var(--text-muted)'
+                            : t.status === 'DECLINED'
+                              ? 'var(--down)'
+                              : 'var(--text-muted)',
+                      }}
+                    >
+                      {t.status === 'PENDING' ? 'Pending' : t.status === 'DECLINED' ? 'Declined' : 'Completed'}
+                    </span>
+                    <p
+                      className="num w-24 shrink-0 text-right text-sm font-semibold"
+                      style={t.direction === 'IN' ? { color: 'var(--up)' } : { color: 'var(--text-primary)' }}
+                    >
+                      {t.direction === 'IN' ? '+' : '−'}
+                      {fmt(t.amount, t.currency)}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
-            <div className="space-y-3">
-              {CARD_CONTROLS.map(c => (
-                <div key={c.id} className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{c.label}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.desc}</p>
-                  </div>
-                  <button
-                    onClick={() => setControls(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
-                    className={`relative shrink-0 h-6 w-11 rounded-full transition-colors duration-200 ${controls[c.id] && !frozen ? 'bg-[#7f2b7b]' : 'bg-slate-200 dark:bg-white/20'}`}
-                    aria-checked={controls[c.id]}
-                    role="switch"
-                  >
-                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${controls[c.id] && !frozen ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Spending limits */}
-          <div className="rounded-2xl p-5" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Spending limits</h2>
-              <button className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400">Edit limits</button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Daily limit', value: fmt(3000), used: fmt(752.48), pct: 25 },
-                { label: 'Monthly limit', value: fmt(10000), used: fmt(1257.68), pct: 13 },
-              ].map(lim => (
-                <div key={lim.label} className="rounded-xl p-4" style={{ backgroundColor: 'var(--surface-input)' }}>
-                  <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{lim.label}</p>
-                  <p className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{lim.value}</p>
-                  <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--surface-border)' }}>
-                    <div className="h-full rounded-full bg-[#7f2b7b]" style={{ width: `${lim.pct}%` }} />
-                  </div>
-                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>Used: {lim.used} ({lim.pct}%)</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent card transactions */}
-          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--surface-card)', border: '1px solid var(--surface-border)' }}>
-            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-              <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Recent card transactions</h2>
-              <Link href="/portal/transactions" className="text-xs font-semibold text-[#7f2b7b] dark:text-purple-400 hover:underline">View all →</Link>
-            </div>
-            <div>
-              {txns.map((t, i) => (
-                <div key={i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors" style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base" style={{ backgroundColor: 'var(--surface-input)' }}>
-                    {t.glyph}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{t.merchant}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.category} · {t.date}</p>
-                  </div>
-                  <p className="text-sm font-bold shrink-0" style={{ color: 'var(--text-primary)' }}>−{fmt(t.amount)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>

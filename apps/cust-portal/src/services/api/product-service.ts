@@ -138,39 +138,6 @@ export const PRODUCT_TYPE_LABELS: Record<string, string> = {
   MICROFINANCE: 'Microfinance Loan',
 };
 
-export const PRODUCT_TYPE_ICONS: Record<string, string> = {
-  PERSONAL_LOAN: '💰',
-  AUTO_LOAN: '🚗',
-  HOME_LOAN: '🏠',
-  MORTGAGE: '🏦',
-  BUSINESS_LOAN: '💼',
-  BUSINESS_LINE_OF_CREDIT: '📊',
-  WORKING_CAPITAL_LOAN: '🔄',
-  EQUIPMENT_FINANCING: '⚙️',
-  COMMERCIAL_REAL_ESTATE: '🏢',
-  CONSTRUCTION_LOAN: '🏗️',
-  AGRICULTURE_LOAN: '🌾',
-  STUDENT_LOAN: '🎓',
-  CREDIT_CARD: '💳',
-  OVERDRAFT: '📈',
-  BRIDGE_LOAN: '🌉',
-  TERM_LOAN: '📅',
-  REVOLVING_CREDIT: '🔁',
-  PCP: '🚘',
-  HIRE_PURCHASE: '🚙',
-  BNPL: '🛍️',
-  SME_TERM_LOAN: '🏭',
-  BUSINESS_OVERDRAFT: '📈',
-  INVOICE_FINANCE: '🧾',
-  BUSINESS_CREDIT_CARD: '💳',
-  COMMERCIAL_MORTGAGE: '🏢',
-  ASSET_LEASING: '📦',
-  AGRI_LOAN: '🌾',
-  CREDIT_UNION_LOAN: '🤝',
-  GREEN_LOAN: '🌱',
-  MICROFINANCE: '🪙',
-};
-
 // ─── Credit Need → Product Matching ────────────────────────────────
 
 /**
@@ -185,9 +152,9 @@ export const INTENT_TO_PRODUCT_TYPES: Record<string, string[]> = {
   BUSINESS_EQUIPMENT_PURCHASE: ['ASSET_LEASING', 'EQUIPMENT_FINANCING', 'SME_TERM_LOAN'],
   CASH_FLOW_MANAGEMENT: ['BUSINESS_OVERDRAFT', 'INVOICE_FINANCE', 'OVERDRAFT', 'WORKING_CAPITAL_LOAN'],
   COMMERCIAL_PROPERTY_PURCHASE: ['COMMERCIAL_MORTGAGE', 'COMMERCIAL_REAL_ESTATE'],
-  BUSINESS_EXPANSION: ['BUSINESS_LOAN', 'SME_TERM_LOAN', 'TERM_LOAN'],
+  BUSINESS_EXPANSION: ['BUSINESS_LOAN', 'SME_TERM_LOAN', 'TERM_LOAN', 'MICROFINANCE'],
   REFINANCE_EXISTING_BORROWING: ['MORTGAGE', 'BUSINESS_LOAN', 'PERSONAL_LOAN'],
-  PERSONAL_BORROWING: ['PERSONAL_LOAN', 'CREDIT_UNION_LOAN', 'MICROFINANCE'],
+  PERSONAL_BORROWING: ['PERSONAL_LOAN', 'CREDIT_UNION_LOAN'],
   OVERDRAFT: ['OVERDRAFT', 'BUSINESS_OVERDRAFT'],
   CREDIT_CARD: ['CREDIT_CARD', 'BUSINESS_CREDIT_CARD'],
   OTHER: [],
@@ -271,6 +238,47 @@ export function matchProductsForIntent(
   }
 
   return matched;
+}
+
+/**
+ * Products this customer's lending segment may apply for, read from the bank's
+ * `eligibleCustomerTypes` on each product. Pass the `segment` from the
+ * application context, not `customerType` — a sole trader is filed as an
+ * INDIVIDUAL but borrows as a business, and the segment is what the product API
+ * and the eligibility rule both compare against. An unresolved segment passes
+ * the list through untouched rather than emptying it.
+ */
+export function filterProductsForSegment(
+  products: LoanProduct[],
+  segment?: string | null
+): LoanProduct[] {
+  if (!segment) return products;
+  return products.filter(
+    p => p.eligibleCustomerTypes?.some(t => t.toUpperCase() === segment.toUpperCase()) ?? false
+  );
+}
+
+/**
+ * Which credit-need chips the AI assistant may offer this customer: a purpose
+ * is only worth asking about when the bank has a product open to them that it
+ * can lead to. Derived from the customer's own catalogue rather than a second
+ * personal/business matrix, so the chips cannot drift from what they are
+ * actually allowed to apply for — an individual is not offered "Purchase
+ * business premises", a trading customer is not offered "Personal borrowing".
+ *
+ * An empty catalogue means the products have not loaded (or failed to), so the
+ * full list is passed through rather than showing no options at all.
+ */
+export function filterIntentsForCatalogue<T extends { code: string }>(
+  options: T[],
+  products: LoanProduct[]
+): T[] {
+  if (products.length === 0) return options;
+  const available = new Set(products.map(p => p.productType));
+  return options.filter(o => {
+    const candidates = INTENT_TO_PRODUCT_TYPES[o.code];
+    return !candidates || candidates.length === 0 || candidates.some(t => available.has(t));
+  });
 }
 
 // ─── API Functions ─────────────────────────────────────────────────

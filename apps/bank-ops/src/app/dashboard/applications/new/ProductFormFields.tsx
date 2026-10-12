@@ -46,53 +46,53 @@ export function getProductCategory(productType: string): string {
 // ─── Purpose options per product category ──────────────────────────────
 const PURPOSE_OPTIONS: Record<string, { value: string; label: string }[]> = {
   TERM_LOAN: [
-    { value: 'PERSONAL_USE', label: 'Personal Use' },
-    { value: 'DEBT_CONSOLIDATION', label: 'Debt Consolidation' },
+    { value: 'PERSONAL_USE', label: 'Personal use' },
+    { value: 'DEBT_CONSOLIDATION', label: 'Debt consolidation' },
     { value: 'EDUCATION', label: 'Education' },
-    { value: 'MEDICAL', label: 'Medical Expenses' },
+    { value: 'MEDICAL', label: 'Medical expenses' },
     { value: 'WEDDING', label: 'Wedding' },
     { value: 'TRAVEL', label: 'Travel' },
-    { value: 'HOME_RENOVATION', label: 'Home Renovation' },
-    { value: 'BUSINESS_EXPANSION', label: 'Business Expansion' },
-    { value: 'WORKING_CAPITAL', label: 'Working Capital' },
-    { value: 'EQUIPMENT_PURCHASE', label: 'Equipment Purchase' },
+    { value: 'HOME_RENOVATION', label: 'Home renovation' },
+    { value: 'BUSINESS_EXPANSION', label: 'Business expansion' },
+    { value: 'WORKING_CAPITAL', label: 'Working capital' },
+    { value: 'EQUIPMENT_PURCHASE', label: 'Equipment purchase' },
     { value: 'OTHER', label: 'Other' },
   ],
   MORTGAGE: [
-    { value: 'HOME_PURCHASE', label: 'Home Purchase' },
-    { value: 'HOME_CONSTRUCTION', label: 'Home Construction' },
-    { value: 'HOME_RENOVATION', label: 'Home Renovation' },
-    { value: 'HOME_REFINANCE', label: 'Refinance Existing Mortgage' },
-    { value: 'INVESTMENT', label: 'Investment Property' },
+    { value: 'HOME_PURCHASE', label: 'Home purchase' },
+    { value: 'HOME_CONSTRUCTION', label: 'Home construction' },
+    { value: 'HOME_RENOVATION', label: 'Home renovation' },
+    { value: 'HOME_REFINANCE', label: 'Refinance existing mortgage' },
+    { value: 'INVESTMENT', label: 'Investment property' },
     { value: 'OTHER', label: 'Other' },
   ],
   VEHICLE_FINANCE: [
-    { value: 'VEHICLE_PURCHASE', label: 'New Vehicle Purchase' },
-    { value: 'PERSONAL_USE', label: 'Used Vehicle Purchase' },
-    { value: 'BUSINESS_EXPANSION', label: 'Commercial Vehicle' },
+    { value: 'VEHICLE_PURCHASE', label: 'New vehicle purchase' },
+    { value: 'PERSONAL_USE', label: 'Used vehicle purchase' },
+    { value: 'BUSINESS_EXPANSION', label: 'Commercial vehicle' },
     { value: 'OTHER', label: 'Other' },
   ],
   CREDIT_CARD: [
-    { value: 'PERSONAL_USE', label: 'Personal Spending' },
-    { value: 'BUSINESS_EXPANSION', label: 'Business Spending' },
-    { value: 'TRAVEL', label: 'Travel & Rewards' },
+    { value: 'PERSONAL_USE', label: 'Personal spending' },
+    { value: 'BUSINESS_EXPANSION', label: 'Business spending' },
+    { value: 'TRAVEL', label: 'Travel and rewards' },
     { value: 'OTHER', label: 'Other' },
   ],
   OVERDRAFT: [
-    { value: 'WORKING_CAPITAL', label: 'Cash Flow Management' },
-    { value: 'PERSONAL_USE', label: 'Personal Buffer' },
-    { value: 'BUSINESS_EXPANSION', label: 'Business Operations' },
+    { value: 'WORKING_CAPITAL', label: 'Cash flow management' },
+    { value: 'PERSONAL_USE', label: 'Personal buffer' },
+    { value: 'BUSINESS_EXPANSION', label: 'Business operations' },
     { value: 'OTHER', label: 'Other' },
   ],
   BNPL: [
-    { value: 'PERSONAL_USE', label: 'Consumer Purchase' },
-    { value: 'EQUIPMENT_PURCHASE', label: 'Equipment / Electronics' },
+    { value: 'PERSONAL_USE', label: 'Consumer purchase' },
+    { value: 'EQUIPMENT_PURCHASE', label: 'Equipment or electronics' },
     { value: 'OTHER', label: 'Other' },
   ],
   INVOICE_ASSET_FINANCE: [
-    { value: 'WORKING_CAPITAL', label: 'Working Capital' },
-    { value: 'EQUIPMENT_PURCHASE', label: 'Equipment / Asset Acquisition' },
-    { value: 'BUSINESS_EXPANSION', label: 'Business Expansion' },
+    { value: 'WORKING_CAPITAL', label: 'Working capital' },
+    { value: 'EQUIPMENT_PURCHASE', label: 'Equipment or asset acquisition' },
+    { value: 'BUSINESS_EXPANSION', label: 'Business expansion' },
     { value: 'OTHER', label: 'Other' },
   ],
 };
@@ -104,26 +104,26 @@ export function getPurposeOptions(category: string) {
 // ─── Shared field labels per product category (for amount/term) ─────────
 const FIELD_LABELS: Record<string, { amountLabel: string; termLabel: string }> = {
   TERM_LOAN: {
-    amountLabel: `Loan Amount (${getCurrencySymbol()})`,
-    termLabel: 'Loan Term (months)',
+    amountLabel: `Loan amount (${getCurrencySymbol()})`,
+    termLabel: 'Loan term (months)',
   },
   MORTGAGE: {
-    amountLabel: `Mortgage Amount (${getCurrencySymbol()})`,
-    termLabel: 'Mortgage Term (years)',
+    amountLabel: `Mortgage amount (${getCurrencySymbol()})`,
+    termLabel: 'Mortgage term (years)',
   },
   VEHICLE_FINANCE: {
-    amountLabel: `Finance Amount (${getCurrencySymbol()})`,
-    termLabel: 'Finance Term (months)',
+    amountLabel: `Finance amount (${getCurrencySymbol()})`,
+    termLabel: 'Finance term (months)',
   },
-  CREDIT_CARD: { amountLabel: `Credit Limit (${getCurrencySymbol()})`, termLabel: '' },
-  OVERDRAFT: { amountLabel: `Overdraft Limit (${getCurrencySymbol()})`, termLabel: '' },
+  CREDIT_CARD: { amountLabel: `Credit limit (${getCurrencySymbol()})`, termLabel: '' },
+  OVERDRAFT: { amountLabel: `Overdraft limit (${getCurrencySymbol()})`, termLabel: '' },
   BNPL: {
-    amountLabel: `Purchase Amount (${getCurrencySymbol()})`,
-    termLabel: 'Repayment Term (months)',
+    amountLabel: `Purchase amount (${getCurrencySymbol()})`,
+    termLabel: 'Repayment term (months)',
   },
   INVOICE_ASSET_FINANCE: {
-    amountLabel: `Facility Amount (${getCurrencySymbol()})`,
-    termLabel: 'Facility Term (months)',
+    amountLabel: `Facility amount (${getCurrencySymbol()})`,
+    termLabel: 'Facility term (months)',
   },
 };
 
@@ -159,6 +159,8 @@ export interface ProductFormData {
   // Invoice / Asset
   assetDescription: string;
 }
+
+export type ProductFormErrors = Partial<Record<keyof ProductFormData, string>>;
 
 export const INITIAL_FORM_DATA: ProductFormData = {
   loanAmount: '',
@@ -198,23 +200,92 @@ interface ProductFormFieldsProps {
   formData: ProductFormData;
   onChange: (field: keyof ProductFormData, value: string) => void;
   customerProfile?: CustomerProfileSnapshot;
+  /** Field-level validation messages, keyed by ProductFormData field. */
+  errors?: ProductFormErrors;
 }
 
 // ─── Shared input styling ───────────────────────────────────────────────
-const inputCls =
-  'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent';
-const labelCls = 'block text-sm font-medium text-gray-700 mb-2';
-const hintCls = 'mt-1 text-xs text-gray-500';
+const inputCls = 'w-full rounded-xl px-4 py-2.5 text-base transition-colors';
+const baseStyle: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  color: 'var(--rm-text)',
+  border: '1px solid var(--rm-border)',
+};
+const invalidStyle: React.CSSProperties = {
+  backgroundColor: 'var(--rm-input)',
+  color: 'var(--rm-text)',
+  border: '1px solid rgba(239,68,68,0.55)',
+};
+
+function RequiredMark() {
+  return (
+    <>
+      <span aria-hidden="true" style={{ color: '#dc2626' }}>
+        {' '}
+        *
+      </span>
+      <span className="sr-only"> (required)</span>
+    </>
+  );
+}
+
+/* Label + hint + error scaffolding shared by every control below.
+   The control itself receives aria-invalid / aria-describedby via a11yProps. */
+function FieldShell({
+  id,
+  label,
+  required,
+  hint,
+  error,
+  children,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+        {label}
+        {required && <RequiredMark />}
+      </label>
+      {children}
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm" style={{ color: '#b91c1c' }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* Wires aria-invalid / aria-describedby onto a control rendered by FieldShell. */
+function a11yProps(id: string, error?: string, hasHint?: boolean) {
+  const describedBy =
+    [hasHint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined;
+  return {
+    'aria-invalid': error ? (true as const) : undefined,
+    'aria-describedby': describedBy,
+  };
+}
 
 // ─── Section wrapper ────────────────────────────────────────────────────
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-4">
-      <h3 className="text-base font-semibold text-gray-900 border-b border-gray-200 pb-2">
+    <section className="space-y-5">
+      <h3 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
         {title}
       </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{children}</div>
-    </div>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">{children}</div>
+    </section>
   );
 }
 
@@ -223,9 +294,9 @@ function formatTermHint(product: Product, category: string) {
   if (category === 'MORTGAGE') {
     const minYears = Math.round((product.minTermMonths || 0) / 12);
     const maxYears = Math.round((product.maxTermMonths || 0) / 12);
-    return `Range: ${minYears} - ${maxYears} years`;
+    return `Allowed range: ${minYears} to ${maxYears} years`;
   }
-  return `Range: ${product.minTermMonths} - ${product.maxTermMonths} months`;
+  return `Allowed range: ${product.minTermMonths} to ${product.maxTermMonths} months`;
 }
 
 // ─── Shared: Amount + Rate fields ───────────────────────────────────────
@@ -233,75 +304,113 @@ function AmountRateFields({
   product,
   formData,
   onChange,
+  errors,
   category,
 }: ProductFormFieldsProps & { category: string }) {
   const labels = getFieldLabels(category);
   const showTerm = labels.termLabel !== '';
   const isMortgage = category === 'MORTGAGE';
+  const rateHint =
+    product.minInterestRate != null && product.maxInterestRate != null
+      ? `Allowed range: ${product.minInterestRate.toFixed(2)}% to ${product.maxInterestRate.toFixed(2)}%`
+      : undefined;
 
   return (
     <Section
       title={
         category === 'CREDIT_CARD'
-          ? 'Credit Limit'
+          ? 'Credit limit'
           : category === 'OVERDRAFT'
-            ? 'Overdraft Details'
-            : 'Financing Details'
+            ? 'Overdraft details'
+            : 'Financing details'
       }
     >
-      <div>
-        <label className={labelCls}>{labels.amountLabel} *</label>
+      <FieldShell
+        id="pf-amount"
+        label={labels.amountLabel}
+        required
+        error={errors?.loanAmount}
+        hint={`Allowed range: ${formatCurrency(product.minLoanAmount || 0)} to ${formatCurrency(
+          product.maxLoanAmount || 0
+        )}`}
+      >
         <input
+          id="pf-amount"
           type="number"
+          min={product.minLoanAmount || undefined}
+          max={product.maxLoanAmount || undefined}
+          step="0.01"
+          inputMode="decimal"
+          required
+          aria-required="true"
           value={formData.loanAmount}
           onChange={e => onChange('loanAmount', e.target.value)}
           className={inputCls}
-          placeholder={`Enter ${labels.amountLabel.toLowerCase().replace(' *', '').replace(` (${getCurrencySymbol()})`, '')}`}
+          style={errors?.loanAmount ? invalidStyle : baseStyle}
+          {...a11yProps('pf-amount', errors?.loanAmount, true)}
         />
-        <p className={hintCls}>
-          Range: {formatCurrency(product.minLoanAmount || 0)} –{' '}
-          {formatCurrency(product.maxLoanAmount || 0)}
-        </p>
-      </div>
+      </FieldShell>
 
       {showTerm && (
-        <div>
-          <label className={labelCls}>{labels.termLabel} *</label>
+        <FieldShell
+          id="pf-term"
+          label={labels.termLabel}
+          required
+          error={errors?.loanTerm}
+          hint={formatTermHint(product, category)}
+        >
           <input
+            id="pf-term"
             type="number"
+            min={isMortgage ? Math.round((product.minTermMonths || 0) / 12) || undefined : product.minTermMonths || undefined}
+            max={isMortgage ? Math.round((product.maxTermMonths || 0) / 12) || undefined : product.maxTermMonths || undefined}
+            step="1"
+            inputMode="numeric"
+            required
+            aria-required="true"
+            placeholder={isMortgage ? 'e.g. 25' : 'e.g. 12'}
             value={formData.loanTerm}
             onChange={e => onChange('loanTerm', e.target.value)}
             className={inputCls}
-            placeholder={isMortgage ? 'e.g. 25' : 'e.g. 12'}
+            style={errors?.loanTerm ? invalidStyle : baseStyle}
+            {...a11yProps('pf-term', errors?.loanTerm, true)}
           />
-          <p className={hintCls}>{formatTermHint(product, category)}</p>
-        </div>
+        </FieldShell>
       )}
 
-      {/* Credit cards & overdrafts don't show term, but we need to fill a grid gap */}
-      {!showTerm && <div />}
-
-      <div>
-        <label className={labelCls}>Interest Rate (%) *</label>
+      <FieldShell
+        id="pf-rate"
+        label="Interest rate (%)"
+        required
+        error={errors?.interestRate}
+        hint={rateHint}
+      >
         <input
+          id="pf-rate"
           type="number"
           step="0.01"
+          min={0}
+          inputMode="decimal"
+          required
+          aria-required="true"
           value={formData.interestRate}
           onChange={e => onChange('interestRate', e.target.value)}
           className={inputCls}
-          placeholder="Enter interest rate"
+          style={errors?.interestRate ? invalidStyle : baseStyle}
+          {...a11yProps('pf-rate', errors?.interestRate, !!rateHint)}
         />
-        <p className={hintCls}>
-          Range: {product.minInterestRate?.toFixed(2)}% – {product.maxInterestRate?.toFixed(2)}%
-        </p>
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Purpose *</label>
+      <FieldShell id="pf-purpose" label="Purpose" required error={errors?.loanPurpose}>
         <select
+          id="pf-purpose"
+          required
+          aria-required="true"
           value={formData.loanPurpose}
           onChange={e => onChange('loanPurpose', e.target.value)}
           className={inputCls}
+          style={errors?.loanPurpose ? invalidStyle : baseStyle}
+          {...a11yProps('pf-purpose', errors?.loanPurpose)}
         >
           <option value="">Select purpose</option>
           {getPurposeOptions(category).map(opt => (
@@ -310,7 +419,7 @@ function AmountRateFields({
             </option>
           ))}
         </select>
-      </div>
+      </FieldShell>
     </Section>
   );
 }
@@ -318,8 +427,8 @@ function AmountRateFields({
 // ─── Employment & Income – read-only from customer profile ─────────────
 const EMPLOYMENT_LABELS: Record<string, string> = {
   EMPLOYED: 'Employed',
-  SELF_EMPLOYED: 'Self-Employed',
-  BUSINESS_OWNER: 'Business Owner',
+  SELF_EMPLOYED: 'Self-employed',
+  BUSINESS_OWNER: 'Business owner',
   RETIRED: 'Retired',
   STUDENT: 'Student',
   HOMEMAKER: 'Homemaker',
@@ -329,34 +438,46 @@ const EMPLOYMENT_LABELS: Record<string, string> = {
 function CustomerIncomeSnapshot({ profile }: { profile: CustomerProfileSnapshot }) {
   const viewField = (label: string, value: string | undefined | null) => (
     <div>
-      <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
-      <p className="text-sm text-slate-900 py-2">{value || '—'}</p>
+      <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {label}
+      </p>
+      <p className="mt-1 text-base font-medium" style={{ color: 'var(--rm-text)' }}>
+        {value || '—'}
+      </p>
     </div>
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-        <h3 className="text-base font-semibold text-gray-900">Employment & Income</h3>
-        <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
-          From customer profile
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+          Employment and income
+        </h3>
+        <span
+          className="rounded-full px-3 py-1 text-sm"
+          style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-muted)' }}
+        >
+          Taken from the customer profile
         </span>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 rounded-lg p-4">
+      <dl
+        className="grid grid-cols-1 gap-5 rounded-2xl p-5 md:grid-cols-2"
+        style={{ backgroundColor: 'var(--rm-input)' }}
+      >
         {viewField(
-          'Employment Status',
+          'Employment status',
           EMPLOYMENT_LABELS[profile.employmentStatus] || profile.employmentStatus
         )}
-        {viewField('Employer Name', profile.employerName)}
+        {viewField('Employer name', profile.employerName)}
         {viewField('Occupation', profile.occupation)}
         {viewField(
-          'Annual Income',
+          'Annual income',
           profile.annualIncome
             ? `${getCurrencySymbol()}${Number(profile.annualIncome).toLocaleString()}`
             : ''
         )}
-      </div>
-    </div>
+      </dl>
+    </section>
   );
 }
 
@@ -364,97 +485,135 @@ function CustomerIncomeSnapshot({ profile }: { profile: CustomerProfileSnapshot 
 function PropertyFields({
   formData,
   onChange,
+  errors,
 }: {
   formData: ProductFormData;
   onChange: ProductFormFieldsProps['onChange'];
+  errors?: ProductFormErrors;
 }) {
   return (
-    <Section title="Property Details">
+    <Section title="Property details">
       <div className="md:col-span-2">
-        <label className={labelCls}>Property Address *</label>
-        <input
-          type="text"
-          value={formData.propertyAddress}
-          onChange={e => onChange('propertyAddress', e.target.value)}
-          className={inputCls}
-          placeholder="Enter property address"
-        />
+        <FieldShell id="pf-property-address" label="Property address" required error={errors?.propertyAddress}>
+          <input
+            id="pf-property-address"
+            type="text"
+            required
+            aria-required="true"
+            value={formData.propertyAddress}
+            onChange={e => onChange('propertyAddress', e.target.value)}
+            className={inputCls}
+            style={errors?.propertyAddress ? invalidStyle : baseStyle}
+            {...a11yProps('pf-property-address', errors?.propertyAddress)}
+          />
+        </FieldShell>
       </div>
 
-      <div>
-        <label className={labelCls}>City *</label>
+      <FieldShell id="pf-property-city" label="City" required error={errors?.propertyCity}>
         <input
+          id="pf-property-city"
           type="text"
+          required
+          aria-required="true"
+          placeholder="e.g. Dublin"
           value={formData.propertyCity}
           onChange={e => onChange('propertyCity', e.target.value)}
           className={inputCls}
-          placeholder="e.g. Dublin"
+          style={errors?.propertyCity ? invalidStyle : baseStyle}
+          {...a11yProps('pf-property-city', errors?.propertyCity)}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>County / Region *</label>
+      <FieldShell id="pf-property-state" label="County or region" required error={errors?.propertyState}>
         <input
+          id="pf-property-state"
           type="text"
+          required
+          aria-required="true"
+          placeholder="e.g. Co. Dublin"
           value={formData.propertyState}
           onChange={e => onChange('propertyState', e.target.value)}
           className={inputCls}
-          placeholder="e.g. Co. Dublin"
+          style={errors?.propertyState ? invalidStyle : baseStyle}
+          {...a11yProps('pf-property-state', errors?.propertyState)}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Eircode / Postcode</label>
+      <FieldShell id="pf-property-postal" label="Eircode or postcode">
         <input
+          id="pf-property-postal"
           type="text"
+          placeholder="e.g. D02 X285"
           value={formData.propertyPostalCode}
           onChange={e => onChange('propertyPostalCode', e.target.value)}
           className={inputCls}
-          placeholder="e.g. D02 X285"
+          style={baseStyle}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Property Type *</label>
+      <FieldShell id="pf-property-type" label="Property type" required error={errors?.propertyType}>
         <select
+          id="pf-property-type"
+          required
+          aria-required="true"
           value={formData.propertyType}
           onChange={e => onChange('propertyType', e.target.value)}
           className={inputCls}
+          style={errors?.propertyType ? invalidStyle : baseStyle}
+          {...a11yProps('pf-property-type', errors?.propertyType)}
         >
           <option value="">Select type</option>
-          <option value="DETACHED_HOUSE">Detached House</option>
-          <option value="SEMI_DETACHED">Semi-Detached House</option>
-          <option value="TERRACED">Terraced House</option>
-          <option value="APARTMENT">Apartment / Flat</option>
+          <option value="DETACHED_HOUSE">Detached house</option>
+          <option value="SEMI_DETACHED">Semi-detached house</option>
+          <option value="TERRACED">Terraced house</option>
+          <option value="APARTMENT">Apartment or flat</option>
           <option value="BUNGALOW">Bungalow</option>
-          <option value="COMMERCIAL">Commercial Property</option>
-          <option value="MIXED_USE">Mixed Use</option>
-          <option value="LAND">Land / Site</option>
+          <option value="COMMERCIAL">Commercial property</option>
+          <option value="MIXED_USE">Mixed use</option>
+          <option value="LAND">Land or site</option>
         </select>
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Estimated Property Value ({getCurrencySymbol()}) *</label>
+      <FieldShell
+        id="pf-property-value"
+        label={`Estimated property value (${getCurrencySymbol()})`}
+        required
+        error={errors?.propertyValue}
+      >
         <input
+          id="pf-property-value"
           type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          required
+          aria-required="true"
           value={formData.propertyValue}
           onChange={e => onChange('propertyValue', e.target.value)}
           className={inputCls}
-          placeholder="Enter estimated value"
+          style={errors?.propertyValue ? invalidStyle : baseStyle}
+          {...a11yProps('pf-property-value', errors?.propertyValue)}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Down Payment Amount ({getCurrencySymbol()})</label>
+      <FieldShell
+        id="pf-property-deposit"
+        label={`Down payment (${getCurrencySymbol()})`}
+        error={errors?.downPaymentAmount}
+      >
         <input
+          id="pf-property-deposit"
           type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
           value={formData.downPaymentAmount}
           onChange={e => onChange('downPaymentAmount', e.target.value)}
           className={inputCls}
-          placeholder="Enter down payment"
+          style={errors?.downPaymentAmount ? invalidStyle : baseStyle}
+          {...a11yProps('pf-property-deposit', errors?.downPaymentAmount)}
         />
-        <p className={hintCls}>Minimum typically 10% for first-time buyers, 20% for others</p>
-      </div>
+      </FieldShell>
     </Section>
   );
 }
@@ -463,80 +622,118 @@ function PropertyFields({
 function VehicleFields({
   formData,
   onChange,
+  errors,
 }: {
   formData: ProductFormData;
   onChange: ProductFormFieldsProps['onChange'];
+  errors?: ProductFormErrors;
 }) {
   return (
-    <Section title="Vehicle Details">
-      <div>
-        <label className={labelCls}>Make *</label>
+    <Section title="Vehicle details">
+      <FieldShell id="pf-vehicle-make" label="Make" required error={errors?.vehicleMake}>
         <input
+          id="pf-vehicle-make"
           type="text"
+          required
+          aria-required="true"
+          placeholder="e.g. Toyota"
           value={formData.vehicleMake}
           onChange={e => onChange('vehicleMake', e.target.value)}
           className={inputCls}
-          placeholder="e.g. Toyota"
+          style={errors?.vehicleMake ? invalidStyle : baseStyle}
+          {...a11yProps('pf-vehicle-make', errors?.vehicleMake)}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Model *</label>
+      <FieldShell id="pf-vehicle-model" label="Model" required error={errors?.vehicleModel}>
         <input
+          id="pf-vehicle-model"
           type="text"
+          required
+          aria-required="true"
+          placeholder="e.g. Corolla"
           value={formData.vehicleModel}
           onChange={e => onChange('vehicleModel', e.target.value)}
           className={inputCls}
-          placeholder="e.g. Corolla"
+          style={errors?.vehicleModel ? invalidStyle : baseStyle}
+          {...a11yProps('pf-vehicle-model', errors?.vehicleModel)}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Year *</label>
+      <FieldShell id="pf-vehicle-year" label="Year" required error={errors?.vehicleYear}>
         <input
+          id="pf-vehicle-year"
           type="number"
+          inputMode="numeric"
+          required
+          aria-required="true"
+          placeholder="e.g. 2025"
           value={formData.vehicleYear}
           onChange={e => onChange('vehicleYear', e.target.value)}
           className={inputCls}
-          placeholder="e.g. 2025"
+          style={errors?.vehicleYear ? invalidStyle : baseStyle}
+          {...a11yProps('pf-vehicle-year', errors?.vehicleYear)}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Condition *</label>
+      <FieldShell id="pf-vehicle-condition" label="Condition" required error={errors?.vehicleCondition}>
         <select
+          id="pf-vehicle-condition"
+          required
+          aria-required="true"
           value={formData.vehicleCondition}
           onChange={e => onChange('vehicleCondition', e.target.value)}
           className={inputCls}
+          style={errors?.vehicleCondition ? invalidStyle : baseStyle}
+          {...a11yProps('pf-vehicle-condition', errors?.vehicleCondition)}
         >
           <option value="">Select condition</option>
           <option value="NEW">New</option>
-          <option value="USED">Used / Pre-Owned</option>
+          <option value="USED">Used or pre-owned</option>
           <option value="DEMO">Demonstrator</option>
         </select>
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Estimated Vehicle Value ({getCurrencySymbol()}) *</label>
+      <FieldShell
+        id="pf-vehicle-value"
+        label={`Estimated vehicle value (${getCurrencySymbol()})`}
+        required
+        error={errors?.vehicleValue}
+      >
         <input
+          id="pf-vehicle-value"
           type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          required
+          aria-required="true"
           value={formData.vehicleValue}
           onChange={e => onChange('vehicleValue', e.target.value)}
           className={inputCls}
-          placeholder="Enter vehicle value"
+          style={errors?.vehicleValue ? invalidStyle : baseStyle}
+          {...a11yProps('pf-vehicle-value', errors?.vehicleValue)}
         />
-      </div>
+      </FieldShell>
 
-      <div>
-        <label className={labelCls}>Down Payment ({getCurrencySymbol()})</label>
+      <FieldShell
+        id="pf-vehicle-deposit"
+        label={`Down payment (${getCurrencySymbol()})`}
+        error={errors?.downPaymentAmount}
+      >
         <input
+          id="pf-vehicle-deposit"
           type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
           value={formData.downPaymentAmount}
           onChange={e => onChange('downPaymentAmount', e.target.value)}
           className={inputCls}
-          placeholder="Enter down payment"
+          style={errors?.downPaymentAmount ? invalidStyle : baseStyle}
+          {...a11yProps('pf-vehicle-deposit', errors?.downPaymentAmount)}
         />
-      </div>
+      </FieldShell>
     </Section>
   );
 }
@@ -546,29 +743,41 @@ function InvoiceAssetFields({
   product,
   formData,
   onChange,
+  errors,
 }: {
   product: Product;
   formData: ProductFormData;
   onChange: ProductFormFieldsProps['onChange'];
+  errors?: ProductFormErrors;
 }) {
   const isInvoice = product.productType === 'INVOICE_FINANCE';
+  const id = 'pf-asset-description';
   return (
-    <Section title={isInvoice ? 'Invoice Details' : 'Asset Details'}>
+    <Section title={isInvoice ? 'Invoice details' : 'Asset details'}>
       <div className="md:col-span-2">
-        <label className={labelCls}>
-          {isInvoice ? 'Invoice / Debtor Description' : 'Asset Description'} *
-        </label>
-        <textarea
-          value={formData.assetDescription}
-          onChange={e => onChange('assetDescription', e.target.value)}
-          rows={3}
-          className={inputCls}
-          placeholder={
-            isInvoice
-              ? 'Describe the invoices / debtors to be financed...'
-              : 'Describe the asset(s) to be leased...'
-          }
-        />
+        <FieldShell
+          id={id}
+          label={isInvoice ? 'Invoice or debtor description' : 'Asset description'}
+          required
+          error={errors?.assetDescription}
+        >
+          <textarea
+            id={id}
+            rows={3}
+            required
+            aria-required="true"
+            value={formData.assetDescription}
+            onChange={e => onChange('assetDescription', e.target.value)}
+            className={`${inputCls} resize-y`}
+            style={errors?.assetDescription ? invalidStyle : baseStyle}
+            {...a11yProps(id, errors?.assetDescription)}
+            placeholder={
+              isInvoice
+                ? 'Describe the invoices or debtors to be financed'
+                : 'Describe the assets to be leased'
+            }
+          />
+        </FieldShell>
       </div>
     </Section>
   );
@@ -580,8 +789,10 @@ export default function ProductFormFields({
   formData,
   onChange,
   customerProfile,
+  errors,
 }: ProductFormFieldsProps) {
   const category = getProductCategory(product.productType);
+  const notesId = 'pf-notes';
 
   return (
     <div className="space-y-8">
@@ -590,34 +801,40 @@ export default function ProductFormFields({
         product={product}
         formData={formData}
         onChange={onChange}
+        errors={errors}
         category={category}
       />
 
       {/* Mortgage: property details */}
-      {category === 'MORTGAGE' && <PropertyFields formData={formData} onChange={onChange} />}
+      {category === 'MORTGAGE' && (
+        <PropertyFields formData={formData} onChange={onChange} errors={errors} />
+      )}
 
       {/* Vehicle Finance: vehicle details */}
-      {category === 'VEHICLE_FINANCE' && <VehicleFields formData={formData} onChange={onChange} />}
+      {category === 'VEHICLE_FINANCE' && (
+        <VehicleFields formData={formData} onChange={onChange} errors={errors} />
+      )}
 
       {/* Invoice / Asset Finance: asset details */}
       {category === 'INVOICE_ASSET_FINANCE' && (
-        <InvoiceAssetFields product={product} formData={formData} onChange={onChange} />
+        <InvoiceAssetFields product={product} formData={formData} onChange={onChange} errors={errors} />
       )}
 
       {/* Employment & Income – read-only from customer profile (all products) */}
       {customerProfile && <CustomerIncomeSnapshot profile={customerProfile} />}
 
       {/* Notes — all products */}
-      <div>
-        <label className={labelCls}>Additional Notes</label>
+      <FieldShell id={notesId} label="Additional notes">
         <textarea
+          id={notesId}
+          rows={3}
           value={formData.notes}
           onChange={e => onChange('notes', e.target.value)}
-          rows={3}
-          className={inputCls}
-          placeholder="Enter any additional information about this application..."
+          className={`${inputCls} resize-y`}
+          style={baseStyle}
+          placeholder="Add any additional information about this application"
         />
-      </div>
+      </FieldShell>
     </div>
   );
 }

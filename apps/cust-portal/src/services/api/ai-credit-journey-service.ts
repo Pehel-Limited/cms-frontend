@@ -29,7 +29,7 @@ export const DEFAULT_INTENT_OPTIONS: IntentOption[] = [
   { code: 'REFINANCE_EXISTING_BORROWING', label: 'Refinance existing borrowing', description: 'Replace or restructure existing borrowing' },
   { code: 'HOME_PURCHASE', label: 'Buy a home', description: 'Finance to purchase a residential property' },
   { code: 'PERSONAL_BORROWING', label: 'Personal borrowing', description: 'General personal finance needs' },
-  { code: 'OVERDRAFT', label: 'Arrange an overdraft', description: 'An overdraft facility on an existing account' },
+  { code: 'OVERDRAFT', label: 'Arrange an overdraft', description: 'An overdraft on your existing account' },
   { code: 'CREDIT_CARD', label: 'Apply for a credit card', description: 'A new credit card' },
   { code: 'OTHER', label: 'Something else', description: "A credit need that doesn't fit the options above" },
 ];
@@ -127,6 +127,7 @@ export interface CreditJourney {
   journeyId: string;
   bankId: string;
   customerId: string;
+  applicationId?: string | null;
   status: string;
   currentStage: string;
   pausedReason?: string | null;
@@ -188,5 +189,20 @@ export const aiCreditJourneyService = {
 
   async resume(journeyId: string): Promise<CreditJourney> {
     return apiClient.post<CreditJourney>(`/api/customer/ai/credit-journeys/${journeyId}/resume`);
+  },
+
+  /**
+   * Turns the confirmed credit need into a REAL draft application —
+   * prefilled from the journey's confirmed facts, no re-entry required.
+   * The customer still reviews and explicitly submits it via the normal
+   * application flow; nothing is auto-submitted here.
+   */
+  async prepareApplication(
+    journeyId: string,
+    productId: string
+  ): Promise<{ applicationId: string; applicationNumber: string }> {
+    return apiClient.post(`/api/customer/ai/credit-journeys/${journeyId}/prepare-application`, {
+      productId,
+    });
   },
 };

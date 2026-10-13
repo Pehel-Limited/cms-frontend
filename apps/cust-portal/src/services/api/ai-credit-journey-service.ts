@@ -52,7 +52,7 @@ export interface CreditNeedFacts {
 
 /**
  * Client-side mirror of ai-assistant-service's `CreditNeedDraft` taxonomy
- * constants — who the borrower is, mirroring how AIB/BOI split lending into
+ * constants — who the borrower is, mirroring how the bank splits lending into
  * separate product lines (Business Loans vs Farm Loans vs personal lending).
  */
 export const BORROWER_SEGMENT_OPTIONS: { value: string; label: string }[] = [
@@ -136,6 +136,70 @@ export interface CreditJourney {
   recentMessages: ConversationMessage[];
   confirmedFacts: ConfirmedFact[];
   intentOptions: IntentOption[];
+  /** The guided suitability interview, present once the credit need is confirmed. */
+  suitability?: SuitabilityStage | null;
+}
+
+/**
+ * One step of the guided suitability interview, exactly as the rule engine produced it.
+ *
+ * Every string here is bank configuration, so the portal renders it without rewording: the question,
+ * the option labels, the "why are we asking" copy and the not-a-credit-decision statement. A
+ * paraphrase in the UI would be a disclosure the bank never approved.
+ */
+export interface SuitabilityStage {
+  state:
+    | 'REASON_REQUIRED'
+    | 'ASKING'
+    | 'CONFIRM'
+    | 'READY'
+    | 'NOT_APPLICABLE'
+    | 'NOT_CONFIGURED'
+    | 'ENGINE_UNAVAILABLE'
+    | 'PATH_TOO_LONG'
+    | string;
+  message?: string | null;
+  choices: { code: string; label: string }[];
+  /** Post the answer against this step id; a stale click then fails instead of answering the wrong question. */
+  expectedStepId?: string | null;
+  questionType?: string | null;
+  /**
+   * An answer the assistant inferred from words the customer already used. Nothing becomes part of
+   * the journey until they answer this — see confirmProposal.
+   */
+  proposal?: {
+    stepId: string;
+    question?: string | null;
+    code: string;
+    label: string;
+    fromUtterance?: string | null;
+  } | null;
+  youToldUs?: string | null;
+  questionNumber?: number | null;
+  questionTotal?: number | null;
+  helpText?: string | null;
+  conditions?: string[];
+  clears?: string[];
+  answered?: { question: string; answer: string }[];
+  outcome?: string | null;
+  suggestionReason?: string | null;
+  notADecisionStatement?: string | null;
+  recommended?: SuitabilityProduct[];
+  unavailableCategories?: { code: string; name: string; reasonCode: string }[];
+  suppressed?: { productCode: string; productName: string; reasonCode: string }[];
+  supportReference?: string | null;
+  ruleSetName?: string | null;
+  ruleSetVersion?: number | null;
+}
+
+export interface SuitabilityProduct {
+  productId: string;
+  productCode: string;
+  productName: string;
+  /** The bank's own line about this product. Not the outcome category — one product can serve several. */
+  description?: string | null;
+  productPage?: string | null;
+  needsReview: boolean;
 }
 
 export const aiCreditJourneyService = {
@@ -204,5 +268,54 @@ export const aiCreditJourneyService = {
     return apiClient.post(`/api/customer/ai/credit-journeys/${journeyId}/prepare-application`, {
       productId,
     });
+  },
+
+  /** Refresh the interview step without pulling the whole conversation back. */
+  async getSuitability(journeyId: string): Promise<SuitabilityStage> {
+    return apiClient.get<SuitabilityStage>(
+      `/api/customer/ai/credit-journeys/${journeyId}/suitability`
+    );
+  },
+
+  /** Question 1: the main reason for borrowing, chosen from the codes the engine offered. */
+  async selectSuitabilityReason(journeyId: string, reasonCode: string): Promise<SuitabilityStage> {
+    return apiClient.post<SuitabilityStage>(
+      `/api/customer/ai/credit-journeys/${journeyId}/suitability/reason`,
+      { reasonCode }
+    );
+  },
+
+  /**
+   * Answer the current question from its offered options.
+   *
+   * Free text is not sent here — it goes through sendMessage, where the assistant maps it onto one of
+   * these same codes and re-asks if it cannot, so the browser never chooses an answer for the customer.
+   */
+  async answerSuitability(
+    journeyId: string,
+    stepId: string,
+    codes: string[]
+  ): Promise<SuitabilityStage> {
+    return apiClient.post<SuitabilityStage>(
+      `/api/customer/ai/credit-journeys/${journeyId}/suitability/answer`,
+      { stepId, codes }
+    );
+  },
+
+  /**
+   * Yes or no to something the assistant inferred from what the customer already said.
+   *
+   * This call is the only thing that turns an inference into an answer, so the audit trail can tell
+   * a bank answer from a machine guess.
+   */
+  async confirmProposal(
+    journeyId: string,
+    stepId: string,
+    accept: boolean
+  ): Promise<SuitabilityStage> {
+    return apiClient.post<SuitabilityStage>(
+      `/api/customer/ai/credit-journeys/${journeyId}/suitability/confirm-proposal`,
+      { stepId, accept }
+    );
   },
 };

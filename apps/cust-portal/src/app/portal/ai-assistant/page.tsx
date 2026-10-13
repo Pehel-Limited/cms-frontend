@@ -14,16 +14,8 @@ import {
   type CreditJourney,
   type CreditNeedFacts,
   type IntentOption,
+  type SuitabilityStage,
 } from '@/services/api/ai-credit-journey-service';
-import {
-  productService,
-  matchProductsForIntent,
-  filterIntentsForCatalogue,
-  filterProductsForSegment,
-  PRODUCT_TYPE_LABELS,
-  type LoanProduct,
-} from '@/services/api/product-service';
-import { applicationService } from '@/services/api/application-service';
 
 /* ─── helpers ────────────────────────────────────────────────── */
 
@@ -283,6 +275,329 @@ function ReviewCard({
   );
 }
 
+/* ─── Suitability interview ─────────────────────────────────── */
+
+interface SuitabilityPanelProps {
+  stage: SuitabilityStage;
+  busy: boolean;
+  preparingProductId: string | null;
+  onReason: (reasonCode: string) => void;
+  onAnswer: (stepId: string, codes: string[]) => void;
+  onConfirm: (stepId: string, accept: boolean) => void;
+  onRetry: () => void;
+  onStart: (productId: string) => void;
+}
+
+/**
+ * Renders whichever step the rule engine says we are on.
+ *
+ * The component deliberately holds no journey logic: it never decides what comes after an answer,
+ * because the engine re-derives the path from the stored answers and a second copy of that path in
+ * the browser is how a UI and an audit record start disagreeing about what a customer was told.
+ */
+function SuitabilityPanel({
+  stage,
+  busy,
+  preparingProductId,
+  onReason,
+  onAnswer,
+  onConfirm,
+  onRetry,
+  onStart,
+}: SuitabilityPanelProps) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const [showWhy, setShowWhy] = useState(false);
+
+  const isMulti = stage.questionType === 'multi';
+  const recommended = stage.recommended ?? [];
+  const unavailable = stage.unavailableCategories ?? [];
+
+  /* The assistant read this out of what the customer already said. It is shown as a proposal, never
+     applied: one click either accepts it or hands the choice back to them. */
+  if (stage.state === 'CONFIRM' && stage.proposal) {
+    const p = stage.proposal;
+    return (
+      <div className="panel space-y-4 p-5">
+        <p className="text-sm font-semibold" style={{ color: 'var(--brand-on-soft)' }}>
+          Let me check I understood
+        </p>
+        <h2 className="serif text-[22px] font-medium leading-snug" style={{ color: 'var(--text-primary)' }}>
+          {p.stepId === 'reason' ? `So the main reason is: ${p.label}. Is that right?`
+            : `I have taken your answer as “${p.label}”. Right?`}
+        </h2>
+        {p.fromUtterance && (
+          <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>
+            From what you said earlier: “{p.fromUtterance}”
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onConfirm(p.stepId, true)}
+            disabled={busy}
+            className="btn btn-primary btn-sm"
+          >
+            Yes, that&apos;s it
+          </button>
+          <button
+            onClick={() => onConfirm(p.stepId, false)}
+            disabled={busy}
+            className="btn btn-secondary btn-sm"
+          >
+            No, let me choose
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage.state === 'REASON_REQUIRED') {
+    return (
+      <div className="panel space-y-4 p-5">
+        <h2 className="section-title">{stage.message}</h2>
+        <div className="grid grid-cols-1 gap-2">
+          {stage.choices.map(choice => (
+            <button
+              key={choice.code}
+              onClick={() => onReason(choice.code)}
+              disabled={busy}
+              className="rounded-xl px-4 py-3 text-left text-base leading-snug transition-colors hover:bg-black/[0.04] disabled:opacity-40 dark:hover:bg-white/[0.06]"
+              style={{ border: '1px solid var(--surface-border)', color: 'var(--text-primary)' }}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          Take the one that fits best — you can change your mind before submitting anything.
+        </p>
+      </div>
+    );
+  }
+
+  if (stage.state === 'ASKING') {
+    return (
+      <div className="panel space-y-5 p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold" style={{ color: 'var(--brand-on-soft)' }}>
+            Question {stage.questionNumber} of {stage.questionTotal}
+          </p>
+          {stage.youToldUs && (
+            <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>
+              You told us: {stage.youToldUs}
+            </p>
+          )}
+        </div>
+
+        {stage.conditions && stage.conditions.length > 0 && (
+          <div className="alert alert-info" role="note">
+            <div className="flex-1 text-sm">
+              <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                To qualify, you&apos;ll need to provide:
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                {stage.conditions.map(c => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+              <p className="mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                Nothing to upload now.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <h2 className="serif text-[22px] font-medium leading-snug" style={{ color: 'var(--text-primary)' }}>
+          {stage.message}
+        </h2>
+
+        <div className="flex flex-wrap gap-2">
+          {stage.choices.map(choice => {
+            const active = picked.includes(choice.code);
+            return (
+              <button
+                key={choice.code}
+                onClick={() =>
+                  isMulti
+                    ? setPicked(prev =>
+                        prev.includes(choice.code)
+                          ? prev.filter(c => c !== choice.code)
+                          : [...prev, choice.code]
+                      )
+                    : onAnswer(stage.expectedStepId!, [choice.code])
+                }
+                disabled={busy}
+                aria-pressed={isMulti ? active : undefined}
+                className={`chip transition-colors disabled:opacity-40 ${
+                  active
+                    ? '!bg-black/90 !text-white dark:!bg-white dark:!text-black'
+                    : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
+                }`}
+              >
+                {choice.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {isMulti && (
+          <button
+            onClick={() => onAnswer(stage.expectedStepId!, picked)}
+            disabled={busy || picked.length === 0}
+            className="btn btn-primary btn-sm"
+          >
+            Continue
+          </button>
+        )}
+
+        {stage.helpText && (
+          <div className="text-sm">
+            <button
+              onClick={() => setShowWhy(v => !v)}
+              className="font-medium transition-colors hover:underline"
+              style={{ color: 'var(--brand-on-soft)' }}
+              aria-expanded={showWhy}
+            >
+              Why are we asking?
+            </button>
+            {showWhy && (
+              <p className="mt-2" style={{ color: 'var(--text-secondary)' }}>
+                {stage.helpText}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (stage.state === 'READY') {
+    return (
+      <div className="space-y-4">
+        <div className="alert alert-info" role="status">
+          <span className="flex-1 text-sm">{stage.notADecisionStatement}</span>
+        </div>
+
+        <div className="panel space-y-4 p-5">
+          {recommended.length > 0 && <h2 className="section-title">Products that may suit</h2>}
+          {recommended.length > 0 && stage.suggestionReason && (
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Because {stage.suggestionReason}.
+            </p>
+          )}
+
+          {recommended.length === 0 ? (
+            <div className="empty-state">
+              <p className="empty-state-title">Nothing online fits this</p>
+              <p className="empty-state-text">
+                {stage.message}
+                {stage.supportReference ? ` Quote ${stage.supportReference} if you'd like to ask about it.` : ''}
+              </p>
+              <Link href="/portal/products" className="btn btn-secondary btn-sm mt-4">
+                Browse all products
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {recommended.map((p, i) => (
+                <div key={p.productId} className="panel flex flex-col p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {p.productName}
+                      </p>
+                      {p.description && (
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                          {p.description}
+                        </p>
+                      )}
+                    </div>
+                    {i === 0 && <span className="badge badge-success shrink-0">Suggested</span>}
+                  </div>
+                  {p.needsReview && (
+                    <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
+                      We&apos;ll need a bit more information before confirming this one.
+                    </p>
+                  )}
+                  <button
+                    onClick={() => onStart(p.productId)}
+                    disabled={preparingProductId !== null}
+                    className="btn btn-primary btn-sm mt-4 self-start"
+                  >
+                    {preparingProductId === p.productId
+                      ? 'Starting your application…'
+                      : 'Start this application'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {unavailable.length > 0 && (
+            <div className="space-y-1 border-t pt-4" style={{ borderColor: 'var(--surface-border)' }}>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Not available online
+              </p>
+              {unavailable.map(u => (
+                <p key={u.code} className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {u.name} — a colleague can talk that one through with you.
+                </p>
+              ))}
+            </div>
+          )}
+
+          {stage.answered && stage.answered.length > 0 && (
+            <details className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              <summary className="cursor-pointer font-medium">What you told us</summary>
+              <ul className="mt-2 space-y-1 pl-4">
+                {stage.answered.map((a, i) => (
+                  <li key={`${a.question}-${i}`}>
+                    {a.question} <span style={{ color: 'var(--text-muted)' }}>— {a.answer}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          {stage.supportReference && (
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              Reference {stage.supportReference} — give this to a colleague if you want to ask how we
+              picked these.
+            </p>
+          )}
+        </div>
+
+        <p className="text-center text-sm">
+          <Link
+            href="/portal/products"
+            className="font-medium transition-colors hover:underline"
+            style={{ color: 'var(--brand-on-soft)' }}
+          >
+            Or browse all products
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  /* Anything the engine could not answer, said plainly rather than papered over. */
+  return (
+    <div className="panel space-y-4 p-5">
+      <h2 className="section-title">Guided suitability</h2>
+      <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+        {stage.message}
+      </p>
+      {stage.state === 'ENGINE_UNAVAILABLE' && (
+        <button onClick={onRetry} disabled={busy} className="btn btn-secondary btn-sm">
+          Try again
+        </button>
+      )}
+      <Link href="/portal/products" className="btn btn-secondary btn-sm">
+        Browse products instead
+      </Link>
+    </div>
+  );
+}
+
 /* ─── Main page ─────────────────────────────────────────────── */
 
 export default function AiAssistantPage() {
@@ -293,36 +608,12 @@ export default function AiAssistantPage() {
   const [error, setError] = useState<string | null>(null);
   const [notEnabled, setNotEnabled] = useState(false);
   const [intentOptions, setIntentOptions] = useState<IntentOption[]>(DEFAULT_INTENT_OPTIONS);
-  /* The bank's products open to this customer — the catalogue the chips and
-     the matched-product list are both read against. */
-  const [catalogue, setCatalogue] = useState<LoanProduct[]>([]);
-  const [loadingCatalogue, setLoadingCatalogue] = useState(true);
   const [preparingProductId, setPreparingProductId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [journey?.recentMessages.length]);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      productService.getProducts(),
-      applicationService.getContext().catch(() => null),
-    ])
-      .then(([list, ctx]) => {
-        if (!cancelled) setCatalogue(filterProductsForSegment(list, ctx?.segment));
-      })
-      .catch(() => {
-        if (!cancelled) setCatalogue([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingCatalogue(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function handleApiError(err: unknown) {
     const e = err as { status?: number; message?: string };
@@ -331,6 +622,23 @@ export default function AiAssistantPage() {
     } else {
       setError(e?.message || 'Something went wrong. Please try again.');
     }
+  }
+
+  /**
+   * The bff's circuit breaker answers a failed call with a 200 and a body that has no journeyId.
+   * Treating that as a journey is what used to strand the page: it wiped the intent options out from
+   * under the "choose one of the options below" message, then posted every later message to
+   * /credit-journeys/null/messages. So a body without an id is an error, not a state — and whatever
+   * the customer already has on screen stays on it.
+   */
+  function adoptJourney(result: CreditJourney) {
+    if (!result.journeyId) {
+      setError('The AI assistant is unavailable right now. Nothing you have told us is lost — '
+        + 'please try again in a moment.');
+      return;
+    }
+    setJourney(result);
+    if (result.intentOptions?.length) setIntentOptions(result.intentOptions);
   }
 
   async function handleSend(e?: React.FormEvent) {
@@ -344,8 +652,7 @@ export default function AiAssistantPage() {
       const result = journey
         ? await aiCreditJourneyService.sendMessage(journey.journeyId, text)
         : await aiCreditJourneyService.start(text);
-      setJourney(result);
-      setIntentOptions(result.intentOptions);
+      adoptJourney(result);
     } catch (err) {
       handleApiError(err);
       setDraft(text);
@@ -362,8 +669,7 @@ export default function AiAssistantPage() {
       const result = journey
         ? await aiCreditJourneyService.selectIntent(journey.journeyId, code)
         : await aiCreditJourneyService.start(undefined, code);
-      setJourney(result);
-      setIntentOptions(result.intentOptions);
+      adoptJourney(result);
     } catch (err) {
       handleApiError(err);
     } finally {
@@ -371,16 +677,81 @@ export default function AiAssistantPage() {
     }
   }
 
-  async function handleStartApplication(product: LoanProduct) {
+  async function handleStartApplication(productId: string) {
     if (!journey || preparingProductId) return;
-    setPreparingProductId(product.productId);
+    setPreparingProductId(productId);
     setError(null);
     try {
-      const result = await aiCreditJourneyService.prepareApplication(journey.journeyId, product.productId);
+      const result = await aiCreditJourneyService.prepareApplication(journey.journeyId, productId);
       router.push(`/portal/applications/${result.applicationId}`);
     } catch (err) {
       handleApiError(err);
       setPreparingProductId(null);
+    }
+  }
+
+  /**
+   * Every one of these replaces the journey rather than patching the stage locally, because the
+   * engine re-derives the next question from the stored answers — a client-side guess about what
+   * comes next is exactly the drift this design avoids.
+   */
+  async function applyStage(next: SuitabilityStage) {
+    if (!journey) return;
+    const refreshed = await aiCreditJourneyService.getJourney(journey.journeyId);
+    setJourney({ ...refreshed, suitability: next });
+  }
+
+  async function handleSuitabilityReason(reasonCode: string) {
+    if (!journey || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await applyStage(await aiCreditJourneyService.selectSuitabilityReason(journey.journeyId, reasonCode));
+    } catch (err) {
+      handleApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSuitabilityAnswer(stepId: string, codes: string[]) {
+    if (!journey || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await applyStage(await aiCreditJourneyService.answerSuitability(journey.journeyId, stepId, codes));
+    } catch (err) {
+      handleApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Yes or no to something the assistant inferred. This is the only path that accepts a guess. */
+  async function handleConfirmProposal(stepId: string, accept: boolean) {
+    if (!journey || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await applyStage(await aiCreditJourneyService.confirmProposal(journey.journeyId, stepId, accept));
+    } catch (err) {
+      handleApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSuitabilityRetry() {
+    if (!journey || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const stage = await aiCreditJourneyService.getSuitability(journey.journeyId);
+      setJourney({ ...journey, suitability: stage });
+    } catch (err) {
+      handleApiError(err);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -393,7 +764,7 @@ export default function AiAssistantPage() {
         journey.journeyId,
         journey.currentReview.reviewId
       );
-      setJourney(result);
+      adoptJourney(result);
     } catch (err) {
       handleApiError(err);
     } finally {
@@ -411,7 +782,7 @@ export default function AiAssistantPage() {
         journey.currentReview.reviewId,
         updates
       );
-      setJourney(result);
+      adoptJourney(result);
     } catch (err) {
       handleApiError(err);
     } finally {
@@ -421,21 +792,10 @@ export default function AiAssistantPage() {
 
   const messages = journey?.recentMessages ?? [];
   const review = journey?.currentReview ?? null;
-  const isUnavailable = journey?.status === 'AI_PROVIDER_UNAVAILABLE';
-
-  // Only offer the purposes this customer's own catalogue can lead to, and
-  // refine the confirmed need down to those products.
-  const visibleIntentOptions = filterIntentsForCatalogue(intentOptions, catalogue);
-  const matchedProducts =
-    review?.status === 'CONFIRMED'
-      ? matchProductsForIntent(
-          catalogue,
-          review.facts.purpose,
-          review.facts.estimatedCost,
-          review.facts.borrowerSegment,
-          review.facts.assetCategory
-        )
-      : [];
+  // The interview is the only source of what is suitable. The page no longer matches a purpose to
+  // product types itself, so the same answers cannot produce a different short list in the browser
+  // than the rule engine produced for the audit record.
+  const suitability = journey?.suitability ?? null;
 
   if (notEnabled) {
     return (
@@ -489,13 +849,6 @@ export default function AiAssistantPage() {
         </div>
       </div>
 
-      {isUnavailable && (
-        <div className="alert alert-warning" role="status">
-          <span className="flex-1 text-sm">
-            The AI assistant is temporarily unavailable. Choose one of the options below to continue.
-          </span>
-        </div>
-      )}
       {error && (
         <div className="alert alert-error" role="alert">
           <span className="flex-1 text-sm">{error}</span>
@@ -572,13 +925,13 @@ export default function AiAssistantPage() {
         </div>
 
         {/* Intent option chips */}
-        {visibleIntentOptions.length > 0 && (!review || review.status !== 'CONFIRMED') && (
+        {intentOptions.length > 0 && (!review || review.status !== 'CONFIRMED') && (
           <div
             className="flex flex-wrap gap-2 px-5 pb-4 pt-4"
             style={{ borderTop: '1px solid var(--surface-border)' }}
           >
             <h2 className="sr-only">Suggested options</h2>
-            {visibleIntentOptions.map(opt => (
+            {intentOptions.map(opt => (
               <button
                 key={opt.code}
                 onClick={() => handleSelectIntent(opt.code)}
@@ -636,87 +989,19 @@ export default function AiAssistantPage() {
         />
       )}
 
-      {review?.status === 'CONFIRMED' && (
-        <div className="space-y-4">
-          <h2 className="section-title">Matching products</h2>
-
-          {loadingCatalogue && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Skeleton className="h-36" />
-              <Skeleton className="h-36" />
-            </div>
-          )}
-
-          {!loadingCatalogue && matchedProducts.length === 0 && (
-            <div className="empty-state">
-              <div className="empty-state-icon">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <p className="empty-state-title">No matching products</p>
-              <p className="empty-state-text">
-                We couldn&apos;t match this request to a product. You can still browse the full
-                catalogue.
-              </p>
-              <Link href="/portal/products" className="btn btn-secondary btn-sm mt-4">
-                Browse all products
-              </Link>
-            </div>
-          )}
-
-          {!loadingCatalogue && matchedProducts.length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {matchedProducts.slice(0, 4).map(p => {
-                const fits =
-                  review.facts.estimatedCost != null &&
-                  review.facts.estimatedCost >= p.minLoanAmount &&
-                  review.facts.estimatedCost <= p.maxLoanAmount;
-                return (
-                  <div key={p.productId} className="panel flex flex-col p-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                          {p.productName}
-                        </p>
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                          {PRODUCT_TYPE_LABELS[p.productType] || p.productType}
-                        </p>
-                      </div>
-                      {fits && <span className="badge badge-success shrink-0">Matches your amount</span>}
-                    </div>
-                    <p className="mt-3 text-sm tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-                      {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
-                      {' · '}
-                      {p.minInterestRate}%–{p.maxInterestRate}% p.a.
-                    </p>
-                    <button
-                      onClick={() => handleStartApplication(p)}
-                      disabled={preparingProductId !== null}
-                      className="btn btn-primary btn-sm mt-4 self-start"
-                    >
-                      {preparingProductId === p.productId
-                        ? 'Starting your application…'
-                        : 'Start this application'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {!loadingCatalogue && matchedProducts.length > 0 && (
-            <p className="text-center text-sm">
-              <Link
-                href="/portal/products"
-                className="font-medium transition-colors hover:underline"
-                style={{ color: 'var(--brand-on-soft)' }}
-              >
-                Or browse all products
-              </Link>
-            </p>
-          )}
-        </div>
+      {review?.status === 'CONFIRMED' && suitability && (
+        <SuitabilityPanel
+          /* Remounting per question clears any half-picked multi-select answer. */
+          key={suitability.expectedStepId ?? suitability.state}
+          stage={suitability}
+          busy={busy}
+          preparingProductId={preparingProductId}
+          onReason={handleSuitabilityReason}
+          onAnswer={handleSuitabilityAnswer}
+          onConfirm={handleConfirmProposal}
+          onRetry={handleSuitabilityRetry}
+          onStart={handleStartApplication}
+        />
       )}
     </div>
   );

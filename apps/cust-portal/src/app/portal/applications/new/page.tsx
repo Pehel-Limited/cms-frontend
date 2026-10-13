@@ -21,7 +21,6 @@ import {
   LoanProduct,
   RatePlan,
   PRODUCT_TYPE_LABELS,
-  filterProductsForSegment,
 } from '@/services/api/product-service';
 import { documentExtractionService, DocumentType, DocumentExtractionResult } from '@/services/api/document-extraction-service';
 import { formatCurrency } from '@/lib/format';
@@ -141,10 +140,8 @@ export default function NewApplicationPage() {
 
   const STEPS = isBusiness ? BUSINESS_STEPS : PERSONAL_STEPS;
 
-  const visibleProducts = useMemo(
-    () => filterProductsForSegment(products, appContext?.segment),
-    [products, appContext]
-  );
+  // Already filtered to the customer's segment by the catalogue endpoint.
+  const visibleProducts = useMemo(() => products, [products]);
 
   // Form data
   const [form, setForm] = useState({

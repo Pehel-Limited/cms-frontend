@@ -6,9 +6,7 @@ import {
   productService,
   LoanProduct,
   PRODUCT_TYPE_LABELS,
-  filterProductsForSegment,
 } from '@/services/api/product-service';
-import { applicationService } from '@/services/api/application-service';
 import { formatCurrency } from '@/lib/format';
 
 export default function ProductsPage() {
@@ -30,11 +28,11 @@ export default function ProductsPage() {
     try {
       setLoading(true);
       setError(null);
-      const [data, ctx] = await Promise.all([
-        productService.getProducts(),
-        applicationService.getContext().catch(() => null),
-      ]);
-      setProducts(filterProductsForSegment(data, ctx?.segment));
+      // The catalogue endpoint already returns only products open to this customer's segment,
+      // resolved server-side from their record. Filtering again here meant a second copy of the rule
+      // with the opposite failure mode: the old helper returned everything when the segment was
+      // unknown, which is precisely when it should return nothing.
+      setProducts(await productService.getProducts());
     } catch (err: any) {
       setError(err.message || 'Failed to load products');
     } finally {

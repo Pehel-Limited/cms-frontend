@@ -776,6 +776,45 @@ html.dark .force-light {
 .btn-brand:hover:not(:disabled) { background: var(--rm-brand-strong); }
 .btn-brand:focus-visible { outline: 2px solid var(--rm-brand); outline-offset: 2px; }
 
+/* Action-button hierarchy: one solid brand action, quiet outlines for the rest,
+   and a soft-danger group for actions that end the application. Replaces the
+   saturated hue-per-outcome buttons, which made a worklist read as a legend. */
+.rm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.rm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rm-btn svg { opacity: 0.8; }
+
+.rm-btn-solid { background: var(--rm-brand); color: #fff; }
+.rm-btn-solid:hover:not(:disabled) { background: var(--rm-brand-strong); }
+.rm-btn-solid:focus-visible { outline: 2px solid var(--rm-brand); outline-offset: 2px; }
+
+.rm-btn-quiet {
+  background: transparent;
+  border-color: var(--rm-hairline-strong);
+  color: var(--rm-text-secondary);
+}
+.rm-btn-quiet:hover:not(:disabled) {
+  background: var(--rm-brand-soft);
+  border-color: var(--rm-brand);
+  color: var(--rm-brand-on-soft);
+}
+
+.rm-btn-danger { background: var(--rm-danger-soft); color: #b91c1c; }
+.rm-btn-danger:hover:not(:disabled) { background: rgba(207, 67, 105, 0.2); }
+html.dark .rm-btn-danger { color: var(--rm-down); }
+html.dark .rm-btn-danger:hover:not(:disabled) { background: rgba(240, 121, 156, 0.24); }
+
 /* Placeholder and link colours for token-themed forms. */
 .input-brand::placeholder { color: var(--rm-text-muted); }
 .link-brand { color: var(--rm-brand-on-soft); }

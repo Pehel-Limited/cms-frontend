@@ -20,6 +20,7 @@ import { WorkflowActions, WorkflowAction } from './WorkflowActions';
 import { OfferCard } from './OfferCard';
 import { AuditTimeline } from './AuditTimeline';
 import { BookingModal } from './BookingModal';
+import { WorkflowIcon, type WorkflowIconName } from './icons';
 
 interface ApplicationWorkflowPanelProps {
   applicationId: string;
@@ -35,6 +36,36 @@ interface ApplicationWorkflowPanelProps {
   productName?: string;
   onStatusChange?: () => void;
   onRequestAssign?: () => void;
+}
+
+/** Task state, read from the pill rather than the card fill: one tinted chip per row. */
+function taskStatusStyle(status: string): React.CSSProperties {
+  const fg =
+    status === 'DONE'
+      ? 'var(--rm-up)'
+      : status === 'IN_PROGRESS'
+        ? 'var(--rm-brand)'
+        : 'var(--rm-text-muted)';
+  return {
+    backgroundColor: `color-mix(in srgb, ${fg} 14%, transparent)`,
+    color: fg,
+  };
+}
+
+function TabEmpty({ icon, text }: { icon: WorkflowIconName; text: string }) {
+  return (
+    <div className="flex flex-col items-center py-8 text-center">
+      <span
+        className="flex h-11 w-11 items-center justify-center rounded-full"
+        style={{ backgroundColor: 'var(--rm-input)', color: 'var(--rm-text-muted)' }}
+      >
+        <WorkflowIcon name={icon} size={19} />
+      </span>
+      <p className="mt-3 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        {text}
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -316,33 +347,47 @@ export function ApplicationWorkflowPanel({
       />
 
       {/* Tab Navigation */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="border-b border-gray-200">
-          <nav className="flex -mb-px">
+      <div
+        className="overflow-hidden rounded-3xl"
+        style={{
+          backgroundColor: 'var(--rm-card)',
+          border: '1px solid var(--rm-hairline)',
+        }}
+      >
+        <div style={{ borderBottom: '1px solid var(--rm-hairline)' }}>
+          <nav className="flex overflow-x-auto" aria-label="Application workflow">
             {[
-              { id: 'workflow', label: 'Workflow Actions', icon: '⚡' },
+              { id: 'workflow', label: 'Workflow Actions', icon: 'bolt' },
               {
                 id: 'tasks',
                 label: 'Tasks',
-                icon: '📋',
+                icon: 'clipboard',
                 count: tasks.filter(t => t.status !== 'DONE').length,
               },
-              { id: 'offer', label: 'Offer', icon: '💰' },
-              { id: 'history', label: 'History', icon: '📜', count: auditEvents.length },
+              { id: 'offer', label: 'Offer', icon: 'banknote' },
+              { id: 'history', label: 'History', icon: 'history', count: auditEvents.length },
             ].map(tab => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                aria-current={activeTab === tab.id ? 'true' : undefined}
+                className="inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3.5 text-sm font-medium transition-opacity hover:opacity-80"
+                style={{
+                  borderColor: activeTab === tab.id ? 'var(--rm-brand)' : 'transparent',
+                  color: activeTab === tab.id ? 'var(--rm-brand-on-soft)' : 'var(--rm-text-muted)',
+                }}
               >
-                <span className="mr-2">{tab.icon}</span>
+                <WorkflowIcon name={tab.icon as WorkflowIconName} />
                 {tab.label}
                 {tab.count !== undefined && tab.count > 0 && (
-                  <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums"
+                    style={{
+                      backgroundColor: 'var(--rm-input)',
+                      color: 'var(--rm-text-secondary)',
+                    }}
+                  >
                     {tab.count}
                   </span>
                 )}
@@ -373,79 +418,80 @@ export function ApplicationWorkflowPanel({
           {activeTab === 'tasks' && (
             <div>
               {tasks.length === 0 ? (
-                <div className="text-center py-8">
-                  <span className="text-4xl">📋</span>
-                  <p className="text-gray-500 mt-2">No pending tasks</p>
-                </div>
+                <TabEmpty icon="clipboard" text="No pending tasks" />
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {tasks.map(task => (
                     <div
                       key={task.id}
-                      className={`p-4 rounded-lg border ${
-                        task.status === 'DONE'
-                          ? 'bg-green-50 border-green-200'
-                          : task.status === 'IN_PROGRESS'
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-white border-gray-200'
-                      }`}
+                      className="rounded-2xl p-4"
+                      style={{
+                        backgroundColor: 'var(--rm-input)',
+                        border: '1px solid var(--rm-hairline)',
+                      }}
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-4">
                         <div>
-                          <h4 className="font-medium text-gray-900">
-                            {task.taskType.replace(/_/g, ' ')}
+                          <h4
+                            className="font-medium capitalize"
+                            style={{ color: 'var(--rm-text)' }}
+                          >
+                            {task.taskType.toLowerCase().replace(/_/g, ' ')}
                           </h4>
-                          <p className="text-sm text-gray-500 mt-1">
+                          <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
                             Queue: {task.queue} • Priority: {task.priority}
                           </p>
                           {task.assignedTo && (
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
                               Assigned to: {task.assigneeName || task.assignedTo}
                             </p>
                           )}
-                          {task.notes && <p className="text-sm text-gray-600 mt-2">{task.notes}</p>}
+                          {task.notes && (
+                            <p className="mt-2 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                              {task.notes}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`px-2 py-1 text-xs rounded-full ${
-                              task.status === 'DONE'
-                                ? 'bg-green-100 text-green-800'
-                                : task.status === 'IN_PROGRESS'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-gray-100 text-gray-800'
-                            }`}
-                          >
-                            {task.status}
-                          </span>
-                        </div>
+                        <span
+                          className="flex-none rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]"
+                          style={taskStatusStyle(task.status)}
+                        >
+                          {task.status.replace(/_/g, ' ')}
+                        </span>
                       </div>
 
                       {/* Task actions */}
                       {task.status !== 'DONE' && (
-                        <div className="mt-4 flex gap-2">
+                        <div className="mt-4 flex flex-wrap gap-2.5">
                           {!task.assignedTo && (
                             <button
+                              type="button"
                               onClick={() => handleClaimTask(task.id)}
                               disabled={loading}
-                              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                              className="rm-btn rm-btn-quiet"
                             >
-                              Claim Task
+                              <WorkflowIcon name="userPlus" />
+                              Claim task
                             </button>
                           )}
                           {task.assignedTo === currentUserId && (
                             <>
                               <button
+                                type="button"
                                 onClick={() => handleCompleteTask(task.id, 'APPROVE', '')}
                                 disabled={loading}
-                                className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                className="rm-btn rm-btn-solid"
                               >
+                                <WorkflowIcon name="check" />
                                 Approve
                               </button>
                               <button
+                                type="button"
                                 onClick={() => handleCompleteTask(task.id, 'DECLINE', '')}
                                 disabled={loading}
-                                className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                                className="rm-btn rm-btn-danger"
                               >
+                                <WorkflowIcon name="x" />
                                 Decline
                               </button>
                             </>
@@ -471,20 +517,24 @@ export function ApplicationWorkflowPanel({
                   productName={productName}
                 />
               ) : (
-                <div className="text-center py-8">
-                  <span className="text-4xl">💰</span>
-                  <p className="text-gray-500 mt-2">
-                    {lomsStatus === 'APPROVED'
-                      ? 'Ready to generate offer'
-                      : 'No offer available yet'}
-                  </p>
+                <div className="flex flex-col items-center">
+                  <TabEmpty
+                    icon="banknote"
+                    text={
+                      lomsStatus === 'APPROVED'
+                        ? 'Ready to generate offer'
+                        : 'No offer available yet'
+                    }
+                  />
                   {lomsStatus === 'APPROVED' && (
                     <button
+                      type="button"
                       onClick={() => handleAction('GENERATE_OFFER')}
                       disabled={loading}
-                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                      className="rm-btn rm-btn-solid mt-1"
                     >
-                      Generate Offer
+                      <WorkflowIcon name="file" />
+                      Generate offer
                     </button>
                   )}
                 </div>
@@ -492,23 +542,35 @@ export function ApplicationWorkflowPanel({
 
               {/* Booking Status */}
               {booking && (
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900 mb-2">Booking Status</h4>
+                <div
+                  className="mt-6 rounded-2xl p-4"
+                  style={{
+                    backgroundColor: 'var(--rm-input)',
+                    border: '1px solid var(--rm-hairline)',
+                  }}
+                >
+                  <h4 className="mb-2 font-medium" style={{ color: 'var(--rm-text)' }}>
+                    Booking Status
+                  </h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-gray-500">Status</p>
-                      <p className="font-medium">{booking.bookingStatus}</p>
+                      <p style={{ color: 'var(--rm-text-muted)' }}>Status</p>
+                      <p className="font-medium" style={{ color: 'var(--rm-text)' }}>
+                        {booking.bookingStatus}
+                      </p>
                     </div>
                     {booking.temenosArrangementId && (
                       <div>
-                        <p className="text-gray-500">Temenos Arrangement ID</p>
-                        <p className="font-medium font-mono">{booking.temenosArrangementId}</p>
+                        <p style={{ color: 'var(--rm-text-muted)' }}>Temenos Arrangement ID</p>
+                        <p className="font-mono font-medium" style={{ color: 'var(--rm-text)' }}>
+                          {booking.temenosArrangementId}
+                        </p>
                       </div>
                     )}
                     {booking.errorMessage && (
                       <div className="col-span-2">
-                        <p className="text-gray-500">Error</p>
-                        <p className="text-red-600">{booking.errorMessage}</p>
+                        <p style={{ color: 'var(--rm-text-muted)' }}>Error</p>
+                        <p style={{ color: 'var(--rm-down)' }}>{booking.errorMessage}</p>
                       </div>
                     )}
                   </div>
@@ -537,30 +599,50 @@ export function ApplicationWorkflowPanel({
 
       {/* Underwriting Decision Modal */}
       {showDecisionModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
-            <div
-              className={`px-6 py-4 ${showDecisionModal === 'approve' ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'}`}
-            >
-              <h3
-                className={`text-lg font-semibold ${showDecisionModal === 'approve' ? 'text-green-900' : 'text-red-900'}`}
-              >
-                {showDecisionModal === 'approve'
-                  ? '✅ Approve Application'
-                  : '❌ Decline Application'}
-              </h3>
-              <p
-                className={`text-sm mt-1 ${showDecisionModal === 'approve' ? 'text-green-700' : 'text-red-700'}`}
-              >
-                {showDecisionModal === 'approve'
-                  ? 'This will approve the application and move it to the offer stage.'
-                  : 'This will decline the application. This action cannot be undone.'}
-              </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div
+            className="mx-4 w-full max-w-md overflow-hidden rounded-3xl"
+            style={{
+              backgroundColor: 'var(--rm-card)',
+              border: '1px solid var(--rm-hairline)',
+              boxShadow: 'var(--rm-shadow-glass)',
+            }}
+          >
+            <div className="px-6 pt-6">
+              <div className="flex items-start gap-3">
+                <span
+                  className="flex h-9 w-9 flex-none items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor:
+                      showDecisionModal === 'approve'
+                        ? 'color-mix(in srgb, var(--rm-up) 14%, transparent)'
+                        : 'var(--rm-danger-soft)',
+                    color: showDecisionModal === 'approve' ? 'var(--rm-up)' : 'var(--rm-down)',
+                  }}
+                >
+                  <WorkflowIcon name={showDecisionModal === 'approve' ? 'check' : 'x'} size={17} />
+                </span>
+                <div>
+                  <h3 className="text-lg font-semibold" style={{ color: 'var(--rm-text)' }}>
+                    {showDecisionModal === 'approve' ? 'Approve application' : 'Decline application'}
+                  </h3>
+                  <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    {showDecisionModal === 'approve'
+                      ? 'This will approve the application and move it to the offer stage.'
+                      : 'This will decline the application. This action cannot be undone.'}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="px-6 py-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="px-6 py-5">
+              <label
+                className="mb-2 block text-sm font-medium"
+                style={{ color: 'var(--rm-text-secondary)' }}
+              >
                 {showDecisionModal === 'approve' ? 'Approval Notes' : 'Reason for Decline'}{' '}
-                {showDecisionModal === 'decline' && <span className="text-red-500">*</span>}
+                {showDecisionModal === 'decline' && (
+                  <span style={{ color: 'var(--rm-down)' }}>*</span>
+                )}
               </label>
               <textarea
                 value={decisionNotes}
@@ -570,31 +652,46 @@ export function ApplicationWorkflowPanel({
                     ? 'Optional notes for approval...'
                     : 'Provide reason for declining...'
                 }
-                className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                className="w-full rounded-2xl p-3 text-sm input-brand"
+                style={{
+                  backgroundColor: 'var(--rm-input)',
+                  border: '1px solid var(--rm-hairline-strong)',
+                  color: 'var(--rm-text)',
+                }}
                 rows={4}
               />
             </div>
-            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <div
+              className="flex justify-end gap-2.5 px-6 py-4"
+              style={{ borderTop: '1px solid var(--rm-hairline)', backgroundColor: 'var(--rm-bg)' }}
+            >
               <button
+                type="button"
                 onClick={() => setShowDecisionModal(null)}
                 disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                className="rm-btn rm-btn-quiet"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => handleDecisionConfirm(showDecisionModal)}
                 disabled={loading || (showDecisionModal === 'decline' && !decisionNotes.trim())}
-                className={`px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 inline-flex items-center gap-2 ${
-                  showDecisionModal === 'approve'
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-red-600 hover:bg-red-700'
+                className={`rm-btn ${
+                  showDecisionModal === 'approve' ? 'rm-btn-solid' : 'rm-btn-danger'
                 }`}
               >
                 {loading && (
-                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                  <span
+                    className="inline-block h-3.5 w-3.5 animate-spin rounded-full"
+                    style={{
+                      border: '2px solid currentColor',
+                      borderTopColor: 'transparent',
+                      opacity: 0.7,
+                    }}
+                  />
                 )}
-                {showDecisionModal === 'approve' ? 'Confirm Approval' : 'Confirm Decline'}
+                {showDecisionModal === 'approve' ? 'Confirm approval' : 'Confirm decline'}
               </button>
             </div>
           </div>

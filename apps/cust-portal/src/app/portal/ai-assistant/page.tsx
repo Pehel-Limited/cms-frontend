@@ -15,6 +15,7 @@ import {
   type CreditNeedFacts,
   type IntentOption,
   type SuitabilityStage,
+  type SuitabilityGroupQuestion,
 } from '@/services/api/ai-credit-journey-service';
 
 /* ─── helpers ────────────────────────────────────────────────── */
@@ -277,12 +278,140 @@ function ReviewCard({
 
 /* ─── Suitability interview ─────────────────────────────────── */
 
+/**
+ * Several interview questions on one screen — the ones the engine can ask together because none of
+ * them is any less applicable because of an answer to another. The assistant's reading of the
+ * customer's own description arrives pre-selected, and nothing is stored until they submit, so a
+ * wrong guess costs them a tap rather than a false answer on a credit application.
+ */
+function GroupedQuestions({
+  group,
+  youToldUs,
+  busy,
+  onSubmit,
+}: {
+  group: SuitabilityGroupQuestion[];
+  youToldUs?: string | null;
+  busy: boolean;
+  onSubmit: (answers: Record<string, string[]>) => void;
+}) {
+  const [picked, setPicked] = useState<Record<string, string[]>>(() => {
+    const initial: Record<string, string[]> = {};
+    group.forEach(q => {
+      if (q.proposedCode) {
+        initial[q.id] = q.type === 'multi'
+          ? q.proposedCode.split(',').filter(Boolean)
+          : [q.proposedCode];
+      }
+    });
+    return initial;
+  });
+
+  const toggle = (question: SuitabilityGroupQuestion, code: string) =>
+    setPicked(prev => {
+      const have = prev[question.id] ?? [];
+      if (question.type === 'multi') {
+        return {
+          ...prev,
+          [question.id]: have.includes(code) ? have.filter(c => c !== code) : [...have, code],
+        };
+      }
+      return { ...prev, [question.id]: [code] };
+    });
+
+  const complete = group.every(q => (picked[q.id]?.length ?? 0) >= (q.min ?? 1));
+
+  return (
+    <div className="panel space-y-6 p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-semibold" style={{ color: 'var(--brand-on-soft)' }}>
+          A few quick questions
+        </p>
+        {youToldUs && (
+          <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>
+            You told us: {youToldUs}
+          </p>
+        )}
+      </div>
+
+      {group.map(question => {
+        const chosen = picked[question.id] ?? [];
+        return (
+          <div key={question.id} className="space-y-3">
+            <h2
+              className="serif text-[20px] font-medium leading-snug"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {question.text}
+            </h2>
+
+            {question.proposedLabel && chosen.length > 0 && (
+              <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>
+                Taken from what you said earlier — change it if that is not right.
+              </p>
+            )}
+
+            {question.conditions && question.conditions.length > 0 && (
+              <div className="alert alert-info" role="note">
+                <div className="flex-1 text-sm">
+                  <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                    To qualify, you&apos;ll need to provide:
+                  </p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                    {question.conditions.map(c => (
+                      <li key={c}>{c}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                    Nothing to upload now.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {question.options.map(option => {
+                const active = chosen.includes(option.code);
+                return (
+                  <button
+                    key={option.code}
+                    onClick={() => toggle(question, option.code)}
+                    disabled={busy}
+                    aria-pressed={question.type === 'multi' ? active : undefined}
+                    className={`chip transition-colors disabled:opacity-40 ${
+                      active
+                        ? '!bg-black/90 !text-white dark:!bg-white dark:!text-black'
+                        : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <button
+        onClick={() => onSubmit(picked)}
+        disabled={busy || !complete}
+        className="btn btn-primary btn-sm"
+      >
+        Continue
+      </button>
+    </div>
+  );
+}
+
 interface SuitabilityPanelProps {
   stage: SuitabilityStage;
   busy: boolean;
   preparingProductId: string | null;
   onReason: (reasonCode: string) => void;
+  onBorrowerType: (code: string) => void;
   onAnswer: (stepId: string, codes: string[]) => void;
+  onAnswerGroup: (answers: Record<string, string[]>) => void;
   onConfirm: (stepId: string, accept: boolean) => void;
   onRetry: () => void;
   onStart: (productId: string) => void;
@@ -300,13 +429,16 @@ function SuitabilityPanel({
   busy,
   preparingProductId,
   onReason,
+  onBorrowerType,
   onAnswer,
+  onAnswerGroup,
   onConfirm,
   onRetry,
   onStart,
 }: SuitabilityPanelProps) {
   const [picked, setPicked] = useState<string[]>([]);
   const [showWhy, setShowWhy] = useState(false);
+  const [correctingType, setCorrectingType] = useState(false);
 
   const isMulti = stage.questionType === 'multi';
   const recommended = stage.recommended ?? [];
@@ -350,15 +482,57 @@ function SuitabilityPanel({
     );
   }
 
-  if (stage.state === 'REASON_REQUIRED') {
+  /* Both ask the customer to pick one of the offered options; only which fact the answer writes
+     differs, so they share a renderer rather than duplicating the list. */
+  if (stage.state === 'REASON_REQUIRED' || stage.state === 'BORROWER_TYPE_REQUIRED') {
+    const basis = stage.borrowingTypeBasis;
+    const choose = (code: string) =>
+      stage.state === 'BORROWER_TYPE_REQUIRED' ? onBorrowerType(code) : onReason(code);
     return (
       <div className="panel space-y-4 p-5">
         <h2 className="section-title">{stage.message}</h2>
+        {/* The interview decided farm-versus-business from the sector on the account rather than
+            asking. Saying so gives the customer the chance to correct a classification that would
+            otherwise quietly decide which products they are offered. */}
+        {basis && (
+          <div className="space-y-2">
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              {basis.statement}
+            </p>
+            {correctingType ? (
+              <div className="grid grid-cols-1 gap-2 pt-1">
+                {(basis.options ?? []).map(option => (
+                  <button
+                    key={option.code}
+                    onClick={() => {
+                      setCorrectingType(false);
+                      onBorrowerType(option.code);
+                    }}
+                    disabled={busy}
+                    className="rounded-xl px-4 py-2.5 text-left text-sm leading-snug transition-colors hover:bg-black/[0.04] disabled:opacity-40 dark:hover:bg-white/[0.06]"
+                    style={{ border: '1px solid var(--surface-border)', color: 'var(--text-primary)' }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button
+                onClick={() => setCorrectingType(true)}
+                disabled={busy}
+                className="text-sm font-medium transition-colors hover:underline disabled:opacity-40"
+                style={{ color: 'var(--brand-on-soft)' }}
+              >
+                Not right?
+              </button>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-2">
           {stage.choices.map(choice => (
             <button
               key={choice.code}
-              onClick={() => onReason(choice.code)}
+              onClick={() => choose(choice.code)}
               disabled={busy}
               className="rounded-xl px-4 py-3 text-left text-base leading-snug transition-colors hover:bg-black/[0.04] disabled:opacity-40 dark:hover:bg-white/[0.06]"
               style={{ border: '1px solid var(--surface-border)', color: 'var(--text-primary)' }}
@@ -371,6 +545,20 @@ function SuitabilityPanel({
           Take the one that fits best — you can change your mind before submitting anything.
         </p>
       </div>
+    );
+  }
+
+  if (stage.state === 'ASKING' && stage.group && stage.group.length > 1) {
+    /* Keyed on the question set so a new screen starts from blank rather than carrying a
+       selection over from the questions it replaced. */
+    return (
+      <GroupedQuestions
+        key={stage.group.map(q => q.id).join('-')}
+        group={stage.group}
+        youToldUs={stage.youToldUs}
+        busy={busy}
+        onSubmit={onAnswerGroup}
+      />
     );
   }
 
@@ -716,12 +904,40 @@ export default function AiAssistantPage() {
     }
   }
 
+  /** Who the borrowing is for, asked when the confirmed need never said. */
+  async function handleBorrowerType(code: string) {
+    if (!journey || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await applyStage(await aiCreditJourneyService.setBorrowerType(journey.journeyId, code));
+    } catch (err) {
+      handleApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSuitabilityAnswer(stepId: string, codes: string[]) {
     if (!journey || busy) return;
     setBusy(true);
     setError(null);
     try {
       await applyStage(await aiCreditJourneyService.answerSuitability(journey.journeyId, stepId, codes));
+    } catch (err) {
+      handleApiError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** A grouped screen, submitted as one set so the engine never sees a half-answered page. */
+  async function handleSuitabilityAnswerGroup(answers: Record<string, string[]>) {
+    if (!journey || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await applyStage(await aiCreditJourneyService.answerSuitabilityGroup(journey.journeyId, answers));
     } catch (err) {
       handleApiError(err);
     } finally {
@@ -999,7 +1215,9 @@ export default function AiAssistantPage() {
           busy={busy}
           preparingProductId={preparingProductId}
           onReason={handleSuitabilityReason}
+          onBorrowerType={handleBorrowerType}
           onAnswer={handleSuitabilityAnswer}
+          onAnswerGroup={handleSuitabilityAnswerGroup}
           onConfirm={handleConfirmProposal}
           onRetry={handleSuitabilityRetry}
           onStart={handleStartApplication}

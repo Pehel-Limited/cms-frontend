@@ -150,6 +150,7 @@ export interface CreditJourney {
 export interface SuitabilityStage {
   state:
     | 'REASON_REQUIRED'
+    | 'BORROWER_TYPE_REQUIRED'
     | 'ASKING'
     | 'CONFIRM'
     | 'READY'
@@ -190,6 +191,39 @@ export interface SuitabilityStage {
   supportReference?: string | null;
   ruleSetName?: string | null;
   ruleSetVersion?: number | null;
+  /**
+   * Questions the customer can answer on one screen, because none of them is any less applicable
+   * because of an answer to another. Empty when the stage asks a single question, which is every
+   * gated question — those cannot be rendered until something earlier is answered.
+   */
+  group?: SuitabilityGroupQuestion[];
+  /**
+   * Set when the interview worked out farm-versus-business borrowing from the sector on the
+   * account instead of being told. Carries the wording and the options that correct it.
+   */
+  borrowingTypeBasis?: {
+    borrowingType: string;
+    statement: string;
+    options?: { code: string; label: string }[];
+  } | null;
+}
+
+export interface SuitabilityGroupQuestion {
+  id: string;
+  /** single | multi | dropdown | yesno */
+  type: string;
+  text: string;
+  min?: number | null;
+  options: { code: string; label: string }[];
+  helpText?: string | null;
+  conditions?: string[];
+  clears?: string[];
+  /**
+   * What the assistant read out of the customer's own description of their need. Pre-selected on
+   * screen and nothing is stored until they submit it, so a wrong guess costs a tap.
+   */
+  proposedCode?: string | null;
+  proposedLabel?: string | null;
 }
 
 export interface SuitabilityProduct {
@@ -286,6 +320,17 @@ export const aiCreditJourneyService = {
   },
 
   /**
+   * Who the borrowing is for, when the confirmed need never said. This chooses which reasons the
+   * engine offers — it is not the lending segment on the account, which the customer cannot change.
+   */
+  async setBorrowerType(journeyId: string, code: string): Promise<SuitabilityStage> {
+    return apiClient.post<SuitabilityStage>(
+      `/api/customer/ai/credit-journeys/${journeyId}/suitability/borrower-type`,
+      { code }
+    );
+  },
+
+  /**
    * Answer the current question from its offered options.
    *
    * Free text is not sent here — it goes through sendMessage, where the assistant maps it onto one of
@@ -299,6 +344,20 @@ export const aiCreditJourneyService = {
     return apiClient.post<SuitabilityStage>(
       `/api/customer/ai/credit-journeys/${journeyId}/suitability/answer`,
       { stepId, codes }
+    );
+  },
+
+  /**
+   * A grouped screen submitted at once. The engine stores every answer before it works out what to
+   * ask next, so a half-answered screen cannot advance the interview.
+   */
+  async answerSuitabilityGroup(
+    journeyId: string,
+    answers: Record<string, string[]>
+  ): Promise<SuitabilityStage> {
+    return apiClient.post<SuitabilityStage>(
+      `/api/customer/ai/credit-journeys/${journeyId}/suitability/answer`,
+      { answers }
     );
   },
 

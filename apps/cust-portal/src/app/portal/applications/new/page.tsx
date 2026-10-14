@@ -51,18 +51,6 @@ const BUSINESS_STEPS: { key: WizardStep; label: string }[] = [
   { key: 'review', label: 'Review and submit' },
 ];
 
-const BUSINESS_PRODUCT_TYPES = [
-  'BUSINESS_LOAN',
-  'BUSINESS_LINE_OF_CREDIT',
-  'WORKING_CAPITAL_LOAN',
-  'EQUIPMENT_FINANCING',
-  'COMMERCIAL_REAL_ESTATE',
-  'CONSTRUCTION_LOAN',
-  'TERM_LOAN',
-  'OVERDRAFT',
-  'REVOLVING_CREDIT',
-];
-
 const EMPLOYMENT_STATUSES = [
   { value: 'EMPLOYED', label: 'Employed' },
   { value: 'SELF_EMPLOYED', label: 'Self-Employed' },
@@ -132,11 +120,16 @@ export default function NewApplicationPage() {
   const [partyValidation, setPartyValidation] = useState<PartyValidation | null>(null);
   const [loadingParties, setLoadingParties] = useState(false);
 
-  // Determine if this is a business application
+  /* Which range of lending this customer is in. Taken from the customer record — the same
+     LendingSegment decision the BFF applies when it accepts or refuses parties — so the steps
+     shown here cannot disagree with the endpoints the wizard later calls. This was a list of
+     product types, which had drifted badly: only 1 of the 11 products open to business customers
+     was in it, so a company or sole trader choosing any other was asked for employment details,
+     while OVERDRAFT, which is personal-only, sent a private customer through "People and roles". */
   const isBusiness = useMemo(() => {
-    if (!selectedProduct) return appContext?.isBusiness ?? false;
-    return BUSINESS_PRODUCT_TYPES.includes(selectedProduct.productType);
-  }, [selectedProduct, appContext]);
+    if (appContext) return appContext.isBusiness;
+    return selectedProduct?.eligibleCustomerTypes?.some(t => t.toUpperCase() === 'BUSINESS') ?? false;
+  }, [appContext, selectedProduct]);
 
   const STEPS = isBusiness ? BUSINESS_STEPS : PERSONAL_STEPS;
 

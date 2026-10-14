@@ -579,7 +579,9 @@ function SuitabilityPanel({
     );
   }
 
-  /* Anything the engine could not answer, said plainly rather than papered over. */
+  /* Anything the engine could not answer, said plainly rather than papered over. The heading stays
+     neutral because NOT_APPLICABLE covers both "not open to your account" and "nothing to check for
+     this need" — only the bank's own message knows which, so the panel must not pre-empt it. */
   return (
     <div className="panel space-y-4 p-5">
       <h2 className="section-title">Guided suitability</h2>

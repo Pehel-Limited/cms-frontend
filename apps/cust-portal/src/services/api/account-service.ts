@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { CustomerClassification } from './customer-service';
 import { ACCOUNTS, type AccountType, type BankAccount } from '@/lib/banking-data';
 
 /**
@@ -26,6 +27,11 @@ export interface CustomerAccount {
   balanceAsOf?: string;
   isJoint?: boolean;
   isFrozen?: boolean;
+  /**
+   * The owning entity's classification, inherited for display. Absent for a personal
+   * customer, and absent on sample accounts.
+   */
+  classification?: CustomerClassification;
 }
 
 /** `SAMPLE` means the figures on screen are not the customer's real money. */
@@ -106,6 +112,7 @@ export function toBankAccount(account: CustomerAccount): BankAccount {
     spark: [],
     statusDisplay: account.statusDisplay,
     balanceAsOf: account.balanceAsOf,
+    sector: account.classification?.sectorName || account.classification?.sectorCode,
   };
 }
 

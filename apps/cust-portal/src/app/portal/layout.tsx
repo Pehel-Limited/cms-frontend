@@ -7,6 +7,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { RootState, AppDispatch } from '@/store';
 import { logout as logoutAction } from '@/store/slices/authSlice';
 import { authService } from '@/services/api/auth-service';
+import { customerService } from '@/services/api/customer-service';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { useTheme } from '@/app/providers';
 
@@ -239,8 +240,28 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [lendingSegment, setLendingSegment] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  /* Which range of products this account is in. Read from the profile rather than the login,
+     because a sole trader signs in as a person and is still assessed against the SME range.
+     When it cannot be resolved the line is left out entirely — a guess here would be a claim
+     about the customer's account that nothing backs. */
+  useEffect(() => {
+    let active = true;
+    customerService
+      .getMyProfile()
+      .then(profile => {
+        if (active) setLendingSegment(profile.lendingSegment ?? null);
+      })
+      .catch(() => {
+        /* An account with no customer record behind it has no banking range to name. */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /* Restore the collapsed preference so the shell feels persistent */
   useEffect(() => {
@@ -377,9 +398,11 @@ function PortalShell({ children }: { children: React.ReactNode }) {
             <p className="serif truncate text-xl font-medium leading-none tracking-tight" style={{ color: 'var(--text-primary)' }}>
               Rayva
             </p>
-            <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              Personal banking
-            </p>
+            {lendingSegment && (
+              <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {lendingSegment === 'BUSINESS' ? 'Business banking' : 'Personal banking'}
+              </p>
+            )}
           </div>
         )}
         <button

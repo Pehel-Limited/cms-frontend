@@ -166,20 +166,21 @@ export default function AccountDetailPage() {
 
   const grouped = useMemo(() => groupTransactionsByDay(filtered), [filtered]);
 
-  const details = useMemo(
-    () =>
-      account
-        ? [
-            ['Account name', account.name],
-            ['Account type', TYPE_LABEL[account.type] ?? account.type],
-            ['Sort code', account.sortCode],
-            ['Account number', account.accountNumber],
-            ['IBAN', account.iban],
-            ['Currency', account.currency],
-          ]
-        : [],
-    [account]
-  );
+  const details = useMemo(() => {
+    if (!account) return [] as [string, string][];
+    const rows: [string, string][] = [
+      ['Account name', account.name],
+      ['Account type', TYPE_LABEL[account.type] ?? account.type],
+      ['Sort code', account.sortCode],
+      ['Account number', account.accountNumber],
+      ['IBAN', account.iban],
+      ['Currency', account.currency],
+    ];
+    // Inherited from the business, so it only appears on a business account and only
+    // when the bank has classified it. Sample accounts carry none of this.
+    if (account.sector) rows.push(['Business sector', account.sector]);
+    return rows;
+  }, [account]);
 
   const handleCopy = useCallback(async () => {
     if (!account) return;

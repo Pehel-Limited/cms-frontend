@@ -8,6 +8,7 @@ import { toast } from 'react-toastify';
 import { type RootState } from '@/store';
 import apiClient from '@/lib/api-client';
 import { getCurrencySymbol } from '@/lib/format';
+import { referenceDataService, type TaxonomyNode } from '@/services/api/referenceDataService';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -735,6 +736,7 @@ export default function NewCustomerPage() {
   const [individualData, setIndividualData] = useState<IndividualFormData>(EMPTY_INDIVIDUAL);
   const [jointHolders, setJointHolders] = useState<JointHolderData[]>([]);
   const [entityData, setEntityData] = useState<EntityFormData>(EMPTY_ENTITY);
+  const [industries, setIndustries] = useState<TaxonomyNode[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ExistingCustomer[]>([]);
@@ -748,6 +750,13 @@ export default function NewCustomerPage() {
   const [memberIsSignatory, setMemberIsSignatory] = useState(false);
   const [memberIsPrimaryContact, setMemberIsPrimaryContact] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
+
+  useEffect(() => {
+    referenceDataService
+      .getIndustries()
+      .then(setIndustries)
+      .catch(err => console.error('Failed to load industry taxonomy:', err));
+  }, []);
 
   const handleCategorySelect = (category: CustomerCategory) => {
     setSelectedCategory(category);
@@ -1051,7 +1060,9 @@ export default function NewCustomerPage() {
           contactEmail: entityData.businessEmail,
           contactPhone: entityData.businessPhone,
           website: entityData.website,
-          industryCode: entityData.industryCode,
+          // The entity write path names this field industrySector; posting it under any
+          // other key is silently dropped by Jackson and the value never reaches the DB.
+          industrySector: entityData.industryCode,
           businessDescription: entityData.businessDescription,
           annualTurnover: entityData.annualTurnover ? parseFloat(entityData.annualTurnover) : null,
           numberOfEmployees: entityData.numberOfEmployees
@@ -1311,7 +1322,7 @@ export default function NewCustomerPage() {
             <TextField id="ent-tradingName" label="Trading name" required value={entityData.tradingName} error={fieldErrors['ent-tradingName']} onChange={v => handleEntityChange('tradingName', v)} />
             <TextField id="ent-taxNumber-st" label="Tax registration number" value={entityData.taxNumber} onChange={v => handleEntityChange('taxNumber', v)} />
             <TextField id="ent-vatNumber-st" label="VAT number" placeholder="IE1234567X" value={entityData.vatNumber} onChange={v => handleEntityChange('vatNumber', v)} />
-            <TextField id="ent-industryCode-st" label="Industry or sector" value={entityData.industryCode} onChange={v => handleEntityChange('industryCode', v)} />
+            <SelectField id="ent-industryCode-st" label="Industry" value={entityData.industryCode} options={industries.map(i => ({ value: i.name, label: i.name }))} placeholder="Select an industry" error={fieldErrors['ent-industryCode-st']} onChange={v => handleEntityChange('industryCode', v)} />
             <div className="md:col-span-2">
               <TextAreaField id="ent-businessDescription-st" label="Business description" value={entityData.businessDescription} onChange={v => handleEntityChange('businessDescription', v)} />
             </div>
@@ -1511,7 +1522,7 @@ export default function NewCustomerPage() {
 
         <Card title="Business details">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <TextField id="ent-industryCode" label="Industry or sector" value={entityData.industryCode} onChange={v => handleEntityChange('industryCode', v)} />
+            <SelectField id="ent-industryCode" label="Industry" value={entityData.industryCode} options={industries.map(i => ({ value: i.name, label: i.name }))} placeholder="Select an industry" error={fieldErrors['ent-industryCode']} onChange={v => handleEntityChange('industryCode', v)} />
             <TextField id="ent-numberOfEmployees" label="Number of employees" type="number" min="0" step="1" value={entityData.numberOfEmployees} onChange={v => handleEntityChange('numberOfEmployees', v)} />
             <TextField id="ent-annualTurnover" label={`Annual turnover (${getCurrencySymbol()})`} type="number" min="0" step="0.01" value={entityData.annualTurnover} onChange={v => handleEntityChange('annualTurnover', v)} />
             <div className="md:col-span-2">

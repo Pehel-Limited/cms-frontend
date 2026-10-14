@@ -2,10 +2,34 @@ import config from '@/config';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
+/**
+ * The banking classification of a customer legal entity, resolved against the sector
+ * taxonomy. Accounts show this read-only and inherited; an account never holds a sector
+ * of its own.
+ */
+export interface CustomerClassification {
+  industryCode?: string;
+  industryName?: string;
+  sectorCode?: string;
+  sectorName?: string;
+  businessTypeCode?: string;
+  businessTypeName?: string;
+  naceRevision?: string;
+  naceCode?: string;
+  naceMappingStatus?: string;
+  naceOfficialTitle?: string;
+  naceVerified?: boolean;
+  indicativeRiskSegmentName?: string;
+  classificationStatus?: string;
+  effectiveFrom?: string;
+}
+
 export interface CustomerProfile {
   customerId: string;
   customerNumber: string;
   customerType: string;
+  /** BUSINESS | INDIVIDUAL, resolved server-side including the sole-trader rule. */
+  lendingSegment?: string;
   customerStatus: string;
 
   // Personal
@@ -134,6 +158,12 @@ export interface CompanyProfile {
   tradingCountry?: string;
 
   industrySector?: string;
+  /**
+   * Governed classification of the legal entity. Replaces the free-text industrySector
+   * above wherever a screen can show it. naceOfficialTitle is only present once the code
+   * has been verified against the official NACE list.
+   */
+  classification?: CustomerClassification;
   businessDescription?: string;
   yearEstablished?: number;
   numberOfEmployees?: number;

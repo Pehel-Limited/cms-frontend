@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { customerService, type Customer } from '@/services/api/customerService';
+import { referenceDataService, type CustomerClassification, type TaxonomyNode } from '@/services/api/referenceDataService';
 import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import {
   SortableHeader,
@@ -145,8 +146,11 @@ function Initials({ name }: { name: string }) {
 
 type CustomerRow = Customer & {
   rowName: string;
+  rowUsername: string;
   rowSegment: string;
   rowIndustry: string;
+  rowSector: string;
+  rowBusinessType: string;
   rowIncome: number;
   rowTenureMonths: number;
   rowKyc: string;
@@ -170,6 +174,8 @@ export default function CustomersPage() {
   const [riskOnly, setRiskOnly] = useState(false);
   const [kycOnly, setKycOnly] = useState(false);
   const [tab, setTab] = useState<'list' | 'segments'>('list');
+  const [industries, setIndustries] = useState<TaxonomyNode[]>([]);
+  const [classifications, setClassifications] = useState<CustomerClassification[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     field: 'rowName',
     direction: 'asc',
@@ -193,6 +199,33 @@ export default function CustomersPage() {
     loadCustomers();
   }, [loadCustomers]);
 
+  useEffect(() => {
+    // Reference data only: a failure here must not break the list, it just leaves the
+    // Industry filter on legacy labels.
+    referenceDataService
+      .getIndustries()
+      .then(setIndustries)
+      .catch(err => console.error('Failed to load industry taxonomy:', err));
+  }, []);
+
+  useEffect(() => {
+    if (customers.length === 0) return;
+    // Reference data only: a failure here leaves Sector and Business type blank for every row
+    // rather than breaking the list. The whole portfolio is fetched in one call, not per row.
+    referenceDataService
+      .getPrimaryActivities(customers.map(c => c.customerId))
+      .then(setClassifications)
+      .catch(err => console.error('Failed to load customer classifications:', err));
+  }, [customers]);
+
+  const classificationOf = useMemo(() => {
+    const byCustomer = new Map<string, CustomerClassification>();
+    classifications.forEach(c => {
+      if (c.customerId) byCustomer.set(c.customerId, c);
+    });
+    return byCustomer;
+  }, [classifications]);
+
   const handleSort = (field: string) => setSortConfig(handleSortToggle(field, sortConfig));
 
   /* Distinct filter values from real data */
@@ -200,11 +233,18 @@ export default function CustomersPage() {
     () => Array.from(new Set(customers.map(segmentOf))).filter(Boolean).sort(),
     [customers]
   );
-  const industryOptions = useMemo(
-    () =>
-      Array.from(new Set(customers.map(c => c.industrySector).filter(Boolean) as string[])).sort(),
-    [customers]
-  );
+
+  /* Governed industries, so the filter offers classification values rather than whatever
+     free-text happened to be typed into a record. Unclassified customers stay reachable by
+     clearing the filter. */
+  const industryOptions = useMemo(() => {
+    const used = new Set(
+      customers.map(c => c.industryCode).filter(Boolean) as string[]
+    );
+    return industries
+      .filter(i => used.has(i.code))
+      .map(i => ({ code: i.code, name: i.name }));
+  }, [customers, industries]);
 
   /* Summary figures — all derived from the loaded records */
   const metrics = useMemo(() => {
@@ -220,18 +260,26 @@ export default function CustomersPage() {
     () =>
       customers.map(c => {
         const months = monthsSince(c.customerSince);
+        const industryName = c.industryCode
+          ? industries.find(i => i.code === c.industryCode)?.name || c.industryCode
+          : c.industrySector;
+        const classification = classificationOf.get(c.customerId);
         return {
           ...c,
           rowName: customerService.getCustomerName(c),
+          rowUsername: c.portalUsername || '—',
           rowSegment: segmentOf(c),
-          rowIndustry: c.industrySector || '—',
+          rowIndustry: industryName || '—',
+          rowSector: classification?.sectorName || classification?.sectorCode || '—',
+          rowBusinessType:
+            classification?.businessTypeName || classification?.businessTypeCode || '—',
           rowIncome: declaredIncomeOf(c),
           rowTenureMonths: months,
           rowKyc: c.kycStatus || '',
           rowRisk: c.riskRating || '',
         };
       }),
-    [customers]
+    [customers, industries, classificationOf]
   );
 
   const filtered = useMemo(() => {
@@ -240,6 +288,7 @@ export default function CustomersPage() {
       if (term) {
         const haystack = [
           c.rowName,
+          c.portalUsername || '',
           c.primaryEmail || '',
           c.primaryPhone || '',
           c.customerNumber || '',
@@ -249,7 +298,7 @@ export default function CustomersPage() {
         if (!haystack.includes(term)) return false;
       }
       if (segmentFilter && c.rowSegment !== segmentFilter) return false;
-      if (industryFilter && c.industrySector !== industryFilter) return false;
+      if (industryFilter && c.industryCode !== industryFilter) return false;
       if (riskOnly && !isAtRisk(c)) return false;
       if (kycOnly && !needsKycReview(c)) return false;
       return true;
@@ -458,7 +507,7 @@ export default function CustomersPage() {
                 <input
                   id="customer-search"
                   type="search"
-                  placeholder="Name, email, phone or customer number"
+                  placeholder="Name, login id, email, phone or customer number"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="w-full rounded-xl px-4 py-2.5 text-sm"
@@ -506,8 +555,8 @@ export default function CustomersPage() {
                   >
                     <option value="">All industries</option>
                     {industryOptions.map(i => (
-                      <option key={i} value={i}>
-                        {i}
+                      <option key={i.code} value={i.code}>
+                        {i.name}
                       </option>
                     ))}
                   </select>
@@ -663,6 +712,13 @@ export default function CustomersPage() {
                             className={SORT_CLASS}
                           />
                           <SortableHeader
+                            label="Login id"
+                            field="rowUsername"
+                            currentSort={sortConfig}
+                            onSort={handleSort}
+                            className={SORT_CLASS}
+                          />
+                          <SortableHeader
                             label="Segment"
                             field="rowSegment"
                             currentSort={sortConfig}
@@ -672,6 +728,20 @@ export default function CustomersPage() {
                           <SortableHeader
                             label="Industry"
                             field="rowIndustry"
+                            currentSort={sortConfig}
+                            onSort={handleSort}
+                            className={SORT_CLASS}
+                          />
+                          <SortableHeader
+                            label="Sector"
+                            field="rowSector"
+                            currentSort={sortConfig}
+                            onSort={handleSort}
+                            className={SORT_CLASS}
+                          />
+                          <SortableHeader
+                            label="Business type"
+                            field="rowBusinessType"
                             currentSort={sortConfig}
                             onSort={handleSort}
                             className={SORT_CLASS}
@@ -746,6 +816,14 @@ export default function CustomersPage() {
                             </td>
                             <td className="px-5 py-4">
                               <span
+                                className="text-sm font-mono"
+                                style={{ color: 'var(--rm-text-secondary)' }}
+                              >
+                                {c.rowUsername}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span
                                 className="text-sm"
                                 style={{ color: 'var(--rm-text-secondary)' }}
                               >
@@ -758,6 +836,22 @@ export default function CustomersPage() {
                                 style={{ color: 'var(--rm-text-secondary)' }}
                               >
                                 {c.rowIndustry}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span
+                                className="text-sm"
+                                style={{ color: 'var(--rm-text-secondary)' }}
+                              >
+                                {c.rowSector}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span
+                                className="text-sm"
+                                style={{ color: 'var(--rm-text-secondary)' }}
+                              >
+                                {c.rowBusinessType}
                               </span>
                             </td>
                             <td className="px-5 py-4 text-right whitespace-nowrap">

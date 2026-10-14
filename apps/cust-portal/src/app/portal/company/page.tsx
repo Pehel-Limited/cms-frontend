@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   customerService,
   type CompanyProfile,
+  type CustomerClassification,
   type UpdateCompanyPayload,
 } from '@/services/api/customer-service';
 
@@ -278,10 +279,34 @@ export default function CompanyPage() {
                 value={form.tradingName}
                 onChange={v => handleChange('tradingName', v)}
               />
-              <ReadOnlyField label="Industry sector" value={company.industrySector} />
+              <ReadOnlyField
+                label="Industry sector"
+                value={company.classification?.industryName || company.industrySector}
+              />
               <ReadOnlyField label="Year established" value={company.yearEstablished?.toString()} />
               <ReadOnlyField label="Employees" value={company.numberOfEmployees?.toString()} />
             </FieldGrid>
+
+            {company.classification && (
+              <>
+                <SectionTitle>How we classify your business</SectionTitle>
+                <FieldGrid>
+                  <ReadOnlyField label="Industry" value={company.classification.industryName} />
+                  <ReadOnlyField label="Sector" value={company.classification.sectorName} />
+                  <ReadOnlyField
+                    label="Business type"
+                    value={company.classification.businessTypeName}
+                  />
+                  <ReadOnlyField label="Activity code" value={naceLine(company.classification)} />
+                </FieldGrid>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  This classification applies to your business as a whole. Every account you
+                  hold with us inherits it — an individual account does not have its own.
+                  If any of it is wrong, tell your relationship manager and they can correct
+                  it.
+                </p>
+              </>
+            )}
             <EditableField
               editing={editing}
               label="Business description"
@@ -466,6 +491,19 @@ export default function CompanyPage() {
 }
 
 // ─── Shared components ─────────────────────────────────────────────
+
+/**
+ * The activity code line for a customer. An unverified code is shown as pending rather
+ * than described with an official title the bank has not confirmed.
+ */
+function naceLine(c: CustomerClassification): string {
+  if (!c.naceCode) return 'Not yet assigned';
+  const revision = c.naceRevision || '2.1';
+  if (c.naceVerified && c.naceOfficialTitle) {
+    return `NACE ${revision} ${c.naceCode} — ${c.naceOfficialTitle}`;
+  }
+  return `NACE ${revision} ${c.naceCode} — being confirmed`;
+}
 
 /** "PRIVATE_LIMITED" → "Private limited" — enum codes read as sentence case. */
 function sentenceCase(value?: string | null): string {

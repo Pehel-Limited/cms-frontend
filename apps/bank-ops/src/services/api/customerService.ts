@@ -3,6 +3,8 @@ import apiClient from '@/lib/api-client';
 export interface Customer {
   customerId: string;
   customerNumber: string;
+  /** The credential the customer signs into the portal with, absent when they have no login. */
+  portalUsername?: string;
   customerType: 'INDIVIDUAL' | 'BUSINESS' | 'CORPORATE';
 
   // Individual fields
@@ -18,7 +20,11 @@ export interface Customer {
   businessRegistrationNumber?: string;
   businessRegistrationDate?: string;
   businessType?: string;
+  /** Legacy free-text label. Prefer industryCode / sectorCode from the taxonomy. */
   industrySector?: string;
+  /** Governed taxonomy codes resolved from the customer's principal activity. */
+  industryCode?: string;
+  sectorCode?: string;
   yearsInBusiness?: number;
   numberOfEmployees?: number;
 

@@ -35,6 +35,8 @@ export interface BankAccount {
   statusDisplay?: string;
   /** When the balance snapshot was taken (ISO). */
   balanceAsOf?: string;
+  /** Sector inherited from the owning business. Sample accounts have none. */
+  sector?: string;
 }
 
 export type CardType = 'DEBIT' | 'CREDIT';

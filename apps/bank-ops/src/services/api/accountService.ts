@@ -234,6 +234,12 @@ export interface AccountSummaryResponse {
   statusDisplay: string;
   availableBalance: number;
   currentBalance: number;
+  /** Capital still owed on a lending account; zero on deposits. */
+  totalOutstanding?: number;
+  /** Undrawn headroom on a revolving facility; absent where the product has none. */
+  creditAvailable?: number;
+  /** Overdraft actually used on a deposit account. */
+  overdraftUsed?: number;
   primaryOwnerId?: string;
   primaryOwnerName?: string;
   primaryIban?: string;

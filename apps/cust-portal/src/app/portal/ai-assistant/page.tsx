@@ -8,11 +8,15 @@ import {
   aiCreditJourneyService,
   DEFAULT_INTENT_OPTIONS,
   BORROWER_SEGMENT_OPTIONS,
+  BORROWER_TYPE_CHOICES,
   ASSET_CATEGORY_OPTIONS,
+  ASSET_CONDITION_OPTIONS,
+  borrowerTypeFromRecord,
   requiresBorrowerSegment,
   requiresAssetCategory,
   type CreditJourney,
   type CreditNeedFacts,
+  type ConfirmedFact,
   type IntentOption,
   type SuitabilityStage,
   type SuitabilityGroupQuestion,
@@ -31,6 +35,9 @@ function formatFactValue(key: string, value: unknown, facts: CreditNeedFacts): s
   }
   if (key === 'borrowerSegment') {
     return BORROWER_SEGMENT_OPTIONS.find(o => o.value === value)?.label ?? String(value).replace(/_/g, ' ');
+  }
+  if (key === 'assetCondition') {
+    return ASSET_CONDITION_OPTIONS.find(o => o.value === value)?.label ?? String(value).replace(/_/g, ' ');
   }
   if (key === 'assetCategory') {
     return ASSET_CATEGORY_OPTIONS.find(o => o.value === value)?.label ?? String(value).replace(/_/g, ' ');
@@ -57,12 +64,14 @@ function Skeleton({ className = '' }: { className?: string }) {
 function ReviewCard({
   facts,
   status,
+  confirmedFacts,
   onConfirm,
   onRequestRevision,
   busy,
 }: {
   facts: CreditNeedFacts;
   status: string;
+  confirmedFacts: ConfirmedFact[];
   onConfirm: () => void;
   onRequestRevision: (updates: Record<string, unknown>) => void;
   busy: boolean;
@@ -74,22 +83,45 @@ function ReviewCard({
   );
   const [currency, setCurrency] = useState(facts.currency || 'EUR');
   const [targetDate, setTargetDate] = useState(facts.targetDate || '');
-  const [borrowerSegment, setBorrowerSegment] = useState(facts.borrowerSegment || 'UNKNOWN');
+  const [assetCondition, setAssetCondition] = useState(facts.assetCondition || 'UNKNOWN');
+  const [borrowerSegment, setBorrowerSegment] = useState(
+    facts.borrowerSegment && facts.borrowerSegment !== 'UNKNOWN' ? facts.borrowerSegment : ''
+  );
   const [assetCategory, setAssetCategory] = useState(facts.assetCategory || 'NOT_APPLICABLE');
+  /** Set only when the customer rejects what the record said about who the borrowing is for. */
+  const [correcting, setCorrecting] = useState(false);
 
   const isPresented = status === 'PRESENTED';
   const isConfirmed = status === 'CONFIRMED';
   const showBorrowerSegment = requiresBorrowerSegment(facts.purpose);
   const showAssetCategory = requiresAssetCategory(facts.purpose);
 
+  /* The account answers this wherever it can, so the form states the answer rather than asking
+     for a declaration the bank has already made. Where it cannot — a business customer with no
+     governed sector could be a company, a sole trader or a farm — only the four types that
+     actually resolve a borrowing are offered. */
+  const fromRecord = borrowerTypeFromRecord(confirmedFacts);
+  const borrower =
+    facts.borrowerSegment && facts.borrowerSegment !== 'UNKNOWN'
+      ? {
+          value: facts.borrowerSegment,
+          label:
+            BORROWER_SEGMENT_OPTIONS.find(o => o.value === facts.borrowerSegment)?.label
+            ?? facts.borrowerSegment,
+          basis: null as string | null,
+          correctable: true,
+        }
+      : fromRecord;
+
   function submitRevision(e: React.FormEvent) {
     e.preventDefault();
     onRequestRevision({
       purpose,
+      assetCondition,
       estimatedCost: estimatedCost === '' ? null : parseFloat(estimatedCost),
       currency,
       targetDate: targetDate || null,
-      borrowerSegment,
+      borrowerSegment: correcting ? borrowerSegment : (borrower?.value ?? borrowerSegment),
       assetCategory,
     });
     setEditing(false);
@@ -138,8 +170,15 @@ function ReviewCard({
                 {FACT_LABELS[key]}
               </p>
               <p className="mt-0.5 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {formatFactValue(key, (facts as unknown as Record<string, unknown>)[key], facts)}
+                {key === 'borrowerSegment' && borrower
+                  ? borrower.label
+                  : formatFactValue(key, (facts as unknown as Record<string, unknown>)[key], facts)}
               </p>
+              {key === 'borrowerSegment' && borrower?.basis && (
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {borrower.basis}
+                </p>
+              )}
             </div>
           ))}
         </div>
@@ -155,6 +194,23 @@ function ReviewCard({
               onChange={e => setPurpose(e.target.value)}
               className="input"
             />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="review-asset-condition">
+              Condition
+            </label>
+            <select
+              id="review-asset-condition"
+              value={assetCondition}
+              onChange={e => setAssetCondition(e.target.value)}
+              className="select"
+            >
+              {ASSET_CONDITION_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="field-label" htmlFor="review-amount">
@@ -196,20 +252,47 @@ function ReviewCard({
           {showBorrowerSegment && (
             <div>
               <label className="field-label" htmlFor="review-borrower-segment">
-                Who is this for?
+                Who this is for
               </label>
-              <select
-                id="review-borrower-segment"
-                value={borrowerSegment}
-                onChange={e => setBorrowerSegment(e.target.value)}
-                className="select"
-              >
-                {BORROWER_SEGMENT_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              {borrower && !correcting ? (
+                /* Stated, not asked: the account already settles this for most people. A
+                   borrowing type read off the sector can still be corrected — a company buying
+                   machinery for its farm is a farm borrowing — but the lending segment on the
+                   account cannot, so no choice is offered there. */
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <p className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {borrower.label}
+                  </p>
+                  {borrower.basis && (
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {borrower.basis}
+                    </span>
+                  )}
+                  {borrower.correctable && (
+                    <button
+                      type="button"
+                      onClick={() => setCorrecting(true)}
+                      className="link-arrow text-xs"
+                    >
+                      That&apos;s not right <span data-arrow aria-hidden="true">→</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <select
+                  id="review-borrower-segment"
+                  value={borrowerSegment}
+                  onChange={e => setBorrowerSegment(e.target.value)}
+                  className="select"
+                >
+                  <option value="">Choose one</option>
+                  {BORROWER_TYPE_CHOICES.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
           {showAssetCategory && (
@@ -237,7 +320,10 @@ function ReviewCard({
             </button>
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={() => {
+                setEditing(false);
+                setCorrecting(false);
+              }}
               className="btn btn-ghost"
             >
               Cancel
@@ -1201,6 +1287,7 @@ export default function AiAssistantPage() {
         <ReviewCard
           facts={review.facts}
           status={review.status}
+          confirmedFacts={journey?.confirmedFacts ?? []}
           onConfirm={handleConfirm}
           onRequestRevision={handleRequestRevision}
           busy={busy}

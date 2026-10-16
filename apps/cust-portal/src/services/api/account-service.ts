@@ -102,6 +102,7 @@ export function toBankAccount(account: CustomerAccount): BankAccount {
     name: account.accountName || account.accountTypeDisplay || 'Account',
     type,
     typeLabel: account.accountTypeDisplay,
+    accountCategory: account.accountCategory,
     accountNumber: maskAccountNumber(account.accountNumber),
     sortCode: '',
     iban: account.iban || account.accountNumber,

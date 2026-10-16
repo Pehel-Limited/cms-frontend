@@ -13,6 +13,7 @@ import {
   type AccountSource,
   type SampleReason,
 } from '@/services/api/account-service';
+import { transactionService } from '@/services/api/transaction-service';
 import { DotMatrix } from '@/components/banking/BankCard';
 import { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
 import { PageHero } from '@/components/ui/PageHero';
@@ -69,17 +70,27 @@ interface AccountsData {
 async function resolveAccounts(): Promise<AccountsData> {
   const { accounts, source, sampleReason, balanceAsOf } = await accountService.getAccountsSnapshot();
 
+  /* The dashboard already shows this customer's real lines, so this screen must not claim there
+     is no feed. Live accounts get the live history; only a sample-account view falls back to
+     the sample transactions, so the two halves always describe the same customer. */
+  const txn =
+    source === 'LIVE'
+      ? await transactionService.getTransactionsSnapshot({
+          from: new Date(Date.now() - 122 * 86400000).toISOString().slice(0, 10),
+        })
+      : null;
+
   const currencies = new Set(accounts.map(a => a.currency));
   const totalCurrency = currencies.size === 1 ? accounts[0]?.currency ?? null : null;
   const sum = (pick: (a: BankAccount) => number) => accounts.reduce((total, a) => total + pick(a), 0);
 
   return {
     accounts,
-    transactions: source === 'LIVE' ? [] : TRANSACTIONS,
+    transactions: txn ? txn.transactions : source === 'LIVE' ? [] : TRANSACTIONS,
     total: totalCurrency ? sum(a => a.balance) : 0,
     totalCurrency,
     available: totalCurrency ? sum(a => a.available) : 0,
-    goal: source === 'LIVE' ? null : savingsGoal(),
+    goal: source === 'LIVE' ? savingsGoal(accounts) : savingsGoal(),
     source,
     sampleReason,
     balanceAsOf,

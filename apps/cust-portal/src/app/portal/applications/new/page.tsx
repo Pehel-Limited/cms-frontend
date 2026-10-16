@@ -11,7 +11,6 @@ import {
   LoanApplication,
   LOAN_PURPOSE_LABELS,
   LoanPurpose,
-  FACILITY_TYPE_LABELS,
   INTENT_TO_LOAN_PURPOSE,
   getPurposeOptions,
   isPurposeAllowed,
@@ -153,7 +152,6 @@ export default function NewApplicationPage() {
     // Business-specific
     businessAnnualRevenue: '',
     businessVintageYears: '',
-    facilityType: '',
     facilityPurposeDescription: '',
     // Property (HOME_PURCHASE, HOME_CONSTRUCTION, HOME_RENOVATION, HOME_REFINANCE)
     propertyAddress: '',
@@ -354,7 +352,6 @@ export default function NewApplicationPage() {
         payload.businessAnnualRevenue = parseFloat(form.businessAnnualRevenue);
       if (form.businessVintageYears)
         payload.businessVintageYears = parseInt(form.businessVintageYears, 10);
-      if (form.facilityType) payload.facilityType = form.facilityType;
       if (form.facilityPurposeDescription)
         payload.facilityPurposeDescription = form.facilityPurposeDescription;
     }
@@ -1118,29 +1115,6 @@ function StepLoan({
             </p>
           )}
         </div>
-
-        {/* Business: how the borrowing is structured */}
-        {isBusiness && (
-          <div>
-            <label className="field-label" htmlFor="facilityType">
-              Type of loan
-            </label>
-            <select
-              id="facilityType"
-              name="facilityType"
-              value={form.facilityType}
-              onChange={onChange}
-              className="select"
-            >
-              <option value="">Select type…</option>
-              {Object.entries(FACILITY_TYPE_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
 
         {/* Purpose Description */}
         <div className="sm:col-span-2">
@@ -2069,14 +2043,6 @@ function StepReview({
           value: LOAN_PURPOSE_LABELS[form.loanPurpose as LoanPurpose] || form.loanPurpose || '—',
         },
         { label: 'Description', value: form.loanPurposeDescription || '—' },
-        ...(isBusiness && form.facilityType
-          ? [
-              {
-                label: 'Type of loan',
-                value: FACILITY_TYPE_LABELS[form.facilityType] || form.facilityType,
-              },
-            ]
-          : []),
       ],
     },
     // Property section (conditional)

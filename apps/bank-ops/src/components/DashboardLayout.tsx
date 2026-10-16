@@ -405,7 +405,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Footer */}
         <footer className="px-6 py-3 border-t flex items-center justify-center gap-4 text-[11px] shrink-0 transition-colors"
           style={{ borderColor: 'var(--rm-border)', color: 'var(--rm-text-muted)' }}>
-          <span>© {new Date().getFullYear()} NorthBank. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Rayva. All rights reserved.</span>
           <span className="text-slate-700">·</span>
           <Link href="/dashboard/diagnostic" className="hover:text-slate-400 transition-colors">
             System status

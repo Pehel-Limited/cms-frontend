@@ -9,6 +9,7 @@ import { logout as logoutAction } from '@/store/slices/authSlice';
 import { authService } from '@/services/api/auth-service';
 import { customerService } from '@/services/api/customer-service';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { RayvaChat } from '@/components/ai/RayvaChat';
 import { useTheme } from '@/app/providers';
 
 /* ─── Nav items ────────────────────────────────────────────── */
@@ -240,9 +241,12 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
+  const [askPing, setAskPing] = useState(false);
   const [lendingSegment, setLendingSegment] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const askButtonRef = useRef<HTMLButtonElement>(null);
 
   /* Which range of products this account is in. Read from the profile rather than the login,
      because a sole trader signs in as a person and is still assessed against the SME range.
@@ -312,6 +316,15 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     await authService.logout();
     dispatch(logoutAction());
     router.push('/portal/login');
+  };
+
+  /* An answer takes ~15s, long enough to close the panel and carry on with something else, so
+     the button says when Rayva finished. Focus moves back to the trigger when the panel closes
+     however it was closed — otherwise Escape drops the keyboard user into the page body. */
+  const toggleAsk = (next: boolean) => {
+    setAskOpen(next);
+    if (next) setAskPing(false);
+    else askButtonRef.current?.focus();
   };
 
   const initials = user
@@ -610,13 +623,24 @@ function PortalShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {/* Rayva AI — the one action worth a persistent button */}
-            <Link href="/portal/ai-assistant" className="pill-btn pill-btn-solid hidden sm:inline-flex">
+            {/* Rayva answers over the page you are on rather than routing you away to it —
+                asking a question mid-task and losing the task is the same problem twice.
+                The label drops to an icon below sm, where the bar has no room for it. */}
+            <button
+              type="button"
+              ref={askButtonRef}
+              onClick={() => toggleAsk(!askOpen)}
+              aria-expanded={askOpen}
+              aria-controls="rayva-chat"
+              aria-label={askPing ? 'Ask Rayva AI — your answer is ready' : 'Ask Rayva AI'}
+              className="pill-btn pill-btn-solid"
+            >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
               </svg>
-              Ask Rayva AI
-            </Link>
+              <span className="hidden sm:inline">Ask Rayva AI</span>
+              {askPing && <span className="rayva-ping" aria-hidden="true" />}
+            </button>
 
             {/* Theme toggle */}
             <button
@@ -775,6 +799,14 @@ function PortalShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </nav>
+
+      {/* Mounted in the shell rather than the page: the thread and any answer in flight
+          outlive a move from Accounts to Payments, which is the point of asking mid-task. */}
+      <RayvaChat
+        open={askOpen}
+        onOpenChange={toggleAsk}
+        onReplyArrived={() => setAskPing(true)}
+      />
     </div>
   );
 }

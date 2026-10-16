@@ -263,11 +263,26 @@ export default function AccountsPage() {
     const depositBalance = deposits.reduce((s, a) => s + (a.availableBalance || 0), 0);
     const operationalBalance = operational.reduce((s, a) => s + (a.availableBalance || 0), 0);
     const totalBalances = depositBalance + operationalBalance;
-    const exposure = credits.reduce((s, a) => s + Math.max(0, -(a.currentBalance || 0)), 0);
-    const availableLimits = credits.reduce((s, a) => s + (a.availableBalance || 0), 0);
+    /* A loan account stores its outstanding as a positive figure, so exposure has to
+       come from the lending fields the balance sheet actually maintains. Deriving it
+       from the sign of currentBalance reported €0 drawn and the whole drawn book as
+       undrawn headroom. */
+    const exposure = credits.reduce((s, a) => s + (a.totalOutstanding || 0), 0);
+    const availableLimits = credits.reduce((s, a) => s + (a.creditAvailable || 0), 0);
     const utilisation =
       exposure + availableLimits > 0 ? (exposure / (exposure + availableLimits)) * 100 : null;
-    return { totalBalances, depositBalance, operationalBalance, exposure, availableLimits, utilisation };
+    /* Drawn overdraft sits on deposit accounts, not on the lending book, so it is
+       reported apart from facility exposure rather than folded into it. */
+    const overdraftDrawn = deposits.reduce((s, a) => s + (a.overdraftUsed || 0), 0);
+    return {
+      totalBalances,
+      depositBalance,
+      operationalBalance,
+      exposure,
+      availableLimits,
+      utilisation,
+      overdraftDrawn,
+    };
   }, [allAccounts]);
 
   const attentionCount = (stats?.frozenAccounts ?? 0) + (stats?.dormantAccounts ?? 0);
@@ -441,7 +456,7 @@ export default function AccountsPage() {
             Portfolio figures are unavailable right now. The account list below is unaffected.
           </p>
         ) : (
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-5">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-6">
             <Figure
               label="Deposit and operational balances"
               value={loading ? '—' : money(agg.totalBalances, currency)}
@@ -449,6 +464,10 @@ export default function AccountsPage() {
             <Figure
               label="Lending exposure"
               value={loading ? '—' : money(agg.exposure, currency)}
+            />
+            <Figure
+              label="Drawn overdraft"
+              value={loading ? '—' : money(agg.overdraftDrawn, currency)}
             />
             <Figure
               label="Available credit limits"

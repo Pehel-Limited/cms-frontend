@@ -64,6 +64,75 @@ export const BORROWER_SEGMENT_OPTIONS: { value: string; label: string }[] = [
   { value: 'UNKNOWN', label: 'Not sure yet' },
 ];
 
+/**
+ * The borrower types a customer can meaningfully choose between — mirrors the interview's own
+ * `BORROWER_TYPE_CHOICES`. Personal is absent because the account decides that, and "Not sure yet"
+ * is absent because it resolves nothing: it only leaves the journey unable to be confirmed.
+ */
+export const BORROWER_TYPE_CHOICES: { value: string; label: string }[] =
+  BORROWER_SEGMENT_OPTIONS.filter(o => o.value !== 'PERSONAL' && o.value !== 'UNKNOWN');
+
+/**
+ * Who the borrowing is for, as far as the bank's own record already settles it. Mirrors
+ * `SuitabilityInterviewService.ask` and `LendingSegment.borrowerTypeOf`, which read the same
+ * system-verified facts.
+ *
+ * The lending segment and the legal form are resolved from the customer record and are not the
+ * customer's to declare — offering them as a question invites somebody on a personal account to
+ * pick "Company". Farm wins over the legal form because a company that farms land is a farm
+ * borrowing, and the sector is the only place that distinction is made. Null means the record
+ * genuinely does not say, which is the only case worth asking in.
+ *
+ * `correctable` is false only for the personal-versus-business gate: choosing to be a company does
+ * not open the SME range to a personal account, and the interview stops them there, so offering
+ * the choice would promise a door that does not open.
+ */
+export function borrowerTypeFromRecord(confirmedFacts: ConfirmedFact[] | undefined): {
+  value: string;
+  label: string;
+  basis: string;
+  correctable: boolean;
+} | null {
+  const fact = (key: string) => {
+    const value = confirmedFacts?.find(f => f.factKey === key)?.value;
+    return typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : null;
+  };
+  const labelOf = (value: string) =>
+    BORROWER_SEGMENT_OPTIONS.find(o => o.value === value)?.label ?? value;
+
+  if (fact('customerIndustry') === 'AGR') {
+    return {
+      value: 'FARM_AGRICULTURE',
+      label: labelOf('FARM_AGRICULTURE'),
+      basis: 'from the sector on your account',
+      correctable: true,
+    };
+  }
+  const legalForm = fact('customerBorrowerType');
+  if (legalForm && legalForm !== 'UNKNOWN') {
+    return {
+      value: legalForm,
+      label: labelOf(legalForm),
+      basis: 'from your account',
+      correctable: legalForm !== 'PERSONAL',
+    };
+  }
+  // A sole trader is filed as an individual who borrows against a trade, so the segment answers
+  // personal-versus-business where no legal form has been mapped onto the journey.
+  const segment = fact('customerSegment');
+  return segment && !segment.startsWith('BUSINESS')
+    ? { value: 'PERSONAL', label: labelOf('PERSONAL'), basis: 'from your account', correctable: false }
+    : null;
+}
+
+/** Client-side mirror of the `assetCondition` values `NeedInterpretationAgent` may return. */
+export const ASSET_CONDITION_OPTIONS: { value: string; label: string }[] = [
+  { value: 'NEW', label: 'New' },
+  { value: 'USED', label: 'Used' },
+  { value: 'NOT_APPLICABLE', label: 'Not applicable' },
+  { value: 'UNKNOWN', label: 'Not stated' },
+];
+
 /** Client-side mirror of `CreditNeedDraft.ASSET_CATEGORIES`. */
 export const ASSET_CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: 'AGRICULTURAL_MACHINERY', label: 'Agricultural machinery' },

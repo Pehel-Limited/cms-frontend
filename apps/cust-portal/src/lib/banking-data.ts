@@ -37,6 +37,12 @@ export interface BankAccount {
   balanceAsOf?: string;
   /** Sector inherited from the owning business. Sample accounts have none. */
   sector?: string;
+  /**
+   * DEPOSIT or CREDIT from account-service. A CREDIT account's balance is capital still
+   * owed, so anything totalling "what the customer has" must leave those out. Sample
+   * accounts have none, so they count as deposits by absence.
+   */
+  accountCategory?: string;
 }
 
 export type CardType = 'DEBIT' | 'CREDIT';
@@ -64,7 +70,7 @@ export interface PaymentCard {
 }
 
 export type TxnDirection = 'IN' | 'OUT';
-export type TxnStatus = 'COMPLETED' | 'PENDING' | 'DECLINED';
+export type TxnStatus = 'COMPLETED' | 'PENDING' | 'DECLINED' | 'REVERSED';
 
 export interface Transaction {
   id: string;
@@ -78,8 +84,19 @@ export interface Transaction {
   status: TxnStatus;
   date: string; // ISO
   note?: string;
+  /**
+   * True when the line was funded by a card rather than a transfer or direct debit. Live rows
+   * carry no cardId — the backend has no card instruments — so card-shaped panels key off this
+   * instead and still describe real spending.
+   */
+  viaCard?: boolean;
 }
 
+/**
+ * Retail categories plus the ones a business statement needs. A sole trader's current account
+ * carries supplier payments and Revenue duties alongside the supermarket shop, and a company's
+ * largest outflow is payroll — none of which fit a retail taxonomy.
+ */
 export type SpendCategory =
   | 'Groceries'
   | 'Eating out'
@@ -92,7 +109,16 @@ export type SpendCategory =
   | 'Income'
   | 'Transfers'
   | 'Cash'
-  | 'Other';
+  | 'Other'
+  | 'Suppliers'
+  | 'Payroll'
+  | 'Tax & Duties'
+  | 'Premises'
+  | 'Materials'
+  | 'Fees & Charges'
+  | 'Takings'
+  | 'Marketing'
+  | 'Operations';
 
 export interface Beneficiary {
   id: string;
@@ -129,6 +155,15 @@ export const CATEGORY_META: Record<SpendCategory, { color: string }> = {
   Transfers: { color: '#64748b', },
   Cash: { color: '#a855f7', },
   Other: { color: '#94a3b8', },
+  Suppliers: { color: '#0d9488', },
+  Payroll: { color: '#7c3aed', },
+  'Tax & Duties': { color: '#b45309', },
+  Premises: { color: '#475569', },
+  Materials: { color: '#65a30d', },
+  'Fees & Charges': { color: '#e11d48', },
+  Takings: { color: '#16a34a', },
+  Marketing: { color: '#db2777', },
+  Operations: { color: '#0284c7', },
 };
 
 /* ──────────────────────────────────────────────────────────────────
@@ -360,6 +395,26 @@ export const TRANSACTIONS: Transaction[] = [
 ];
 
 /* ──────────────────────────────────────────────────────────────────
+ * Active dataset
+ *
+ * Helpers below read this rather than TRANSACTIONS directly, so a screen can render a
+ * customer's real statement through the same maths without every call site being rewritten.
+ * It is only ever replaced on the client, after mount, so a server render never mutates
+ * module state shared between requests.
+ * ────────────────────────────────────────────────────────────────── */
+
+let ACTIVE_TRANSACTIONS: Transaction[] = TRANSACTIONS;
+
+/** Replace the dataset the derived helpers read. Pass the sample set back to restore it. */
+export function setActiveTransactions(rows: Transaction[]): void {
+  ACTIVE_TRANSACTIONS = rows;
+}
+
+export function activeTransactions(): Transaction[] {
+  return ACTIVE_TRANSACTIONS;
+}
+
+/* ──────────────────────────────────────────────────────────────────
  * Derived helpers
  * ────────────────────────────────────────────────────────────────── */
 
@@ -375,13 +430,13 @@ export function getAccount(id: string): BankAccount | undefined {
 }
 
 export function transactionsForAccount(accountId: string): Transaction[] {
-  return TRANSACTIONS.filter(t => t.accountId === accountId).sort(
+  return ACTIVE_TRANSACTIONS.filter(t => t.accountId === accountId).sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 }
 
 export function recentTransactions(limit = 8): Transaction[] {
-  return [...TRANSACTIONS]
+  return [...ACTIVE_TRANSACTIONS]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, limit);
 }
@@ -402,7 +457,7 @@ export function spendByCategory(
   settledOnly = false
 ): CategorySpend[] {
   const totals = new Map<SpendCategory, number>();
-  TRANSACTIONS.filter(
+  ACTIVE_TRANSACTIONS.filter(
     t =>
       t.direction === 'OUT' &&
       t.category !== 'Transfers' &&
@@ -424,8 +479,8 @@ export function spendByCategory(
 }
 
 export function monthlyInOut(): { income: number; spending: number } {
-  const income = TRANSACTIONS.filter(t => t.direction === 'IN').reduce((s, t) => s + t.amount, 0);
-  const spending = TRANSACTIONS.filter(t => t.direction === 'OUT').reduce((s, t) => s + t.amount, 0);
+  const income = ACTIVE_TRANSACTIONS.filter(t => t.direction === 'IN').reduce((s, t) => s + t.amount, 0);
+  const spending = ACTIVE_TRANSACTIONS.filter(t => t.direction === 'OUT').reduce((s, t) => s + t.amount, 0);
   return { income, spending };
 }
 
@@ -462,7 +517,7 @@ export function bucketSpendByDay(rows: Transaction[], days: number): DailySpend[
 /** Daily OUT-spend for the last `days` days, oldest → newest (for bar charts). */
 export function dailySpendSeries(days = 14): DailySpend[] {
   return bucketSpendByDay(
-    TRANSACTIONS.filter(t => t.direction === 'OUT'),
+    ACTIVE_TRANSACTIONS.filter(t => t.direction === 'OUT'),
     days
   );
 }
@@ -491,8 +546,12 @@ export function bucketDaily<T extends { date: string; total: number }>(series: T
 }
 
 export function dailyCardSpend(days: number, cardId?: string): { date: string; total: number }[] {
-  const rows = TRANSACTIONS.filter(
-    t => t.direction === 'OUT' && t.status === 'COMPLETED' && t.cardId && (!cardId || t.cardId === cardId)
+  const rows = ACTIVE_TRANSACTIONS.filter(
+    t =>
+      t.direction === 'OUT' &&
+      t.status === 'COMPLETED' &&
+      (t.cardId || t.viaCard) &&
+      (!cardId || t.cardId === cardId)
   );
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -521,8 +580,8 @@ export interface SavingsGoal {
   currency: string;
 }
 
-export function savingsGoal(): SavingsGoal {
-  const pot = ACCOUNTS.find(a => a.id === 'acc-savings');
+export function savingsGoal(accounts: BankAccount[] = ACCOUNTS): SavingsGoal {
+  const pot = accounts.find(a => a.id === 'acc-savings') ?? accounts.find(a => a.type === 'SAVINGS');
   return {
     label: 'Savings Pot',
     saved: pot?.balance ?? 0,

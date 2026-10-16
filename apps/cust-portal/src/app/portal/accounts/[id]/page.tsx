@@ -31,6 +31,9 @@ const STATUS_BADGE: Record<Transaction['status'], { className: string; label: st
   COMPLETED: null,
   PENDING: { className: 'badge badge-warning', label: 'Pending' },
   DECLINED: { className: 'badge badge-error', label: 'Declined' },
+  // A reversal is not a decline: the purchase happened and was then undone, and the
+  // compensating line appears separately.
+  REVERSED: { className: 'badge badge-neutral', label: 'Reversed' },
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -445,7 +448,7 @@ export default function AccountDetailPage() {
             </div>
             {state === 'loading' ? (
               <div className="space-y-4 p-5">
-                <div className="skeleton aspect-[1.586] w-full rounded-2xl" />
+                <div className="skeleton card-art rounded-2xl" />
               </div>
             ) : state === 'error' ? (
               <p className="px-5 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>

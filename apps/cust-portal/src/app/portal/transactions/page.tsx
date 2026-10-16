@@ -7,6 +7,7 @@ import { glyphFor, GlyphTile } from '@/components/ui/Glyph';
 import {
   TRANSACTIONS,
   ACCOUNTS,
+  setActiveTransactions,
   groupTransactionsByDay,
   spendByCategory,
   monthlyInOut,
@@ -14,6 +15,8 @@ import {
   type Transaction,
   type SpendCategory,
 } from '@/lib/banking-data';
+import { accountService } from '@/services/api/account-service';
+import { transactionService } from '@/services/api/transaction-service';
 
 function fmt(n: number, currency = 'EUR'): string {
   return new Intl.NumberFormat('en-IE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(n);
@@ -34,6 +37,9 @@ const STATUS_BADGE: Record<Transaction['status'], { className: string; label: st
   COMPLETED: null,
   PENDING: { className: 'badge badge-warning', label: 'Pending' },
   DECLINED: { className: 'badge badge-error', label: 'Declined' },
+  // A reversal is not a decline: the purchase happened and was then undone, and the
+  // compensating line appears separately.
+  REVERSED: { className: 'badge badge-neutral', label: 'Reversed' },
 };
 
 /* Stable fallbacks so derived memos don't recompute while data is loading. */
@@ -60,19 +66,21 @@ interface TxnData {
   topCategory: { category: SpendCategory; total: number; pct: number } | null;
 }
 
-function resolveTransactions(): TxnData {
-  if (!TRANSACTIONS.length) throw new Error('No transactions returned');
-  const { income, spending } = monthlyInOut();
+function deriveRows(rows: Transaction[], accounts: BankAccount[]): TxnData {
+  // Totals come from the rows this screen actually lists, so the header can never
+  // disagree with the timeline beneath it.
+  const income = rows.filter(t => t.direction === 'IN').reduce((s, t) => s + t.amount, 0);
+  const spending = rows.filter(t => t.direction === 'OUT').reduce((s, t) => s + t.amount, 0);
+  const oldest = rows.reduce((min, t) => Math.min(min, new Date(t.date).getTime()), Date.now());
   const spend = spendByCategory();
-  const oldest = TRANSACTIONS.reduce((min, t) => Math.min(min, new Date(t.date).getTime()), Date.now());
   return {
-    transactions: TRANSACTIONS,
-    accounts: ACCOUNTS,
-    categories: Array.from(new Set(TRANSACTIONS.map(t => t.category))),
+    transactions: rows,
+    accounts,
+    categories: Array.from(new Set(rows.map(t => t.category))),
     income,
     spending,
-    incomeCount: TRANSACTIONS.filter(t => t.direction === 'IN').length,
-    spendingCount: TRANSACTIONS.filter(t => t.direction === 'OUT').length,
+    incomeCount: rows.filter(t => t.direction === 'IN').length,
+    spendingCount: rows.filter(t => t.direction === 'OUT').length,
     historyDays: Math.max(1, Math.round((Date.now() - oldest) / 86400000)),
     topCategory: spend[0]
       ? { category: spend[0].category, total: spend[0].total, pct: spend[0].pct }
@@ -88,19 +96,33 @@ function useTransactionsData() {
   useEffect(() => {
     let active = true;
     setState('loading');
-    const timer = window.setTimeout(() => {
+    (async () => {
+      const acct = await accountService.getAccountsSnapshot();
       if (!active) return;
-      try {
-        setData(resolveTransactions());
-        setState('ready');
-      } catch {
+      // Sample accounts and live lines would describe two different customers, so the
+      // halves switch over together.
+      const txn =
+        acct.source === 'LIVE'
+          ? await transactionService.getTransactionsSnapshot({
+              from: new Date(Date.now() - 372 * 86400000).toISOString().slice(0, 10),
+            })
+          : { transactions: TRANSACTIONS, sampleReason: acct.sampleReason };
+      if (!active) return;
+
+      setActiveTransactions(txn.transactions);
+      setData(deriveRows(txn.transactions, acct.accounts));
+      // An empty history is a real answer, not a failure: the timeline's own
+      // "No transactions yet" state covers it.
+      setState('ready');
+    })().catch(() => {
+      if (active) {
         setData(null);
         setState('error');
       }
-    }, 220);
+    });
     return () => {
       active = false;
-      window.clearTimeout(timer);
+      setActiveTransactions(TRANSACTIONS);
     };
   }, [attempt]);
 

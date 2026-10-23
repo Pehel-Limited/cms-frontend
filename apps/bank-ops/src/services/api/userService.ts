@@ -35,6 +35,7 @@ class UserService {
   async getUsers(params?: {
     search?: string;
     role?: string;
+    userType?: string;
     page?: number;
     size?: number;
     sort?: string;
@@ -43,6 +44,7 @@ class UserService {
 
     if (params?.search) queryParams.append('search', params.search);
     if (params?.role) queryParams.append('role', params.role);
+    if (params?.userType) queryParams.append('userType', params.userType);
     if (params?.page !== undefined) queryParams.append('page', params.page.toString());
     if (params?.size !== undefined) queryParams.append('size', params.size.toString());
     if (params?.sort) queryParams.append('sort', params.sort);

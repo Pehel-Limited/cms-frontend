@@ -5,7 +5,11 @@ import Link from 'next/link';
 import {
   TRANSACTIONS,
   savingsGoal,
+  savingsPosition,
+  savingsCaption,
   type BankAccount,
+  type SavingsGoal,
+  type SavingsPosition,
   type Transaction,
 } from '@/lib/banking-data';
 import {
@@ -56,12 +60,17 @@ type LoadState = 'loading' | 'ready' | 'error';
 
 interface AccountsData {
   accounts: BankAccount[];
+  /** The subset that is money held rather than capital owed — what every total is drawn from. */
+  depositAccounts: BankAccount[];
   transactions: Transaction[];
   total: number;
   /** Null when the accounts do not share one currency — then no single total is honest. */
   totalCurrency: string | null;
   available: number;
-  goal: ReturnType<typeof savingsGoal> | null;
+  /** Sample-only: the illustrative savings target. Null for a live customer. */
+  goal: SavingsGoal | null;
+  /** Live-only: what the savings accounts actually hold, with no target invented for it. */
+  savings: SavingsPosition | null;
   source: AccountSource;
   sampleReason: SampleReason | null;
   balanceAsOf: string | null;
@@ -80,17 +89,25 @@ async function resolveAccounts(): Promise<AccountsData> {
         })
       : null;
 
-  const currencies = new Set(accounts.map(a => a.currency));
-  const totalCurrency = currencies.size === 1 ? accounts[0]?.currency ?? null : null;
-  const sum = (pick: (a: BankAccount) => number) => accounts.reduce((total, a) => total + pick(a), 0);
+  /* A loan account's balance is capital still owed, so it stays out of every total of what
+     the customer holds — the same rule the dashboard applies. Reporting a Term Loan and a
+     Working Capital line as €1.3m of the customer's own money overstated the balance by that
+     much on a book where two of five accounts are credit. */
+  const depositAccounts = accounts.filter(a => a.accountCategory !== 'CREDIT');
+  const currencies = new Set(depositAccounts.map(a => a.currency));
+  const totalCurrency = currencies.size === 1 ? depositAccounts[0]?.currency ?? null : null;
+  const sum = (pick: (a: BankAccount) => number) =>
+    depositAccounts.reduce((total, a) => total + pick(a), 0);
 
   return {
     accounts,
+    depositAccounts,
     transactions: txn ? txn.transactions : source === 'LIVE' ? [] : TRANSACTIONS,
     total: totalCurrency ? sum(a => a.balance) : 0,
     totalCurrency,
     available: totalCurrency ? sum(a => a.available) : 0,
-    goal: source === 'LIVE' ? savingsGoal(accounts) : savingsGoal(),
+    goal: source === 'LIVE' ? null : savingsGoal(),
+    savings: source === 'LIVE' ? savingsPosition(depositAccounts) : null,
     source,
     sampleReason,
     balanceAsOf,
@@ -200,6 +217,7 @@ export default function AccountsPage() {
   }, [data, selected]);
 
   const goal = data?.goal;
+  const savings = data?.savings;
   const goalPct = goal && goal.target > 0 ? Math.round((goal.saved / goal.target) * 100) : 0;
   const mask = (value: string) => (hideBalances ? '••••••' : value);
 
@@ -275,22 +293,27 @@ export default function AccountsPage() {
               <>
                 <p className="stat-value">{mask(fmt(data.total, data.totalCurrency))}</p>
                 <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Across {data.accounts.length} accounts
+                  {/* Loan balances are excluded from the total, so the caption names the accounts
+                      the figure actually covers instead of implying the whole book. */}
+                  Across {data.depositAccounts.length}{' '}
+                  {data.accounts.length > data.depositAccounts.length ? 'deposit ' : ''}
+                  account{data.depositAccounts.length === 1 ? '' : 's'}
                   {data.balanceAsOf ? ` · as of ${new Date(data.balanceAsOf).toLocaleString()}` : ''}
                 </p>
               </>
             )}
           </div>
           {/* One column per account, scaled to its balance. A composition of what
-              is held, not a trend — the page has no balance history. */}
+              is held, not a trend — the page has no balance history. Matches the total,
+              so credit accounts are out of this too. */}
           {state === 'ready' && data && data.totalCurrency && (
             <div className="shrink-0">
               <DotMatrix
-                data={data.accounts.map(a => a.balance)}
+                data={data.depositAccounts.map(a => a.balance)}
                 cell={8}
                 rows={5}
-                label={`Balance held by each of ${data.accounts.length} accounts`}
-                format={(value, i) => `${data.accounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
+                label={`Balance held by each of ${data.depositAccounts.length} accounts`}
+                format={(value, i) => `${data.depositAccounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
               />
             </div>
           )}
@@ -315,42 +338,59 @@ export default function AccountsPage() {
           {state === 'ready' && data && data.totalCurrency && (
             <div className="shrink-0">
               <DotMatrix
-                data={data.accounts.map(a => Math.max(0, a.available))}
+                data={data.depositAccounts.map(a => Math.max(0, a.available))}
                 cell={8}
                 rows={5}
                 color="var(--brand-strong)"
-                label={`Available to spend in each of ${data.accounts.length} accounts`}
-                format={(value, i) => `${data.accounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
+                label={`Available to spend in each of ${data.depositAccounts.length} accounts`}
+                format={(value, i) => `${data.depositAccounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
               />
             </div>
           )}
         </div>
 
         <div className="stat-tile">
-          <p className="stat-label">{goal?.label ?? 'Savings'} goal</p>
           {state === 'loading' ? (
-            <div className="skeleton mt-2 h-7 w-24" />
-          ) : !goal ? (
-            <p className="stat-value">—</p>
-          ) : (
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={goal.target}
-              aria-valuenow={goal.saved}
-              aria-label={`${goal.label}: ${mask(fmt(goal.saved))} saved of ${mask(fmt(goal.target))}`}
-            >
-              <p className="stat-value">{goalPct}%</p>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--surface-input)' }}>
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${Math.min(100, goalPct)}%`, backgroundColor: 'var(--brand)' }}
-                />
+            <>
+              <p className="stat-label">Savings</p>
+              <div className="skeleton mt-2 h-7 w-24" />
+            </>
+          ) : goal ? (
+            <>
+              <p className="stat-label">{goal.label} goal</p>
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={goal.target}
+                aria-valuenow={goal.saved}
+                aria-label={`${goal.label}: ${mask(fmt(goal.saved))} saved of ${mask(fmt(goal.target))}`}
+              >
+                <p className="stat-value">{goalPct}%</p>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--surface-input)' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min(100, goalPct)}%`, backgroundColor: 'var(--brand)' }}
+                  />
+                </div>
+                <p className="mt-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {mask(fmt(goal.saved, goal.currency))} of {mask(fmt(goal.target, goal.currency))} saved
+                </p>
               </div>
-              <p className="mt-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-                {mask(fmt(goal.saved, goal.currency))} of {mask(fmt(goal.target, goal.currency))} saved
+            </>
+          ) : (
+            <>
+              {/* A real customer has no savings goal recorded anywhere, so this reports the
+                  balance and stops rather than dividing it by a target nobody set. */}
+              <p className="stat-label">{savings?.accountCount === 1 ? savings.label : 'Savings'}</p>
+              <p className="stat-value">
+                {savings?.currency ? mask(fmt(savings.saved, savings.currency)) : '—'}
               </p>
-            </div>
+              {savings && (
+                <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {savingsCaption(savings)}
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -497,9 +537,13 @@ export default function AccountsPage() {
                 </div>
 
                 <div>
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>IBAN</p>
+                  {/* A live account has no IBAN on the feed, only its domestic number, so the
+                      row takes its label from whichever of the two was actually served. */}
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {selected.iban ? 'IBAN' : 'Account number'}
+                  </p>
                   <p className="break-all font-mono text-base" style={{ color: 'var(--text-primary)' }}>
-                    {selected.iban}
+                    {selected.iban || selected.accountNumber}
                   </p>
                 </div>
 
@@ -510,13 +554,11 @@ export default function AccountsPage() {
                     </svg>
                     Move money
                   </Link>
-                  {/* The detail page is driven by the sample dataset, so it is
-                      only linked while that is what we are showing. */}
-                  {data?.source !== 'LIVE' && (
-                    <Link href={`/portal/accounts/${selected.id}`} className="btn btn-secondary btn-sm">
-                      View full account
-                    </Link>
-                  )}
+                  {/* The detail page resolves against the same snapshot as this list, so it
+                      opens for a live account as well as a sample one. */}
+                  <Link href={`/portal/accounts/${selected.id}`} className="btn btn-secondary btn-sm">
+                    View full account
+                  </Link>
                   <Link href="/portal/documents" className="btn btn-ghost btn-sm">
                     Statements
                   </Link>                </div>

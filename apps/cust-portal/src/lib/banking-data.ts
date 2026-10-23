@@ -572,7 +572,14 @@ export function dailyCardSpend(days: number, cardId?: string): { date: string; t
   return buckets;
 }
 
-/** A simple savings-goal model for the radial progress ring. */
+/**
+ * A simple savings-goal model for the radial progress ring.
+ *
+ * Sample-only. The €40,000 target is illustrative and exists nowhere on the bank's
+ * records, so a live customer's real balance must never be measured against it —
+ * that produced "€2,622,981.86 of €40,000.00 saved · 6557%". Use `savingsPosition`
+ * for accounts that came from the account service.
+ */
 export interface SavingsGoal {
   label: string;
   saved: number;
@@ -588,6 +595,43 @@ export function savingsGoal(accounts: BankAccount[] = ACCOUNTS): SavingsGoal {
     target: 40000,
     currency: pot?.currency ?? 'EUR',
   };
+}
+
+/**
+ * What the customer actually holds across their savings-type deposit accounts.
+ *
+ * Deliberately carries no target: nothing in the account service records a savings
+ * goal for anyone, so the only honest figure is the balance itself. A loan account's
+ * balance is capital owed rather than money held, so CREDIT accounts are excluded the
+ * same way every "what the customer has" total excludes them.
+ */
+export interface SavingsPosition {
+  /** The savings account's own name, or a generic label when the figure spans several. */
+  label: string;
+  saved: number;
+  /** Null when the savings accounts do not share one currency. */
+  currency: string | null;
+  accountCount: number;
+}
+
+export function savingsPosition(accounts: BankAccount[]): SavingsPosition {
+  const pots = accounts.filter(a => a.type === 'SAVINGS' && a.accountCategory !== 'CREDIT');
+  const currencies = new Set(pots.map(a => a.currency));
+  return {
+    label: pots.length === 1 ? pots[0].name : 'Savings',
+    saved: pots.reduce((sum, a) => sum + a.balance, 0),
+    currency: currencies.size === 1 ? pots[0]?.currency ?? null : null,
+    accountCount: pots.length,
+  };
+}
+
+/** What sits under a savings figure. There is no target to report against, so it says
+ *  where the money is instead. Shared by the two screens that show the position. */
+export function savingsCaption(s: SavingsPosition): string {
+  if (s.accountCount === 0) return 'No savings account held';
+  if (!s.currency) return 'Held in more than one currency';
+  if (s.accountCount > 1) return `Across ${s.accountCount} savings accounts`;
+  return 'Savings balance';
 }
 
 export function groupTransactionsByDay(list: Transaction[]): { label: string; items: Transaction[] }[] {

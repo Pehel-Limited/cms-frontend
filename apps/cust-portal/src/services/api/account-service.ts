@@ -105,7 +105,10 @@ export function toBankAccount(account: CustomerAccount): BankAccount {
     accountCategory: account.accountCategory,
     accountNumber: maskAccountNumber(account.accountNumber),
     sortCode: '',
-    iban: account.iban || account.accountNumber,
+    /* account-service does not serve an IBAN yet, only the domestic account number.
+       Passing that through as `iban` made the screens label it as one, so it stays
+       empty and the rows that need an IBAN do not render. */
+    iban: account.iban ?? '',
     currency: account.currency || 'EUR',
     balance: account.currentBalance ?? account.availableBalance ?? 0,
     available: account.availableBalance ?? account.currentBalance ?? 0,

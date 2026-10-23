@@ -146,7 +146,8 @@ export default function TeamPage() {
             <p className="text-base font-semibold">Unable to load team</p>
             <p className="mt-1 text-sm">{error}</p>
             <p className="mt-2 text-sm opacity-80">
-              This feature is only available for business customers.
+              No company is linked to this login, so there is no team to manage. Sign in with the
+              business credentials, or ask an authorised official to record you as an officer.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button onClick={loadTeam} className="btn btn-primary btn-sm">

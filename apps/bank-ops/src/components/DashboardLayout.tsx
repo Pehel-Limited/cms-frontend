@@ -6,6 +6,12 @@ import Link from 'next/link';
 import { useAppSelector, useAppDispatch } from '@/store';
 import { logoutUser } from '@/store/slices/authSlice';
 import { useTheme } from '@/app/providers';
+import { useMessagingInbox } from '@/hooks/useMessagingInbox';
+import {
+  formatRelativeTime,
+  previewLine,
+  threadCounterpartName,
+} from '@/services/api/messaging-service';
 
 /* ─── RM-specific surface tokens (always dark) ───
    The rail keeps its own always-dark ground, but tinted plum rather than navy so
@@ -31,6 +37,16 @@ const NAV_ITEMS = [
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Messages',
+    path: '/dashboard/messages',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
       </svg>
     ),
   },
@@ -77,7 +93,7 @@ const NAV_ITEMS = [
 ];
 
 const ADMIN_ITEM = {
-  name: 'Admin',
+  name: 'Executive',
   path: '/dashboard/admin',
   icon: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -120,10 +136,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const { unreadTotal, unreadThreads, refresh: refreshInbox } = useMessagingInbox();
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setIsUserMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setIsNotifOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -330,12 +350,105 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           {/* Notifications */}
-          <button className="relative p-2 rounded-xl transition-colors border" style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }} aria-label="Notifications">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-                      </button>
+          <div className="relative" ref={notifRef}>
+            <button
+              onClick={() => {
+                setIsNotifOpen(v => !v);
+                if (!isNotifOpen) refreshInbox();
+              }}
+              aria-expanded={isNotifOpen}
+              aria-controls="rm-notifications"
+              className="relative p-2 rounded-xl transition-colors border"
+              style={{ color: 'var(--rm-text-secondary)', borderColor: 'var(--rm-border)' }}
+              aria-label={
+                unreadTotal > 0
+                  ? `Notifications — ${unreadTotal} unread customer message${unreadTotal === 1 ? '' : 's'}`
+                  : 'Notifications'
+              }
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {unreadTotal > 0 && (
+                <span
+                  className="absolute -right-1 -top-1 min-w-[1.15rem] rounded-full px-1 text-center text-[10px] font-bold leading-[1.15rem] text-white"
+                  style={{ backgroundColor: 'var(--rm-down)' }}
+                >
+                  {unreadTotal > 99 ? '99+' : unreadTotal}
+                </span>
+              )}
+            </button>
+
+            {isNotifOpen && (
+              <div
+                id="rm-notifications"
+                role="menu"
+                aria-label="Customer message notifications"
+                className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl shadow-2xl"
+                style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
+              >
+                <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>
+                    Messages
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                    {unreadTotal > 0
+                      ? `${unreadTotal} unread across ${unreadThreads.length} conversation${unreadThreads.length === 1 ? '' : 's'}`
+                      : 'Nothing unread'}
+                  </p>
+                </div>
+
+                {unreadThreads.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    No new messages from customers.
+                  </p>
+                ) : (
+                  <ul className="max-h-80 overflow-y-auto py-1">
+                    {unreadThreads.slice(0, 6).map(row => (
+                      <li key={row.conversation.id}>
+                        <Link
+                          href={`/dashboard/messages?application=${row.conversation.applicationId}`}
+                          role="menuitem"
+                          onClick={() => setIsNotifOpen(false)}
+                          className="block px-4 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                        >
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="min-w-0 truncate text-sm font-semibold" style={{ color: 'var(--rm-text)' }}>
+                              {threadCounterpartName(row)}
+                            </span>
+                            <span className="shrink-0 text-[11px]" style={{ color: 'var(--rm-text-muted)' }}>
+                              {formatRelativeTime(row.lastMessage?.createdAt ?? null)}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 line-clamp-2 text-xs" style={{ color: 'var(--rm-text-secondary)' }}>
+                            {previewLine(row)}
+                          </span>
+                          <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--rm-brand-on-soft)' }}>
+                            {row.unreadCount > 1 ? `${row.unreadCount} messages — respond` : 'Respond'}
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="border-t px-4 py-2" style={{ borderColor: 'var(--rm-border)' }}>
+                  <Link
+                    href="/dashboard/messages"
+                    onClick={() => setIsNotifOpen(false)}
+                    className="text-xs font-semibold"
+                    style={{ color: 'var(--rm-brand-on-soft)' }}
+                  >
+                    All conversations
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* User menu */}
           <div className="relative" ref={menuRef}>
@@ -372,7 +485,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="py-1">
                   {[
                     { href: '/dashboard/rm', label: 'My Profile' },
-                    { href: '/dashboard/admin', label: 'Settings' },
+                    { href: '/dashboard/admin', label: 'Executive overview' },
                   ].map(item => (
                     <Link key={item.href} href={item.href}
                       className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5"

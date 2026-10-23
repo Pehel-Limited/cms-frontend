@@ -9,6 +9,7 @@ import {
   AddPartyPayload,
   UpdatePartyPayload,
   PARTY_ROLE_LABELS,
+  partySummaryCounts,
 } from '@/services/api/party-service';
 import { getCurrencySymbol } from '@/lib/format';
 import { PageHero } from '@/components/ui/PageHero';
@@ -57,21 +58,24 @@ export default function PartiesPage() {
   const [roleFilter, setRoleFilter] = useState<string>('');
 
   const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    /* Two requests, not Promise.all: a failed validation call discarded the members that
+       had already arrived, so a company with a full register could still render empty. */
     try {
-      setLoading(true);
-      setError(null);
-      const [members, val] = await Promise.all([
-        partyService.listParties(),
-        partyService.validateParties(),
-      ]);
-      setParties(members);
-      setValidation(val);
+      setParties(await partyService.listParties());
     } catch (err: any) {
-      if (err.status === 403) {
-        setError('You must be a business customer to manage company parties.');
-      } else {
-        setError(err.message || 'Failed to load parties');
-      }
+      setParties([]);
+      setError(
+        err?.status === 403
+          ? 'No company is linked to this login, so there is no register to show. Sign in with the business credentials, or ask an authorised official to record you as an officer.'
+          : err?.message || 'Failed to load parties'
+      );
+    }
+    try {
+      setValidation(await partyService.validateParties());
+    } catch {
+      setValidation(null);
     } finally {
       setLoading(false);
     }
@@ -143,6 +147,8 @@ export default function PartiesPage() {
       </div>
     );
   }
+
+  const summaryCounts = validation ? partySummaryCounts(validation.summary) : [];
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -233,23 +239,15 @@ export default function PartiesPage() {
                 ))}
               </ul>
             )}
-            <ul className="mt-3 flex flex-wrap gap-2">
-              <li className="chip">
-                {validation.summary.directors} director{validation.summary.directors !== 1 ? 's' : ''}
-              </li>
-              <li className="chip">
-                {validation.summary.shareholders} shareholder
-                {validation.summary.shareholders !== 1 ? 's' : ''}
-              </li>
-              <li className="chip">
-                {validation.summary.ubos} beneficial owner{validation.summary.ubos !== 1 ? 's' : ''} ·{' '}
-                <span className="tabular-nums">{validation.summary.totalUboOwnership}%</span> ownership
-              </li>
-              <li className="chip">
-                {validation.summary.signatories} authorized signator
-                {validation.summary.signatories !== 1 ? 'ies' : 'y'}
-              </li>
-            </ul>
+            {summaryCounts.length > 0 && (
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {summaryCounts.map(text => (
+                  <li key={text} className="chip">
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}

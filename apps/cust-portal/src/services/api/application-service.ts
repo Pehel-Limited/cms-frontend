@@ -333,6 +333,9 @@ export interface LoanApplication {
   // Business (for business/corporate loans)
   businessVintageYears?: number;
   businessAnnualRevenue?: number;
+  /** Trading figures, not the applicant income the bank's affordability check divides by. */
+  businessMonthlyIncome?: number;
+  businessMonthlyExpenses?: number;
 
   // Property (home/mortgage)
   propertyAddress?: string;
@@ -411,6 +414,9 @@ export interface CreateApplicationPayload {
   // Business
   businessVintageYears?: number;
   businessAnnualRevenue?: number;
+  /** Trading figures, not the applicant income the bank's affordability check divides by. */
+  businessMonthlyIncome?: number;
+  businessMonthlyExpenses?: number;
   facilityPurposeDescription?: string;
 
   // Property

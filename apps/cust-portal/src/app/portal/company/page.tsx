@@ -124,8 +124,9 @@ export default function CompanyPage() {
           </div>
           <p className="empty-state-title">No company workspace</p>
           <p className="empty-state-text">
-            This section is available for business and corporate customers. If you believe this is an
-            error, please contact your relationship manager.
+            No company is linked to this login — either you are not registered as an officer of
+            one, or you have not been invited to act for it yet. If you are a director or
+            secretary and expected to see a company here, contact your relationship manager.
           </p>
           <Link href="/portal" className="btn btn-secondary btn-sm mt-4">
             Back to overview

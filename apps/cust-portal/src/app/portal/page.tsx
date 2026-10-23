@@ -17,6 +17,8 @@ import {
   dailyCardSpend,
   spendByCategory,
   savingsGoal,
+  savingsPosition,
+  savingsCaption,
   dailySpendSeries,
   groupTransactionsByDay,
   type BankAccount,
@@ -341,7 +343,7 @@ const QUICK_ACTIONS = [
     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /> },
   { href: '/portal/products', label: 'Products', icon:
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /> },
-  { href: '/portal/ai-assistant', label: 'Rayva AI', icon:
+  { href: '/portal/ai-assistant', label: 'Credit Assistant', icon:
     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" /> },
 ];
 
@@ -434,7 +436,14 @@ export default function PortalDashboard() {
     () => (totalCurrency ? depositAccounts.reduce((sum, a) => sum + a.balance, 0) : 0),
     [depositAccounts, totalCurrency]
   );
-  const goal = useMemo(() => savingsGoal(accounts), [accounts]);
+  /* A real customer has no savings goal recorded anywhere, so the live tile reports only
+     what they hold. The sample set carries an illustrative target, which is the one case
+     where a percentage against a target means anything. */
+  const goal = useMemo(
+    () => (accountSource === 'LIVE' ? null : savingsGoal(accounts)),
+    [accountSource, accounts]
+  );
+  const savings = useMemo(() => savingsPosition(depositAccounts), [depositAccounts]);
   const scheduledPayments = SCHEDULED_PAYMENTS;
 
   /* The trend the balance sparkline draws: every account's own series summed.
@@ -500,7 +509,7 @@ export default function PortalDashboard() {
   );
   const mask = useCallback((s: string) => (hideBalance ? '••••••' : s), [hideBalance]);
 
-  const goalPct = goal.target > 0 ? Math.min(100, (goal.saved / goal.target) * 100) : 0;
+  const goalPct = goal && goal.target > 0 ? Math.min(100, (goal.saved / goal.target) * 100) : 0;
 
   /* Daily out-spend across the visible history. Days with no payments keep a
      short tick so the axis doesn't stretch the busy days out of proportion. */
@@ -583,15 +592,23 @@ export default function PortalDashboard() {
             note={`last ${WINDOW_DAYS} days`}
             series={outActivity.series}
           />
-          <KpiCell
-            label="Savings goal"
-            value={mask(fmtEUR(goal.saved))}
-            note={`of ${hideBalance ? '••••••' : fmtEUR(goal.target)} target`}
-            series={accounts.find(a => a.id === 'acc-savings')?.spark}
-            trailing={
-              <span className="dash-update-chip">{Math.round(goalPct)}%</span>
-            }
-          />
+          {goal ? (
+            <KpiCell
+              label={`${goal.label} goal`}
+              value={mask(fmtEUR(goal.saved))}
+              note={`of ${hideBalance ? '••••••' : fmtEUR(goal.target)} target`}
+              series={accounts.find(a => a.id === 'acc-savings')?.spark}
+              trailing={
+                <span className="dash-update-chip">{Math.round(goalPct)}%</span>
+              }
+            />
+          ) : (
+            <KpiCell
+              label={savings.accountCount === 1 ? savings.label : 'In savings'}
+              value={savings.currency ? mask(fmtEUR(savings.saved)) : '—'}
+              note={savingsCaption(savings)}
+            />
+          )}
         </div>
       </section>
 

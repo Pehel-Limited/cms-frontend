@@ -1145,7 +1145,7 @@ export default function AiAssistantPage() {
             </svg>
           </div>
           <div>
-            <h1 className="serif text-[28px] font-medium leading-tight tracking-tight sm:text-[32px]">Rayva AI credit assistant</h1>
+            <h1 className="serif text-[28px] font-medium leading-tight tracking-tight sm:text-[32px]">Credit Assistant</h1>
             <p className="mt-1.5 text-sm text-white/70">
               Tell me what you need credit for, in your own words — I&apos;ll help you get started.
             </p>

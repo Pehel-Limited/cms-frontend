@@ -70,6 +70,26 @@ export interface ApplicationParties {
   members: PartyMember[];
 }
 
+/**
+ * The register counts shown to a customer, as ready-made labels.
+ *
+ * A role with nobody in it is left out. "0 shareholders" reads like a field the customer got
+ * wrong when it is simply a shape their company does not have — and where a count really is a
+ * gap, the validation issues already say so. One function because the application step and the
+ * company register screen must not be able to describe the same company differently.
+ */
+export function partySummaryCounts(summary: PartyValidation['summary']): string[] {
+  const label = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  return [
+    summary.directors > 0 ? label(summary.directors, 'director') : null,
+    summary.shareholders > 0 ? label(summary.shareholders, 'shareholder') : null,
+    summary.ubos > 0
+      ? `${label(summary.ubos, 'beneficial owner')} (${summary.totalUboOwnership}% ownership)`
+      : null,
+    summary.signatories > 0 ? label(summary.signatories, 'signatory', 'signatories') : null,
+  ].filter((text): text is string => text !== null);
+}
+
 export interface LinkPartiesResult {
   linked: boolean;
   entityId: string;
@@ -86,6 +106,7 @@ export interface LinkPartiesResult {
 
 export const PARTY_ROLE_LABELS: Record<string, string> = {
   DIRECTOR: 'Director',
+  MANAGER: 'Manager',
   SHAREHOLDER: 'Shareholder',
   SECRETARY: 'Secretary',
   PARTNER: 'Partner',
@@ -99,6 +120,13 @@ export const PARTY_ROLE_LABELS: Record<string, string> = {
 };
 
 // ─── API Service ───────────────────────────────────────────────────
+
+/**
+ * A business application is signed by at least two named officers. Mirrors
+ * CompanyPartyBffController.MIN_SIGNATORIES, which enforces the same number on the server —
+ * the portal only ever saves the choice, it cannot widen who is eligible to be picked.
+ */
+export const MIN_SIGNATORIES = 2;
 
 const BFF_BASE = config.api.baseUrl;
 
@@ -190,5 +218,35 @@ export const partyService = {
       headers: authHeaders(),
     });
     return handleResponse<ApplicationParties>(res);
+  },
+
+  /**
+   * The officers named to sign this application, as customer ids.
+   * GET /api/customer/applications/:id/parties/signatories
+   */
+  async getSignatories(applicationId: string): Promise<string[]> {
+    const res = await fetch(
+      `${BFF_BASE}/api/customer/applications/${applicationId}/parties/signatories`,
+      { headers: authHeaders() }
+    );
+    return handleResponse<string[]>(res);
+  },
+
+  /**
+   * Replace the application's signatories. The server refuses anyone the company register
+   * does not record as an authorised signatory, and fewer than two, so a selection made here
+   * cannot name a signer the company has not authorised.
+   * PUT /api/customer/applications/:id/parties/signatories
+   */
+  async setSignatories(applicationId: string, partyIds: string[]): Promise<string[]> {
+    const res = await fetch(
+      `${BFF_BASE}/api/customer/applications/${applicationId}/parties/signatories`,
+      {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ partyIds }),
+      }
+    );
+    return handleResponse<string[]>(res);
   },
 };

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { notifyMessagingInboxChanged } from '@/hooks/useMessagingInbox';
 import { formatCurrency } from '@/lib/format';
 import {
   applicationService,
@@ -2309,22 +2310,37 @@ function MessageRmSection({ applicationId }: { applicationId: string }) {
   /* Surfaced inline — the customer keeps whatever they typed and can retry. */
   const [formError, setFormError] = useState<string | null>(null);
 
-  async function loadMessages() {
+  const loadMessages = useCallback(async () => {
     setLoading(true);
     try {
       const res = await messagingService.getMessages(applicationId);
       setConversation(res.conversation);
       setMessages(res.messages);
+      /* Opening the thread acknowledges it, so the nav badge re-counts now rather than on its
+         next tick. */
+      notifyMessagingInboxChanged();
     } catch {
       // Conversation may not exist yet — that's fine
     } finally {
       setLoading(false);
     }
-  }
+  }, [applicationId]);
 
+  /* Poll while the panel is on screen: an RM reply has to land without the customer reloading. */
   useEffect(() => {
     loadMessages();
-  }, [applicationId]);
+    const id = window.setInterval(() => {
+      if (!document.hidden) loadMessages();
+    }, 8000);
+    const onVisible = () => {
+      if (!document.hidden) loadMessages();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [loadMessages]);
 
   async function handleSend() {
     if (!newMessage.trim() || sending) return;
@@ -2636,7 +2652,7 @@ function MessageBubble({ message }: { message: Message }) {
             : { backgroundColor: 'var(--surface-input)', color: 'var(--text-primary)' }
         }
       >
-        <span className="sr-only">{isCustomer ? 'You sent: ' : `${message.senderName ?? 'Bank'}: `}</span>
+        <span className="sr-only">{isCustomer ? 'You sent: ' : 'From the bank: '}</span>
         {!isCustomer && message.senderName && (
           <p className="mb-0.5 text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
             {message.senderName}

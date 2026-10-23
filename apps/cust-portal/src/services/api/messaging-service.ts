@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { formatCurrency } from '@/lib/format';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -34,6 +35,16 @@ export interface MessagesResponse {
   messages: Message[];
 }
 
+/** A thread plus how much of it the customer has not read and its newest line. */
+export interface ConversationInboxRow {
+  conversation: Conversation;
+  customerName: string | null;
+  requestedAmount: number | null;
+  requestedTermMonths: number | null;
+  unreadCount: number;
+  lastMessage: Message | null;
+}
+
 export interface TaskResponse {
   id: string;
   applicationId: string;
@@ -63,6 +74,23 @@ export const SENDER_TYPE_COLORS: Record<SenderType, string> = {
 };
 
 // ─── Helpers ───────────────────────────────────────────────────
+
+/**
+ * The line shown under a thread in the inbox and in the notification list. The newest message
+ * can be absent (a thread created but never written to) and its body can be blank, so both fall
+ * back to the same quiet wording rather than rendering an empty row.
+ */
+export function previewLine(row: ConversationInboxRow): string {
+  return row.lastMessage?.body?.trim() || 'No messages yet';
+}
+
+/** What a thread is about. A customer can hold several applications, so the ask names it. */
+export function threadLabel(row: ConversationInboxRow): string {
+  const parts: string[] = [];
+  if (row.requestedAmount != null) parts.push(formatCurrency(row.requestedAmount));
+  if (row.requestedTermMonths != null) parts.push(`${row.requestedTermMonths} months`);
+  return parts.length ? parts.join(' over ') : 'Your application';
+}
 
 export function formatMessageTime(dateStr: string): string {
   const d = new Date(dateStr);
@@ -126,9 +154,9 @@ export const messagingService = {
     );
   },
 
-  /** List all conversations for the current customer. */
-  async listConversations(): Promise<Conversation[]> {
-    return apiClient.get<Conversation[]>('/api/customer/conversations');
+  /** List all conversations for the current customer, with unread counts and previews. */
+  async listConversations(): Promise<ConversationInboxRow[]> {
+    return apiClient.get<ConversationInboxRow[]>('/api/customer/conversations');
   },
 
   /** Count unread messages for an application. */

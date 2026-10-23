@@ -11,7 +11,6 @@ import {
   LoanApplication,
   LOAN_PURPOSE_LABELS,
   LoanPurpose,
-  FACILITY_TYPE_LABELS,
   INTENT_TO_LOAN_PURPOSE,
   getPurposeOptions,
   isPurposeAllowed,
@@ -20,16 +19,20 @@ import {
   productService,
   LoanProduct,
   RatePlan,
-  PRODUCT_TYPE_LABELS,
-  filterProductsForSegment,
 } from '@/services/api/product-service';
 import { documentExtractionService, DocumentType, DocumentExtractionResult } from '@/services/api/document-extraction-service';
+import { statementAnalysisService, type CashFlowAnalysis } from '@/services/api/statement-analysis-service';
+import { customerService } from '@/services/api/customer-service';
 import { formatCurrency } from '@/lib/format';
+import { useBankQuote, QuoteFigures, QuoteHeadline } from '@/components/applications/QuoteFigures';
+import type { Quote } from '@/services/api/quote-service';
 import {
   partyService,
   PartyMember,
   PartyValidation,
   PARTY_ROLE_LABELS,
+  MIN_SIGNATORIES,
+  partySummaryCounts,
 } from '@/services/api/party-service';
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -50,18 +53,6 @@ const BUSINESS_STEPS: { key: WizardStep; label: string }[] = [
   { key: 'parties', label: 'People and roles' },
   { key: 'financial', label: 'Financials' },
   { key: 'review', label: 'Review and submit' },
-];
-
-const BUSINESS_PRODUCT_TYPES = [
-  'BUSINESS_LOAN',
-  'BUSINESS_LINE_OF_CREDIT',
-  'WORKING_CAPITAL_LOAN',
-  'EQUIPMENT_FINANCING',
-  'COMMERCIAL_REAL_ESTATE',
-  'CONSTRUCTION_LOAN',
-  'TERM_LOAN',
-  'OVERDRAFT',
-  'REVOLVING_CREDIT',
 ];
 
 const EMPLOYMENT_STATUSES = [
@@ -132,19 +123,36 @@ export default function NewApplicationPage() {
   const [partyMembers, setPartyMembers] = useState<PartyMember[]>([]);
   const [partyValidation, setPartyValidation] = useState<PartyValidation | null>(null);
   const [loadingParties, setLoadingParties] = useState(false);
+  /* Distinct from "the company has no people": a lookup that failed must not be shown as a
+     statement about the customer's own company. */
+  const [partyError, setPartyError] = useState<string | null>(null);
+  /* Customer ids of the officers chosen to sign. Held apart from the register because it is
+     a choice about this application, not a fact about the company. */
+  const [signatoryIds, setSignatoryIds] = useState<string[]>([]);
 
-  // Determine if this is a business application
+  /* Which range of lending this customer is in. Taken from the customer record — the same
+     LendingSegment decision the BFF applies when it accepts or refuses parties — so the steps
+     shown here cannot disagree with the endpoints the wizard later calls. This was a list of
+     product types, which had drifted badly: only 1 of the 11 products open to business customers
+     was in it, so a company or sole trader choosing any other was asked for employment details,
+     while OVERDRAFT, which is personal-only, sent a private customer through "People and roles". */
   const isBusiness = useMemo(() => {
-    if (!selectedProduct) return appContext?.isBusiness ?? false;
-    return BUSINESS_PRODUCT_TYPES.includes(selectedProduct.productType);
-  }, [selectedProduct, appContext]);
+    if (appContext) return appContext.isBusiness;
+    return selectedProduct?.eligibleCustomerTypes?.some(t => t.toUpperCase() === 'BUSINESS') ?? false;
+  }, [appContext, selectedProduct]);
 
   const STEPS = isBusiness ? BUSINESS_STEPS : PERSONAL_STEPS;
 
-  const visibleProducts = useMemo(
-    () => filterProductsForSegment(products, appContext?.segment),
-    [products, appContext]
-  );
+  /* A company's income is the company's, and it is asked for as revenue on this same step —
+     annual income, monthly income and expenses describe a person, so asking a limited company
+     for them invites somebody to enter a director's salary as the borrower's income. A sole
+     trader is the exception: there is no distance between the trade and the person, so their
+     household figures are the affordability answer. */
+  const showPersonalFinancials =
+    !isBusiness || appContext?.customerSubtype?.toUpperCase() === 'SOLE_TRADER';
+
+  // Already filtered to the customer's segment by the catalogue endpoint.
+  const visibleProducts = useMemo(() => products, [products]);
 
   // Form data
   const [form, setForm] = useState({
@@ -162,8 +170,9 @@ export default function NewApplicationPage() {
     jobTitle: '',
     // Business-specific
     businessAnnualRevenue: '',
+    businessMonthlyIncome: '',
+    businessMonthlyExpenses: '',
     businessVintageYears: '',
-    facilityType: '',
     facilityPurposeDescription: '',
     // Property (HOME_PURCHASE, HOME_CONSTRUCTION, HOME_RENOVATION, HOME_REFINANCE)
     propertyAddress: '',
@@ -188,10 +197,24 @@ export default function NewApplicationPage() {
     termsAccepted: false,
   });
 
+  /* The repayment the bank would actually charge for these figures. Asked here rather than
+     per-step so the same quote is on screen while the amount is being typed and again when the
+     customer signs the declarations — and so the two can never disagree. */
+  const { quote, quoting, quoteError, retry: retryQuote } = useBankQuote(
+    selectedProduct?.productCode ?? null,
+    Number(form.requestedAmount),
+    Number(form.requestedTermMonths)
+  );
+
+  /* Which fields came from the customer record rather than from this sitting-down, so the step
+     can say so beside each one. A field the customer then edits stops being labelled. */
+  const [seededFromProfile, setSeededFromProfile] = useState<Record<string, string>>({});
+
   // Load products + context
   useEffect(() => {
     loadProducts();
     loadContext();
+    loadProfileDefaults();
   }, []);
 
   // Load parties when entering parties step
@@ -200,6 +223,24 @@ export default function NewApplicationPage() {
       loadParties();
     }
   }, [step, isBusiness]);
+
+  // Restore a signatory choice already saved against the draft
+  useEffect(() => {
+    if (step !== 'parties' || !savedApp) return;
+    let active = true;
+    partyService
+      .getSignatories(savedApp.applicationId)
+      .then(ids => {
+        if (active) setSignatoryIds(ids ?? []);
+      })
+      .catch(() => {
+        /* Nothing chosen yet is indistinguishable from a failed read here; the step simply
+           starts with nothing ticked and the customer chooses. */
+      });
+    return () => {
+      active = false;
+    };
+  }, [step, savedApp]);
 
   async function loadContext() {
     try {
@@ -210,17 +251,53 @@ export default function NewApplicationPage() {
     }
   }
 
-  async function loadParties() {
+  /* The bank already holds this customer's employer, job and income, so asking them to type it
+     in again is work we invented. Only fields still empty are seeded — a resumed draft's own
+     answers win — and the steps say where the values came from, so anything out of date can be
+     corrected in place. */
+  async function loadProfileDefaults() {
     try {
-      setLoadingParties(true);
-      const [members, val] = await Promise.all([
-        partyService.listParties(),
-        partyService.validateParties(),
-      ]);
-      setPartyMembers(members);
-      setPartyValidation(val);
+      const me = await customerService.getMyProfile();
+      const seeded = {
+        employmentStatus: me.employmentStatus || '',
+        employerName: me.employerName || '',
+        jobTitle: me.occupation || '',
+        statedAnnualIncome: me.annualIncome ? String(me.annualIncome) : '',
+      };
+      if (!Object.values(seeded).some(Boolean)) return;
+      setSeededFromProfile(seeded);
+      setForm(prev => ({
+        ...prev,
+        employmentStatus: prev.employmentStatus || seeded.employmentStatus,
+        employerName: prev.employerName || seeded.employerName,
+        jobTitle: prev.jobTitle || seeded.jobTitle,
+        statedAnnualIncome: prev.statedAnnualIncome || seeded.statedAnnualIncome,
+      }));
     } catch {
-      // Party data not available — may not be a business customer
+      // No profile readable — the steps start blank, exactly as they always did.
+    }
+  }
+
+  async function loadParties() {
+    setLoadingParties(true);
+    setPartyError(null);
+    /* Two requests, deliberately not Promise.all: with the pair, a failed validation call
+       discarded members that had arrived, so a company with a director on file could still
+       be shown as having none. Validation only adds warnings, so losing it is survivable. */
+    try {
+      setPartyMembers(await partyService.listParties());
+    } catch (err: any) {
+      setPartyMembers([]);
+      setPartyError(
+        err?.status === 403
+          ? 'We could not match your login to a company, so we cannot see who acts for it.'
+          : 'We could not read the people linked to your company just now.'
+      );
+    }
+    try {
+      setPartyValidation(await partyService.validateParties());
+    } catch {
+      setPartyValidation(null);
     } finally {
       setLoadingParties(false);
     }
@@ -254,6 +331,8 @@ export default function NewApplicationPage() {
             yearsWithEmployer: existing.yearsWithEmployer?.toString() ?? prev.yearsWithEmployer,
             jobTitle: existing.jobTitle ?? prev.jobTitle,
             businessAnnualRevenue: existing.businessAnnualRevenue?.toString() ?? prev.businessAnnualRevenue,
+            businessMonthlyIncome: existing.businessMonthlyIncome?.toString() ?? prev.businessMonthlyIncome,
+            businessMonthlyExpenses: existing.businessMonthlyExpenses?.toString() ?? prev.businessMonthlyExpenses,
             businessVintageYears: existing.businessVintageYears?.toString() ?? prev.businessVintageYears,
             propertyAddress: existing.propertyAddress ?? prev.propertyAddress,
             propertyCity: existing.propertyCity ?? prev.propertyCity,
@@ -325,7 +404,11 @@ export default function NewApplicationPage() {
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+    /* Once the customer has typed in a field it is their answer, not ours to attribute
+       to their record. */
+    setSeededFromProfile(prev => (prev[name] ? { ...prev, [name]: '' } : prev));
   }
 
   // Applies a customer-confirmed subset of an AI document-extraction draft —
@@ -362,9 +445,12 @@ export default function NewApplicationPage() {
     if (isBusiness) {
       if (form.businessAnnualRevenue)
         payload.businessAnnualRevenue = parseFloat(form.businessAnnualRevenue);
+      if (form.businessMonthlyIncome)
+        payload.businessMonthlyIncome = parseFloat(form.businessMonthlyIncome);
+      if (form.businessMonthlyExpenses)
+        payload.businessMonthlyExpenses = parseFloat(form.businessMonthlyExpenses);
       if (form.businessVintageYears)
         payload.businessVintageYears = parseInt(form.businessVintageYears, 10);
-      if (form.facilityType) payload.facilityType = form.facilityType;
       if (form.facilityPurposeDescription)
         payload.facilityPurposeDescription = form.facilityPurposeDescription;
     }
@@ -406,7 +492,7 @@ export default function NewApplicationPage() {
         setSavedApp(created);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to save draft');
+      setError(readableError(err.message, 'We could not save your application.'));
     } finally {
       setSaving(false);
     }
@@ -510,7 +596,10 @@ export default function NewApplicationPage() {
       case 'loan':
         return !hasLoanErrors;
       case 'parties':
-        return true; // can proceed with warnings
+        /* Two named signatories are required before the application can move on — the same
+           minimum the server enforces on save, so the two cannot disagree about when the
+           customer is allowed through. */
+        return signatoryIds.length >= MIN_SIGNATORIES;
       case 'financial':
         return true; // optional
       case 'employment':
@@ -520,11 +609,43 @@ export default function NewApplicationPage() {
     }
   }
 
-  function goNext() {
+  /**
+   * Records the chosen signatories, creating the draft first if the customer has not
+   * reached a save yet — there is nowhere to attach a choice to before an application exists.
+   */
+  async function persistSignatories(): Promise<boolean> {
+    if (!selectedProduct) return false;
+    try {
+      let app = savedApp;
+      if (!app) {
+        app = await applicationService.create(
+          buildPayload(),
+          isBusiness ? 'BUSINESS' : undefined
+        );
+        setSavedApp(app);
+      }
+      await partyService.setSignatories(app.applicationId, signatoryIds);
+      return true;
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setError(readableError(e.message, 'We could not record who is signing.'));
+      return false;
+    }
+  }
+
+  async function goNext() {
     if (!canGoNext()) {
       setAttemptedNext(true);
+      /* The button stays clickable on the loan step deliberately, so the reason reads next to
+         the field rather than as a dead control — but on a step taller than the viewport that
+         field can be off screen, so bring it to the customer instead. */
+      const firstError = step === 'loan' ? Object.keys(loanErrors)[0] : undefined;
+      if (firstError) {
+        (document.getElementsByName(firstError)[0] as HTMLElement | undefined)?.focus();
+      }
       return;
     }
+    if (step === 'parties' && !(await persistSignatories())) return;
     setAttemptedNext(false);
     const i = stepIndex;
     if (i < STEPS.length - 1) setStep(STEPS[i + 1].key);
@@ -574,22 +695,19 @@ export default function NewApplicationPage() {
         </div>
       </div>
 
-      <section className="panel mb-6 p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="panel-title">Your application</h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">{STEPS[stepIndex]?.label ?? 'Choose a product'} is your focus now. Review everything before you submit.</p>
-          </div>
-          <span className="rounded-full bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand)]">Step {stepIndex + 1} of {STEPS.length}</span>
-        </div>
-        <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[var(--surface-border)]" role="progressbar" aria-label="Application steps completed" aria-valuemin={0} aria-valuemax={STEPS.length} aria-valuenow={Math.max(0, stepIndex)}><div className="h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${Math.max(0, stepIndex) / STEPS.length * 100}%` }} /></div>
-        {ready && preferences.documents && step === 'product' && <details className="mt-5 rounded-xl bg-[var(--surface-input)] p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-[var(--brand)]">Prefill from a bank statement or payslip</summary>
-          <p className="my-3 text-sm leading-6 text-[var(--text-secondary)]">Upload a document, check the extracted information, then apply the suggested values to your draft. You can edit every field.</p>
-          <div className="grid gap-3 lg:grid-cols-2"><DocumentExtractionUpload documentType="BANK_STATEMENT" onApplyExtracted={applyExtractedFields} /><DocumentExtractionUpload documentType="PAYSLIP" onApplyExtracted={applyExtractedFields} /></div>
-          <p className="text-xs text-[var(--text-secondary)]">Tax document extraction is not available yet. Document reading helps prepare your application; it does not determine eligibility.</p>
-        </details>}
-      </section>
+      {/* What the figures typed so far actually cost. Step position is carried by the
+          stepper below, so it is not restated here, and the document uploads live on the
+          two steps whose fields they fill rather than on a step with none. */}
+      {selectedProduct && step !== 'product' && (quote || quoting || quoteError) && (
+        <section className="panel mb-6 px-5 py-4" aria-label="Indicative repayment">
+          <QuoteHeadline
+            quote={quote}
+            quoting={quoting}
+            quoteError={quoteError}
+            onRetry={retryQuote}
+          />
+        </section>
+      )}
 
       {/* Stepper — plain step position, no scoring */}
       <nav
@@ -700,6 +818,16 @@ export default function NewApplicationPage() {
             members={partyMembers}
             validation={partyValidation}
             loading={loadingParties}
+            error={partyError}
+            signatoryIds={signatoryIds}
+            showShortfall={attemptedNext}
+            onToggleSignatory={customerId =>
+              setSignatoryIds(prev =>
+                prev.includes(customerId)
+                  ? prev.filter(id => id !== customerId)
+                  : [...prev, customerId]
+              )
+            }
             onRefresh={loadParties}
           />
         )}
@@ -709,12 +837,19 @@ export default function NewApplicationPage() {
             form={form}
             onChange={handleChange}
             isBusiness={isBusiness}
+            showPersonalFinancials={showPersonalFinancials}
+            seededFromProfile={seededFromProfile}
             onApplyExtracted={applyExtractedFields}
           />
         )}
 
         {step === 'employment' && (
-          <StepEmployment form={form} onChange={handleChange} onApplyExtracted={applyExtractedFields} />
+          <StepEmployment
+            form={form}
+            onChange={handleChange}
+            seededFromProfile={seededFromProfile}
+            onApplyExtracted={applyExtractedFields}
+          />
         )}
 
         {step === 'review' && selectedProduct && (
@@ -722,7 +857,13 @@ export default function NewApplicationPage() {
             form={form}
             product={selectedProduct}
             isBusiness={isBusiness}
+            showPersonalFinancials={showPersonalFinancials}
+            quote={quote}
+            signatories={partyMembers
+              .filter(m => signatoryIds.includes(m.customerId))
+              .map(m => m.customerName || 'Unnamed officer')}
             declarations={declarations}
+            onEdit={goToStep}
             onDeclarationChange={(key, val) => setDeclarations(prev => ({ ...prev, [key]: val }))}
           />
         )}
@@ -741,7 +882,9 @@ export default function NewApplicationPage() {
           {step !== 'review' && selectedProduct && (
             <button
               onClick={saveDraft}
-              disabled={saving || !canGoNext()}
+              /* Saving work in progress must not wait for the step to validate — otherwise the
+                 only way to keep what you have typed is to finish it first. */
+              disabled={saving}
               className="btn btn-ghost"
               type="button"
             >
@@ -773,9 +916,12 @@ export default function NewApplicationPage() {
             /* Stays clickable on the loan step so missing or out-of-range
                values are explained next to the field instead of silently
                disabling the way forward. */
+            /* Stays clickable on the steps that explain themselves — the loan step names the
+               field, the parties step counts what is still needed — so a missing answer reads
+               as a reason rather than as a dead button. */
             <button
               onClick={goNext}
-              disabled={step !== 'loan' && !canGoNext()}
+              disabled={step !== 'loan' && step !== 'parties' && !canGoNext()}
               className="btn btn-primary"
               type="button"
             >
@@ -789,6 +935,24 @@ export default function NewApplicationPage() {
 }
 
 // ─── Step Components ───────────────────────────────────────────
+
+/**
+ * Shown once per step when values were carried in from the customer's own record instead of
+ * being asked for. Saying where they came from is what makes a pre-filled form trustworthy —
+ * an unexplained figure the customer did not type looks like the bank putting words in their
+ * mouth, and this one is about to be signed as accurate.
+ */
+function ProfileSeededNote() {
+  return (
+    <p
+      className="mt-3 rounded-xl px-4 py-2.5 text-sm"
+      style={{ background: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+    >
+      Some of this came from the details on your account, so you did not have to type it. Change
+      anything that is out of date.
+    </p>
+  );
+}
 
 function StepProduct({
   products,
@@ -869,17 +1033,22 @@ function StepProduct({
                       <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                         {p.productName}
                       </h3>
-                      <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {PRODUCT_TYPE_LABELS[p.productType] || p.productType}
-                        {p.shortDescription && ` — ${p.shortDescription}`}
-                      </p>
+                      {/* The description alone: the product type label is nearly always the
+                          product's own name again, which read as the name twice. */}
+                      {p.shortDescription && (
+                        <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                          {p.shortDescription}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right text-sm" style={{ color: 'var(--text-muted)' }}>
                       <p className="tabular-nums">
                         {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
                       </p>
                       <p className="tabular-nums">
-                        {p.minInterestRate}% – {p.maxInterestRate}% p.a.
+                        {p.minInterestRate === p.maxInterestRate
+                          ? `${p.minInterestRate}% p.a.`
+                          : `${p.minInterestRate}% – ${p.maxInterestRate}% p.a.`}
                       </p>
                     </div>
                   </div>
@@ -1129,29 +1298,6 @@ function StepLoan({
           )}
         </div>
 
-        {/* Business: how the borrowing is structured */}
-        {isBusiness && (
-          <div>
-            <label className="field-label" htmlFor="facilityType">
-              Type of loan
-            </label>
-            <select
-              id="facilityType"
-              name="facilityType"
-              value={form.facilityType}
-              onChange={onChange}
-              className="select"
-            >
-              <option value="">Select type…</option>
-              {Object.entries(FACILITY_TYPE_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Purpose Description */}
         <div className="sm:col-span-2">
           <label className="field-label" htmlFor="loanPurposeDescription">
@@ -1378,6 +1524,19 @@ function StepLoan({
 
 /* Extracted field names arrive as raw camelCase API keys — show them as plain
    sentence-case words rather than leaking the payload shape into the UI. */
+/**
+ * An HTTP status name is not something the customer can act on, and it reads worse than nothing
+ * in the error banner. A real sentence from the API — "At least 2 signatories must be selected" —
+ * is kept.
+ */
+function readableError(message: string | undefined, fallback: string): string {
+  const text = message?.trim();
+  if (!text) return fallback;
+  return /^(internal server error|bad request|unauthorized|forbidden|not found|method not allowed|request failed|http\b)/i.test(text)
+    ? fallback
+    : text;
+}
+
 function humaniseFieldKey(key: string): string {
   const words = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
@@ -1394,72 +1553,430 @@ function parseAmount(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-// Parses a date the model echoes verbatim, e.g. "01/04/2026" or "01 Apr 2026".
-// Returns null for anything unparseable so callers fall back gracefully.
-function parseStatementDate(value: unknown): Date | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const s = value.trim();
-  const num = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
-  if (num) {
-    const d = new Date(Number(num[3]), Number(num[2]) - 1, Number(num[1]));
-    return isNaN(d.getTime()) ? null : d;
-  }
-  const t = Date.parse(s);
-  return isNaN(t) ? null : new Date(t);
+/**
+ * A payslip is one document about one pay period, so it still applies on its own. Bank statements
+ * are aggregated across every source by the analysis service instead — averaging them here as well
+ * would put two different calculations of the same figure in the same form.
+ */
+function extractedFieldPatch(fields: Record<string, unknown>): Record<string, string> {
+  const patch: Record<string, string> = {};
+  if (typeof fields.employerName === 'string') patch.employerName = fields.employerName;
+  const monthlyIncome = parseAmount(fields.netPay) ?? parseAmount(fields.grossPay);
+  if (monthlyIncome != null) patch.statedMonthlyIncome = monthlyIncome.toFixed(2);
+  return patch;
 }
 
-// Number of calendar months a bank statement's transactions cover. The model
-// reads a statement that can span 1-6+ months, so a monthly-expense figure must
-// be an average, not the raw period total (AI_roadmap §15.1 "produce the figure
-// deterministically"). Prefers the printed statement period; falls back to the
-// distinct months present in the transaction list (always ≥ 1).
-function statementMonthsCovered(fields: Record<string, unknown>): number {
-  const start = parseStatementDate(fields.statementPeriodStart);
-  const end = parseStatementDate(fields.statementPeriodEnd);
-  if (start && end && end.getTime() >= start.getTime()) {
-    return (end.getFullYear() - start.getFullYear()) * 12
-      + (end.getMonth() - start.getMonth()) + 1;
-  }
-  const tx = Array.isArray(fields.transactions) ? fields.transactions : [];
-  const distinct = new Set<number>();
-  for (const txObj of tx) {
-    if (txObj && typeof txObj === 'object') {
-      const d = parseStatementDate((txObj as Record<string, unknown>).date);
-      if (d) distinct.add(d.getFullYear() * 12 + d.getMonth());
+/**
+ * Every statement the application has, analysed as one picture: the accounts the customer holds
+ * with the bank (only after they tick the consent box) plus any number of statements they upload
+ * from other institutions. Totals are summed from transaction lines by the service — the model
+ * reads the lines, it does not add them up — and stay a draft until the customer applies them.
+ */
+function StatementSources({
+  isBusiness,
+  showPersonalFinancials,
+  onApplyExtracted,
+}: {
+  isBusiness: boolean;
+  showPersonalFinancials: boolean;
+  onApplyExtracted: (patch: Record<string, string>) => void;
+}) {
+  const { preferences, ready } = useAIPreferences();
+  const [documents, setDocuments] = useState<DocumentExtractionResult[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [useBankRecords, setUseBankRecords] = useState(false);
+  const [windowMonths, setWindowMonths] = useState(6);
+  const [analysis, setAnalysis] = useState<CashFlowAnalysis | null>(null);
+  const [analysing, setAnalysing] = useState(false);
+  const [applied, setApplied] = useState(false);
+  const uploadRef = useRef<AbortController | null>(null);
+  const analysisRef = useRef<AbortController | null>(null);
+
+  const hasStatementSource = documents.length > 0 || useBankRecords;
+
+  useEffect(() => {
+    if (!ready || !preferences.documents) return;
+    let cancelled = false;
+    documentExtractionService
+      .list('BANK_STATEMENT')
+      .then(docs => !cancelled && setDocuments(docs))
+      .catch(() => {
+        /* Nothing on file yet is the common case here and is not worth an error state. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, preferences.documents]);
+
+  useEffect(() => {
+    if (!uploading) return;
+    const timer = window.setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [uploading]);
+
+  // Re-run whenever the evidence base changes: a new upload, a withdrawal, consent, or the period.
+  useEffect(() => {
+    if (!ready || !preferences.documents || !hasStatementSource) {
+      setAnalysis(null);
+      return;
+    }
+    analysisRef.current?.abort();
+    const controller = new AbortController();
+    analysisRef.current = controller;
+    setAnalysing(true);
+    setApplied(false);
+    statementAnalysisService
+      .cashFlow({
+        windowMonths,
+        useBankRecords,
+        consentGranted: useBankRecords,
+        signal: controller.signal,
+      })
+      .then(result => {
+        if (controller.signal.aborted) return;
+        setAnalysis(result);
+        setError(null);
+      })
+      .catch(err => {
+        if (controller.signal.aborted) return;
+        setAnalysis(null);
+        setError(err instanceof Error ? err.message : 'Could not analyse your statements.');
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return;
+        analysisRef.current = null;
+        setAnalysing(false);
+      });
+    return () => controller.abort();
+  }, [ready, preferences.documents, hasStatementSource, useBankRecords, windowMonths, documents]);
+
+  async function refreshDocuments() {
+    try {
+      setDocuments(await documentExtractionService.list('BANK_STATEMENT'));
+    } catch {
+      // The upload response already carries the draft, so a failed refresh is cosmetic.
     }
   }
-  return Math.max(distinct.size, 1);
-}
 
-function extractedFieldPatch(
-  documentType: DocumentType,
-  fields: Record<string, unknown>
-): Record<string, string> {
-  if (documentType === 'PAYSLIP') {
-    const patch: Record<string, string> = {};
-    if (typeof fields.employerName === 'string') patch.employerName = fields.employerName;
-    const monthlyIncome = parseAmount(fields.netPay) ?? parseAmount(fields.grossPay);
-    if (monthlyIncome != null) patch.statedMonthlyIncome = monthlyIncome.toFixed(2);
-    return patch;
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (
+      file.size > 10 * 1024 * 1024 ||
+      !['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+    ) {
+      setError('Choose a PDF, JPG, PNG or WebP file up to 10 MB.');
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    setElapsedSeconds(0);
+    const controller = new AbortController();
+    uploadRef.current = controller;
+    try {
+      const result = await documentExtractionService.extract('BANK_STATEMENT', file, controller.signal);
+      if (result.status !== 'DRAFT') {
+        setError(result.errorMessage || result.warnings[0] || 'Could not read this document.');
+      }
+      await refreshDocuments();
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : 'Upload failed');
+      }
+    } finally {
+      uploadRef.current = null;
+      setUploading(false);
+    }
   }
 
-  // BANK_STATEMENT: estimate MONTHLY expenses. Sum the debit transactions, then
-  // divide by how many months the statement covers — a statement routinely
-  // spans 1-6 months, so the raw debit total is NOT a monthly figure. Without
-  // this the applied value was the whole-period total (~19,317) instead of the
-  // monthly average (~3,220), which is what made the fetched amount "grossly
-  // incorrect".
-  const transactions = Array.isArray(fields.transactions) ? fields.transactions : [];
-  const totalDebits = transactions.reduce((sum: number, tx) => {
-    if (!tx || typeof tx !== 'object') return sum;
-    const t = tx as Record<string, unknown>;
-    if (String(t.type).toUpperCase() !== 'DEBIT') return sum;
-    const amount = parseAmount(t.amount);
-    return amount == null ? sum : sum + Math.abs(amount);
-  }, 0);
-  if (totalDebits <= 0) return {};
-  const monthlyExpenses = totalDebits / statementMonthsCovered(fields);
-  return { statedMonthlyExpenses: monthlyExpenses.toFixed(2) };
+  async function handleRemove(documentKey: string) {
+    try {
+      await documentExtractionService.remove('BANK_STATEMENT', documentKey);
+      await refreshDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove that statement.');
+    }
+  }
+
+  function handleApply() {
+    if (!analysis) return;
+    const showsPersonalMonthly = !isBusiness || showPersonalFinancials;
+    const allowed = new Set<string>();
+    if (isBusiness) {
+      allowed.add('businessAnnualRevenue');
+      // A sole trader's receipts are their income, so the monthly pair goes to the personal fields
+      // they can see. For a company they are trading figures and must not land in stated income,
+      // which the bank divides its debt-to-income ratio by.
+      if (!showsPersonalMonthly) {
+        allowed.add('businessMonthlyIncome');
+        allowed.add('businessMonthlyExpenses');
+      }
+    }
+    if (showsPersonalMonthly) {
+      allowed.add('statedAnnualIncome');
+      allowed.add('statedMonthlyIncome');
+      allowed.add('statedMonthlyExpenses');
+    }
+    const patch = Object.fromEntries(
+      Object.entries(analysis.suggestedFields).filter(([key]) => allowed.has(key))
+    );
+    if (Object.keys(patch).length === 0) return;
+    onApplyExtracted(patch);
+    setApplied(true);
+  }
+
+  if (!ready || !preferences.documents) return null;
+
+  const totals = analysis?.byCurrency ?? [];
+  const readableCount = documents.length + (useBankRecords ? 1 : 0);
+
+  return (
+    <div
+      className="mb-6 rounded-xl border bg-[var(--brand-soft)] p-5"
+      style={{ borderColor: 'var(--surface-border-strong)' }}
+    >
+      <p className="field-label mb-1">
+        Your income and expenditure <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
+      </p>
+      <p className="field-hint mb-4">
+        Show us as much of your banking as you like — from us and from other banks — and we&apos;ll
+        work out your monthly income, outgoings and turnover from the transaction lines. Nothing is
+        entered on the form until you apply it.
+      </p>
+
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 shrink-0"
+          checked={useBankRecords}
+          onChange={e => setUseBankRecords(e.target.checked)}
+        />
+        <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+            Use the accounts I hold with the bank
+          </span>
+          <span className="mt-0.5 block field-hint">
+            We read your transaction history for this application only. It does not change any
+            account, limit or standing instruction.
+          </span>
+        </span>
+      </label>
+
+      <div className="mt-4">
+        <p className="field-label mb-2">Statements from other banks</p>
+        {documents.length > 0 && (
+          <ul className="mb-3 space-y-2">
+            {documents.map((doc, i) => {
+              const institution = String(doc.extractedFields.institutionName ?? '').trim();
+              const start = String(doc.extractedFields.statementPeriodStart ?? '');
+              const end = String(doc.extractedFields.statementPeriodEnd ?? '');
+              const lineCount = Array.isArray(doc.extractedFields.transactions)
+                ? doc.extractedFields.transactions.length
+                : 0;
+              return (
+                <li
+                  key={doc.documentKey ?? `unnamed-${i}`}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2"
+                  style={{ backgroundColor: 'var(--surface-input)' }}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {institution || 'Statement with no readable bank name'}
+                    </span>
+                    <span className="block text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                      {start && end ? `${start} to ${end}` : 'Period not read'} ·{' '}
+                      {lineCount === 0
+                        ? 'no lines read'
+                        : `${lineCount} transaction line${lineCount === 1 ? '' : 's'}`}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => doc.documentKey && handleRemove(doc.documentKey)}
+                    disabled={!doc.documentKey}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Remove
+                    <span className="sr-only">: {institution || 'this statement'}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <label className="btn btn-ghost btn-sm inline-block cursor-pointer">
+          {uploading ? 'Reading…' : 'Add a statement'}
+          <input
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/webp"
+            className="sr-only"
+            disabled={uploading}
+            onChange={handleFileSelected}
+          />
+        </label>
+        {uploading && (
+          <div className="mt-3 flex items-center justify-between gap-3" role="status" aria-live="polite">
+            <p className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+              <span
+                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                aria-hidden="true"
+              />
+              Reading this statement
+              <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                {elapsedSeconds}s
+              </span>
+            </p>
+            <button type="button" onClick={() => uploadRef.current?.abort()} className="btn btn-ghost btn-sm">
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {hasStatementSource && (
+        <div className="mt-5 flex flex-wrap items-end gap-4">
+          <div>
+            <label className="field-label" htmlFor="analysisWindow">
+              Period to review
+            </label>
+            <select
+              id="analysisWindow"
+              value={windowMonths}
+              onChange={e => setWindowMonths(Number(e.target.value))}
+              className="input"
+            >
+              <option value={3}>Last 3 months</option>
+              <option value={6}>Last 6 months</option>
+              <option value={12}>Last 12 months</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-300" role="alert">
+          {error}
+        </p>
+      )}
+
+      {analysing && (
+        <p className="mt-4 text-sm" style={{ color: 'var(--text-muted)' }} role="status">
+          Adding up the transaction lines…
+        </p>
+      )}
+
+      {analysis && !analysing && (
+        <div className="mt-4 rounded-xl p-4" style={{ backgroundColor: 'var(--surface-input)' }}>
+          <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+            {readableCount > 1
+              ? `Combined picture from ${readableCount} sources`
+              : 'From your transaction lines'}
+          </p>
+          {totals.map(group => (
+            <div key={group.currency} className="mt-3">
+              {totals.length > 1 && (
+                <p className="field-label mb-2">{group.currency}</p>
+              )}
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                <AnalysisFigure label="Monthly in" value={group.suggestedFields[isBusiness && !showPersonalFinancials ? 'businessMonthlyIncome' : 'statedMonthlyIncome']} currency={group.currency} />
+                <AnalysisFigure label="Monthly out" value={group.suggestedFields[isBusiness && !showPersonalFinancials ? 'businessMonthlyExpenses' : 'statedMonthlyExpenses']} currency={group.currency} />
+                <AnalysisFigure label="Net over the period" value={String(group.net)} currency={group.currency} />
+                {isBusiness && (
+                  <AnalysisFigure
+                    label="Turnover, annualised"
+                    value={group.suggestedFields.businessAnnualRevenue}
+                    currency={group.currency}
+                  />
+                )}
+              </dl>
+              <p className="field-hint mt-2">
+                Across {group.monthsCovered} month{group.monthsCovered === 1 ? '' : 's'} with activity.
+              </p>
+            </div>
+          ))}
+
+          {analysis.sources.length > 0 && (
+            <ul className="mt-3 space-y-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
+              {analysis.sources.map((source, i) => (
+                <li key={`${source.label}-${source.currency}-${i}`} className="flex flex-wrap justify-between gap-2">
+                  <span style={{ color: 'var(--text-muted)' }}>{source.label}</span>
+                  <span className="tabular-nums">
+                    {formatAmount(source.credits, source.currency)} in ·{' '}
+                    {formatAmount(source.debits, source.currency)} out · {source.lineCount} lines{' '}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      ({source.firstDate}–{source.lastDate})
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {analysis.warnings.length > 0 && (
+            <ul className="mt-3 space-y-1 text-sm text-amber-700 dark:text-amber-300">
+              {analysis.warnings.map((warning, i) => (
+                <li key={i}>{warning}</li>
+              ))}
+            </ul>
+          )}
+
+          <p className="field-hint mt-3">{analysis.basis}</p>
+
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={applied || Object.keys(analysis.suggestedFields).length === 0}
+            className="btn btn-primary btn-sm mt-4"
+          >
+            {applied ? (
+              <>
+                Applied <span aria-hidden="true">✓</span>
+                <span className="sr-only">— figures copied into the form</span>
+              </>
+            ) : (
+              'Apply to the form'
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalysisFigure({
+  label,
+  value,
+  currency,
+}: {
+  label: string;
+  value?: string;
+  currency: string;
+}) {
+  const amount = value == null ? NaN : Number(value);
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </dt>
+      <dd className="text-lg font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+        {Number.isFinite(amount) ? formatAmount(amount, currency) : '—'}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * A statement may be in any currency, including one we could not read on the page, so an
+ * unrecognised code is shown as a suffix rather than passed to Intl, which rejects it.
+ */
+function formatAmount(amount: number, currency: string): string {
+  return /^[A-Z]{3}$/.test(currency) && currency !== 'UNKNOWN'
+    ? formatCurrency(amount, currency)
+    : `${new Intl.NumberFormat('en-IE', { maximumFractionDigits: 0 }).format(amount)} ${currency}`;
 }
 
 function DocumentExtractionUpload({
@@ -1525,7 +2042,7 @@ function DocumentExtractionUpload({
 
   function handleApply() {
     if (!draft) return;
-    onApplyExtracted(extractedFieldPatch(documentType, draft.extractedFields));
+    onApplyExtracted(extractedFieldPatch(draft.extractedFields));
     setApplied(true);
   }
 
@@ -1647,13 +2164,17 @@ function StepFinancial({
   form,
   onChange,
   isBusiness,
+  showPersonalFinancials,
+  seededFromProfile,
   onApplyExtracted,
 }: {
   form: Record<string, string>;
   isBusiness: boolean;
+  showPersonalFinancials: boolean;
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => void;
+  seededFromProfile: Record<string, string>;
   onApplyExtracted: (patch: Record<string, string>) => void;
 }) {
   return (
@@ -1665,7 +2186,13 @@ function StepFinancial({
         Every field on this step is optional. Providing them helps us assess your application.
       </p>
 
-      <DocumentExtractionUpload documentType="BANK_STATEMENT" onApplyExtracted={onApplyExtracted} />
+      {seededFromProfile.statedAnnualIncome && <ProfileSeededNote />}
+
+      <StatementSources
+        isBusiness={isBusiness}
+        showPersonalFinancials={showPersonalFinancials}
+        onApplyExtracted={onApplyExtracted}
+      />
 
       {/* Business-specific fields */}
       {isBusiness && (
@@ -1686,6 +2213,36 @@ function StepFinancial({
                 className="input"
               />
               <p className="field-hint">Annual turnover of the business</p>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="businessMonthlyIncome">
+                Monthly money in
+              </label>
+              <input
+                id="businessMonthlyIncome"
+                type="number"
+                name="businessMonthlyIncome"
+                value={form.businessMonthlyIncome}
+                onChange={onChange}
+                placeholder="e.g. 210000"
+                className="input"
+              />
+              <p className="field-hint">Average paid into the business accounts each month</p>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="businessMonthlyExpenses">
+                Monthly money out
+              </label>
+              <input
+                id="businessMonthlyExpenses"
+                type="number"
+                name="businessMonthlyExpenses"
+                value={form.businessMonthlyExpenses}
+                onChange={onChange}
+                placeholder="e.g. 145000"
+                className="input"
+              />
+              <p className="field-hint">Average paid out of them each month</p>
             </div>
             <div>
               <label className="field-label" htmlFor="businessVintageYears">
@@ -1722,56 +2279,59 @@ function StepFinancial({
         </div>
       )}
 
-      {/* Personal financial fields */}
-      <div className="mt-6">
-        {isBusiness && <h3 className="section-title mb-3">Personal financials</h3>}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <div>
-            <label className="field-label" htmlFor="statedAnnualIncome">
-              Annual income
-            </label>
-            <input
-              id="statedAnnualIncome"
-              type="number"
-              name="statedAnnualIncome"
-              value={form.statedAnnualIncome}
-              onChange={onChange}
-              placeholder="e.g. 60000"
-              className="input"
-            />
-          </div>
+      {/* Personal financial fields. A company's affordability is its trading figures, asked
+          for above; these three describe a person. */}
+      {showPersonalFinancials && (
+        <div className="mt-6">
+          {isBusiness && <h3 className="section-title mb-3">Personal financials</h3>}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div>
+              <label className="field-label" htmlFor="statedAnnualIncome">
+                Annual income
+              </label>
+              <input
+                id="statedAnnualIncome"
+                type="number"
+                name="statedAnnualIncome"
+                value={form.statedAnnualIncome}
+                onChange={onChange}
+                placeholder="e.g. 60000"
+                className="input"
+              />
+            </div>
 
-          <div>
-            <label className="field-label" htmlFor="statedMonthlyIncome">
-              Monthly income
-            </label>
-            <input
-              id="statedMonthlyIncome"
-              type="number"
-              name="statedMonthlyIncome"
-              value={form.statedMonthlyIncome}
-              onChange={onChange}
-              placeholder="e.g. 5000"
-              className="input"
-            />
-          </div>
+            <div>
+              <label className="field-label" htmlFor="statedMonthlyIncome">
+                Monthly income
+              </label>
+              <input
+                id="statedMonthlyIncome"
+                type="number"
+                name="statedMonthlyIncome"
+                value={form.statedMonthlyIncome}
+                onChange={onChange}
+                placeholder="e.g. 5000"
+                className="input"
+              />
+            </div>
 
-          <div>
-            <label className="field-label" htmlFor="statedMonthlyExpenses">
-              Monthly expenses
-            </label>
-            <input
-              id="statedMonthlyExpenses"
-              type="number"
-              name="statedMonthlyExpenses"
-              value={form.statedMonthlyExpenses}
-              onChange={onChange}
-              placeholder="e.g. 2000"
-              className="input"
-            />
+            <div>
+              <label className="field-label" htmlFor="statedMonthlyExpenses">
+                Monthly expenses
+              </label>
+              <input
+                id="statedMonthlyExpenses"
+                type="number"
+                name="statedMonthlyExpenses"
+                value={form.statedMonthlyExpenses}
+                onChange={onChange}
+                placeholder="e.g. 2000"
+                className="input"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1779,14 +2339,21 @@ function StepFinancial({
 function StepEmployment({
   form,
   onChange,
+  seededFromProfile,
   onApplyExtracted,
 }: {
   form: Record<string, string>;
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => void;
+  seededFromProfile: Record<string, string>;
   onApplyExtracted: (patch: Record<string, string>) => void;
 }) {
+  const anySeeded = !!(
+    seededFromProfile.employmentStatus ||
+    seededFromProfile.employerName ||
+    seededFromProfile.jobTitle
+  );
   return (
     <div>
       <h2 className="section-title">Employment details</h2>
@@ -1794,6 +2361,8 @@ function StepEmployment({
         Every field on this step is optional. Add your employment details if you want us to take
         them into account.
       </p>
+
+      {anySeeded && <ProfileSeededNote />}
 
       <DocumentExtractionUpload documentType="PAYSLIP" onApplyExtracted={onApplyExtracted} />
 
@@ -1873,11 +2442,19 @@ function StepParties({
   members,
   validation,
   loading,
+  error,
+  signatoryIds,
+  showShortfall,
+  onToggleSignatory,
   onRefresh,
 }: {
   members: PartyMember[];
   validation: PartyValidation | null;
   loading: boolean;
+  error: string | null;
+  signatoryIds: string[];
+  showShortfall: boolean;
+  onToggleSignatory: (customerId: string) => void;
   onRefresh: () => void;
 }) {
   if (loading) {
@@ -1930,69 +2507,135 @@ function StepParties({
             )}
             {summary && (
               <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums opacity-90">
-                <li>
-                  {summary.directors} {summary.directors === 1 ? 'director' : 'directors'}
-                </li>
-                <li>
-                  {summary.shareholders} {summary.shareholders === 1 ? 'shareholder' : 'shareholders'}
-                </li>
-                <li>
-                  {summary.ubos} beneficial {summary.ubos === 1 ? 'owner' : 'owners'} (
-                  {summary.totalUboOwnership}% ownership)
-                </li>
-                <li>
-                  {summary.signatories} {summary.signatories === 1 ? 'signatory' : 'signatories'}
-                </li>
+                {partySummaryCounts(summary).map(text => (
+                  <li key={text}>{text}</li>
+                ))}
               </ul>
             )}
           </div>
         </div>
       )}
 
-      {/* Members list */}
+      {/* Who signs. Only an officer the company register already records as an authorised
+          signatory can be chosen; the others stay listed so the customer can see why somebody
+          is not on the list rather than finding them missing. */}
       {active.length > 0 ? (
-        <ul className="mt-4 space-y-3">
-          {active.map(m => (
-            <li
-              key={m.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4"
-              style={{
-                backgroundColor: 'var(--surface-input)',
-                borderColor: 'var(--surface-border)',
-              }}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
-                  style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
-                  aria-hidden="true"
-                >
-                  {(m.customerName || '?')[0]}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {m.customerName || 'Name not provided'}
-                  </p>
-                  {m.customerEmail && (
-                    <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                      {m.customerEmail}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="badge badge-neutral">{PARTY_ROLE_LABELS[m.role] || m.role}</span>
-                {m.ownershipPercentage != null && (
-                  <span className="badge badge-neutral tabular-nums">
-                    {m.ownershipPercentage}% owned
-                  </span>
-                )}
-                {m.isAuthorizedSignatory && <span className="badge badge-info">Signatory</span>}
-                {m.isBeneficialOwner && <span className="badge badge-info">Beneficial owner</span>}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <fieldset className="mt-5 border-0 p-0">
+          <legend className="field-label">Who will sign this application</legend>
+          <p
+            className="mb-3 mt-1 text-sm"
+            style={{
+              color:
+                showShortfall && signatoryIds.length < MIN_SIGNATORIES
+                  ? 'var(--down, #b42318)'
+                  : 'var(--text-muted)',
+            }}
+            role={showShortfall && signatoryIds.length < MIN_SIGNATORIES ? 'alert' : undefined}
+          >
+            Choose at least {MIN_SIGNATORIES}.{' '}
+            {signatoryIds.length >= MIN_SIGNATORIES
+              ? `${signatoryIds.length} selected.`
+              : `${signatoryIds.length} selected — pick ${MIN_SIGNATORIES - signatoryIds.length} more.`}
+          </p>
+          <ul className="space-y-3">
+            {active.map(m => {
+              const canSign = !!m.isAuthorizedSignatory;
+              const chosen = signatoryIds.includes(m.customerId);
+              const details = (
+                <>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                      style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+                      aria-hidden="true"
+                    >
+                      {(m.customerName || '?')[0]}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {m.customerName || 'Name not provided'}
+                      </p>
+                      {m.customerEmail && (
+                        <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                          {m.customerEmail}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <span className="badge badge-neutral">{PARTY_ROLE_LABELS[m.role] || m.role}</span>
+                    {m.ownershipPercentage != null && (
+                      <span className="badge badge-neutral tabular-nums">
+                        {m.ownershipPercentage}% owned
+                      </span>
+                    )}
+                    {m.isAuthorizedSignatory && <span className="badge badge-info">Signatory</span>}
+                    {m.isBeneficialOwner && <span className="badge badge-info">Beneficial owner</span>}
+                  </div>
+                </>
+              );
+
+              /* Three fixed columns — marker, person, badges — shared by both kinds of row, so
+                 the name starts in the same place whether or not the officer can be selected.
+                 Letting the marker take flexible space instead slid every avatar to a different
+                 x, and left the unselectable rows out of line with the rest. */
+              const columns = '1rem minmax(0, 1fr) auto';
+
+              if (!canSign) {
+                return (
+                  <li
+                    key={m.id}
+                    className="grid items-center gap-3 rounded-xl border px-5 py-4 opacity-60"
+                    style={{
+                      gridTemplateColumns: columns,
+                      backgroundColor: 'var(--surface-input)',
+                      borderColor: 'var(--surface-border)',
+                    }}
+                  >
+                    <span aria-hidden="true" />
+                    {details}
+                  </li>
+                );
+              }
+
+              return (
+                <li key={m.id}>
+                  <label
+                    className="grid cursor-pointer items-center gap-3 rounded-xl border-2 px-5 py-4 transition-colors"
+                    style={{
+                      gridTemplateColumns: columns,
+                      borderColor: chosen ? 'var(--brand)' : 'var(--surface-border)',
+                      backgroundColor: chosen ? 'var(--brand-soft)' : 'var(--surface-input)',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={chosen}
+                      onChange={() => onToggleSignatory(m.customerId)}
+                      className="h-4 w-4 shrink-0 rounded"
+                      style={{ accentColor: 'var(--brand)' }}
+                      aria-label={`${m.customerName || 'This officer'} signs this application`}
+                    />
+                    {details}
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </fieldset>
+      ) : error ? (
+        <div className="alert alert-warning mt-4" role="alert">
+          <div className="flex-1">
+            <p className="text-sm font-semibold">{error}</p>
+            <p className="mt-1 text-sm">
+              Nothing you have entered is lost. Try again, or continue and this can be picked up
+              with your relationship manager.
+            </p>
+            <button onClick={onRefresh} className="btn btn-ghost btn-sm mt-3" type="button">
+              <span aria-hidden="true">↻</span> Try again
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="empty-state mt-4">
           <div className="empty-state-icon">
@@ -2004,9 +2647,12 @@ function StepParties({
               />
             </svg>
           </div>
-          <h3 className="empty-state-title">No people linked to your company</h3>
+          <h3 className="empty-state-title">No people recorded for your company yet</h3>
+          {/* The step never gated submission — canGoNext passes it and a failed party link is
+              caught as non-blocking — so the copy no longer claims it must be done first. */}
           <p className="empty-state-text">
-            Add your directors, shareholders and signatories before submitting this application.
+            You can continue now and add directors, shareholders and signatories later, or manage
+            them here first.
           </p>
         </div>
       )}
@@ -2033,36 +2679,51 @@ function StepReview({
   form,
   product,
   isBusiness,
+  showPersonalFinancials,
+  quote,
+  signatories,
   declarations,
+  onEdit,
   onDeclarationChange,
 }: {
   form: Record<string, string>;
   product: LoanProduct;
   isBusiness: boolean;
+  showPersonalFinancials: boolean;
+  quote: Quote | null;
+  signatories: string[];
   declarations: {
     informationAccurate: boolean;
     consentCreditCheck: boolean;
     termsAccepted: boolean;
   };
+  onEdit: (step: WizardStep) => void;
   onDeclarationChange: (key: string, val: boolean) => void;
 }) {
   const isHomePurpose = HOME_PURPOSES.includes(form.loanPurpose);
   const isVehiclePurpose = VEHICLE_PURPOSES.includes(form.loanPurpose);
+  const acceptedDeclarations = Object.values(declarations).filter(Boolean).length;
 
-  const sections = [
+  /* An optional answer left blank is not a fact about the customer, and a page of em-dashes
+     reads as a form with holes in it rather than one they chose to skip. Empty rows are
+     dropped; a section that ends up with nothing offers to be filled. */
+  const row = (label: string, value: string | null | undefined) =>
+    value && value.trim() ? { label, value } : null;
+  const money = (raw?: string) => (raw ? formatCurrency(parseFloat(raw)) : null);
+
+  const sections: {
+    title: string;
+    step: WizardStep;
+    items: { label: string; value: string }[];
+  }[] = [
     {
-      title: 'Product',
+      title: 'Loan',
+      step: 'loan',
       items: [
         { label: 'Product', value: product.productName },
-        { label: 'Type', value: PRODUCT_TYPE_LABELS[product.productType] || product.productType },
-      ],
-    },
-    {
-      title: 'Loan details',
-      items: [
         {
           label: 'Amount',
-          value: form.requestedAmount ? formatCurrency(parseFloat(form.requestedAmount)) : '—',
+          value: money(form.requestedAmount) ?? '—',
         },
         {
           label: 'Term',
@@ -2076,44 +2737,30 @@ function StepReview({
         },
         {
           label: 'Purpose',
-          value: LOAN_PURPOSE_LABELS[form.loanPurpose as LoanPurpose] || form.loanPurpose || '—',
+          value:
+            LOAN_PURPOSE_LABELS[form.loanPurpose as LoanPurpose] || form.loanPurpose || '—',
         },
-        { label: 'Description', value: form.loanPurposeDescription || '—' },
-        ...(isBusiness && form.facilityType
-          ? [
-              {
-                label: 'Type of loan',
-                value: FACILITY_TYPE_LABELS[form.facilityType] || form.facilityType,
-              },
-            ]
-          : []),
-      ],
+        row('Description', form.loanPurposeDescription),
+      ].filter(Boolean) as { label: string; value: string }[],
     },
     // Property section (conditional)
     ...(isHomePurpose
       ? [
           {
             title: 'Property details',
+            step: 'loan' as WizardStep,
             items: [
-              { label: 'Address', value: form.propertyAddress || '—' },
-              { label: 'City', value: form.propertyCity || '—' },
-              { label: 'County / state', value: form.propertyState || '—' },
-              { label: 'Postal code', value: form.propertyPostalCode || '—' },
-              {
-                label: 'Type',
-                value: PROPERTY_TYPES.find(t => t.value === form.propertyType)?.label || '—',
-              },
-              {
-                label: 'Estimated value',
-                value: form.propertyValue ? formatCurrency(parseFloat(form.propertyValue)) : '—',
-              },
-              {
-                label: 'Deposit',
-                value: form.downPaymentAmount
-                  ? formatCurrency(parseFloat(form.downPaymentAmount))
-                  : '—',
-              },
-            ],
+              row('Address', form.propertyAddress),
+              row('City', form.propertyCity),
+              row('County / state', form.propertyState),
+              row('Postal code', form.propertyPostalCode),
+              row(
+                'Type',
+                PROPERTY_TYPES.find(t => t.value === form.propertyType)?.label
+              ),
+              row('Estimated value', money(form.propertyValue)),
+              row('Deposit', money(form.downPaymentAmount)),
+            ].filter(Boolean) as { label: string; value: string }[],
           },
         ]
       : []),
@@ -2122,20 +2769,17 @@ function StepReview({
       ? [
           {
             title: 'Vehicle details',
+            step: 'loan' as WizardStep,
             items: [
-              { label: 'Make', value: form.vehicleMake || '—' },
-              { label: 'Model', value: form.vehicleModel || '—' },
-              { label: 'Year', value: form.vehicleYear || '—' },
-              {
-                label: 'Condition',
-                value:
-                  VEHICLE_CONDITIONS.find(c => c.value === form.vehicleCondition)?.label || '—',
-              },
-              {
-                label: 'Estimated value',
-                value: form.vehicleValue ? formatCurrency(parseFloat(form.vehicleValue)) : '—',
-              },
-            ],
+              row('Make', form.vehicleMake),
+              row('Model', form.vehicleModel),
+              row('Year', form.vehicleYear),
+              row(
+                'Condition',
+                VEHICLE_CONDITIONS.find(c => c.value === form.vehicleCondition)?.label
+              ),
+              row('Estimated value', money(form.vehicleValue)),
+            ].filter(Boolean) as { label: string; value: string }[],
           },
         ]
       : []),
@@ -2144,56 +2788,50 @@ function StepReview({
       ? [
           {
             title: 'Business financials',
+            step: 'financial' as WizardStep,
             items: [
-              {
-                label: 'Annual revenue',
-                value: form.businessAnnualRevenue
-                  ? formatCurrency(parseFloat(form.businessAnnualRevenue))
-                  : '—',
-              },
-              {
-                label: 'Business vintage',
-                value: form.businessVintageYears ? `${form.businessVintageYears} years` : '—',
-              },
-              { label: 'Loan use', value: form.facilityPurposeDescription || '—' },
-            ],
+              row('Annual revenue', money(form.businessAnnualRevenue)),
+              row('Monthly money in', money(form.businessMonthlyIncome)),
+              row('Monthly money out', money(form.businessMonthlyExpenses)),
+              row('Business vintage', form.businessVintageYears ? `${form.businessVintageYears} years` : null),
+              row('Loan use', form.facilityPurposeDescription),
+            ].filter(Boolean) as { label: string; value: string }[],
+          },
+        ]
+      : []),
+    // The people named to sign, so the customer sees who is bound before accepting
+    ...(isBusiness && signatories.length > 0
+      ? [
+          {
+            title: 'Signing for the company',
+            step: 'parties' as WizardStep,
+            items: signatories.map((name, i) => ({ label: `Signatory ${i + 1}`, value: name })),
+          },
+        ]
+      : []),
+    // Personal figures are only ever asked of a person — see StepFinancial
+    ...(showPersonalFinancials
+      ? [
+          {
+            title: 'Financial information',
+            step: 'financial' as WizardStep,
+            items: [
+              row('Annual income', money(form.statedAnnualIncome)),
+              row('Monthly income', money(form.statedMonthlyIncome)),
+              row('Monthly expenses', money(form.statedMonthlyExpenses)),
+            ].filter(Boolean) as { label: string; value: string }[],
           },
         ]
       : []),
     {
-      title: 'Financial information',
-      items: [
-        {
-          label: 'Annual income',
-          value: form.statedAnnualIncome
-            ? formatCurrency(parseFloat(form.statedAnnualIncome))
-            : '—',
-        },
-        {
-          label: 'Monthly income',
-          value: form.statedMonthlyIncome
-            ? formatCurrency(parseFloat(form.statedMonthlyIncome))
-            : '—',
-        },
-        {
-          label: 'Monthly expenses',
-          value: form.statedMonthlyExpenses
-            ? formatCurrency(parseFloat(form.statedMonthlyExpenses))
-            : '—',
-        },
-      ],
-    },
-    {
       title: 'Employment',
+      step: 'employment',
       items: [
-        {
-          label: 'Status',
-          value: EMPLOYMENT_STATUSES.find(s => s.value === form.employmentStatus)?.label || '—',
-        },
-        { label: 'Employer', value: form.employerName || '—' },
-        { label: 'Job title', value: form.jobTitle || '—' },
-        { label: 'Years with employer', value: form.yearsWithEmployer ? `${form.yearsWithEmployer} years` : '—' },
-      ],
+        row('Status', EMPLOYMENT_STATUSES.find(s => s.value === form.employmentStatus)?.label),
+        row('Employer', form.employerName),
+        row('Job title', form.jobTitle),
+        row('Years with employer', form.yearsWithEmployer ? `${form.yearsWithEmployer} years` : null),
+      ].filter(Boolean) as { label: string; value: string }[],
     },
   ];
 
@@ -2202,30 +2840,55 @@ function StepReview({
       <h2 className="section-title">Review your application</h2>
       <p className="field-hint">Check everything below, then accept the declarations to submit.</p>
 
+      {/* The number the whole application resolves to, restated here so the customer signs
+          the declarations against it rather than against a figure two steps back. */}
+      {quote && (
+        <div className="mt-5 rounded-2xl p-4 sm:p-5" style={{ background: 'var(--surface-input)' }}>
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+            What you would be repaying
+          </h3>
+          <QuoteFigures quote={quote} />
+        </div>
+      )}
+
       <div className="mt-6 space-y-6">
         {sections.map(section => (
           <section key={section.title} aria-label={section.title}>
-            <h3
-              className="mb-3 border-b pb-2 text-base font-semibold"
-              style={{ color: 'var(--text-secondary)', borderColor: 'var(--surface-border)' }}
-            >
-              {section.title}
-            </h3>
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-              {section.items.map(item => (
-                <div key={item.label} className="flex justify-between gap-4 sm:block">
-                  <dt className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                    {item.label}
-                  </dt>
-                  <dd
-                    className="text-base font-medium tabular-nums sm:mt-0.5"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    {item.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <div className="mb-3 flex items-center justify-between gap-3 border-b pb-2" style={{ borderColor: 'var(--surface-border)' }}>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                {section.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => onEdit(section.step)}
+                className="link-arrow text-sm"
+              >
+                {section.items.length ? 'Edit' : 'Add'}{' '}
+                <span className="sr-only">{section.title}</span>
+                <span data-arrow aria-hidden="true">→</span>
+              </button>
+            </div>
+            {section.items.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                Not added — it is optional, but it helps us assess your application.
+              </p>
+            ) : (
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                {section.items.map(item => (
+                  <div key={item.label} className="flex justify-between gap-4 sm:block">
+                    <dt className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                      {item.label}
+                    </dt>
+                    <dd
+                      className="text-base font-medium tabular-nums sm:mt-0.5"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      {item.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
           </section>
         ))}
       </div>
@@ -2235,8 +2898,10 @@ function StepReview({
         <h3 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-secondary)' }}>
           Declarations and consent
         </h3>
-        <p className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-          All three declarations are required before you can submit.
+        <p className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }} id="declarations-hint">
+          {acceptedDeclarations === 3
+            ? 'All three accepted — you can submit.'
+            : `${acceptedDeclarations} of 3 accepted. Accept all three to submit.`}
         </p>
         <div className="space-y-4">
           <label className="flex cursor-pointer items-start gap-3">

@@ -168,7 +168,7 @@ export default function ApplicationsPage() {
             </p>
           </div>
           <button
-            onClick={() => router.push('/portal/applications/new')}
+            onClick={() => router.push('/portal/ai-assistant')}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-white/25"
           >
             <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -269,7 +269,7 @@ export default function ApplicationsPage() {
                 progress here.
               </p>
               <button
-                onClick={() => router.push('/portal/applications/new')}
+                onClick={() => router.push('/portal/ai-assistant')}
                 className="btn btn-primary mt-5"
               >
                 Start an application

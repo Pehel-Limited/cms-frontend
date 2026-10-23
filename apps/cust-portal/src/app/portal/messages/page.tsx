@@ -2,22 +2,31 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { PageHero } from '@/components/ui/PageHero';
+import { useMessagingInbox, notifyMessagingInboxChanged } from '@/hooks/useMessagingInbox';
 import {
   messagingService,
   formatMessageTime,
+  previewLine,
+  threadLabel,
   SENDER_TYPE_LABELS,
-  type Conversation,
+  type ConversationInboxRow,
   type Message,
 } from '@/services/api/messaging-service';
 
-const STATUS_LABELS: Record<Conversation['status'], string> = {
+/* An open thread is the one place a delay is felt, so it refreshes faster than the list does.
+   Ticks are skipped while the tab is hidden. */
+const THREAD_POLL_MS = 8000;
+const LIST_POLL_MS = 15000;
+
+const STATUS_LABELS: Record<ConversationInboxRow['conversation']['status'], string> = {
   ACTIVE: 'Active',
   RESOLVED: 'Resolved',
   ARCHIVED: 'Archived',
 };
 
-const STATUS_BADGES: Record<Conversation['status'], string> = {
+const STATUS_BADGES: Record<ConversationInboxRow['conversation']['status'], string> = {
   ACTIVE: 'badge-success',
   RESOLVED: 'badge-neutral',
   ARCHIVED: 'badge-neutral',
@@ -28,10 +37,20 @@ function errorMessage(err: unknown, fallback: string): string {
   return e?.message || fallback;
 }
 
+function lastActivity(row: ConversationInboxRow): number {
+  const at = row.conversation.lastMessageAt;
+  return at ? new Date(at).getTime() : 0;
+}
+
 export default function MessagesPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [listLoading, setListLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const {
+    rows,
+    loading: listLoading,
+    error: listError,
+    unreadTotal,
+    refresh,
+  } = useMessagingInbox(LIST_POLL_MS);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -45,33 +64,27 @@ export default function MessagesPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const loadConversations = useCallback(async (selectFirst: boolean) => {
-    try {
-      setListLoading(true);
-      setListError(null);
-      const list = await messagingService.listConversations();
-      const sorted = [...(list ?? [])].sort((a, b) => {
-        const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-        const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-        return bt - at;
-      });
-      setConversations(sorted);
-      if (selectFirst) setActiveId(sorted.length > 0 ? sorted[0].id : null);
-    } catch (err) {
-      setListError(errorMessage(err, 'Could not load your conversations'));
-    } finally {
-      setListLoading(false);
-    }
-  }, []);
+  const sorted = useMemo(() => [...rows].sort((a, b) => lastActivity(b) - lastActivity(a)), [rows]);
 
+  /* A notification deep-links its thread, including when the inbox is already on screen. */
+  const linkedApplication = searchParams.get('application');
   useEffect(() => {
-    loadConversations(true);
-  }, [loadConversations]);
+    if (!linkedApplication) return;
+    const match = sorted.find(r => r.conversation.applicationId === linkedApplication);
+    if (match) setActiveId(match.conversation.id);
+  }, [linkedApplication, sorted]);
 
-  const active = useMemo(
-    () => conversations.find(c => c.id === activeId) ?? null,
-    [conversations, activeId]
+  /* Open the most recent thread on arrival, unless the URL asked for a specific one. */
+  useEffect(() => {
+    if (activeId !== null || linkedApplication || sorted.length === 0) return;
+    setActiveId(sorted[0].conversation.id);
+  }, [sorted, activeId, linkedApplication]);
+
+  const activeRow = useMemo(
+    () => sorted.find(r => r.conversation.id === activeId) ?? null,
+    [sorted, activeId]
   );
+  const active = activeRow?.conversation ?? null;
 
   const loadMessages = useCallback(async (applicationId: string) => {
     try {
@@ -79,6 +92,8 @@ export default function MessagesPage() {
       setMessagesError(null);
       const res = await messagingService.getMessages(applicationId);
       setMessages(res?.messages ?? []);
+      /* Reading the thread acknowledges it server-side, so tell the badge to re-count now. */
+      notifyMessagingInboxChanged();
     } catch (err) {
       setMessages([]);
       setMessagesError(errorMessage(err, 'Could not load these messages'));
@@ -96,6 +111,17 @@ export default function MessagesPage() {
       return;
     }
     loadMessages(activeApplicationId);
+    const id = window.setInterval(() => {
+      if (!document.hidden) loadMessages(activeApplicationId);
+    }, THREAD_POLL_MS);
+    const onVisible = () => {
+      if (!document.hidden) loadMessages(activeApplicationId);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [activeApplicationId, loadMessages]);
 
   /* Keep the newest message in view as the log grows */
@@ -106,9 +132,13 @@ export default function MessagesPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter(c => c.subject?.toLowerCase().includes(q));
-  }, [conversations, search]);
+    if (!q) return sorted;
+    return sorted.filter(
+      r =>
+        threadLabel(r).toLowerCase().includes(q) ||
+        previewLine(r).toLowerCase().includes(q)
+    );
+  }, [sorted, search]);
 
   async function handleSend(e?: React.FormEvent) {
     e?.preventDefault();
@@ -118,16 +148,11 @@ export default function MessagesPage() {
       setSending(true);
       setSendError(null);
       const sent = await messagingService.sendMessage(active.applicationId, body);
-      setMessages(prev => [...prev, sent]);
+      /* Keep what is on screen and append — reloading would flicker the log the customer is
+         reading, and the next poll picks up anything written since. */
+      setMessages(prev => (prev.some(m => m.id === sent.id) ? prev : [...prev, sent]));
       setDraft('');
-      /* Keep the list's message count and "last activity" honest after a send */
-      setConversations(prev =>
-        prev.map(c =>
-          c.id === active.id
-            ? { ...c, messageCount: c.messageCount + 1, lastMessageAt: sent.createdAt }
-            : c
-        )
-      );
+      refresh();
     } catch (err) {
       setSendError(errorMessage(err, 'Could not send your message'));
     } finally {
@@ -142,7 +167,9 @@ export default function MessagesPage() {
         title="Messages"
         subtitle={
           !listLoading && !listError
-            ? `${conversations.length} conversation${conversations.length === 1 ? '' : 's'} with your bank`
+            ? `${sorted.length} conversation${sorted.length === 1 ? '' : 's'} with your bank${
+                unreadTotal > 0 ? ` · ${unreadTotal} unread` : ''
+              }`
             : 'Your conversations with the bank, in one place.'
         }
       />
@@ -153,7 +180,7 @@ export default function MessagesPage() {
           <div className="panel-header">
             <h2 className="panel-title">Conversations</h2>
             <button
-              onClick={() => loadConversations(false)}
+              onClick={refresh}
               className="btn btn-ghost btn-sm shrink-0"
               disabled={listLoading}
             >
@@ -170,12 +197,12 @@ export default function MessagesPage() {
               type="search"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search by subject"
+              placeholder="Search by application or message"
               className="input"
             />
           </div>
 
-          {listLoading ? (
+          {listLoading && sorted.length === 0 ? (
             <div className="space-y-3 p-5">
               {[1, 2, 3].map(i => (
                 <div key={i} className="skeleton h-14 w-full" />
@@ -188,12 +215,12 @@ export default function MessagesPage() {
                   <p className="text-base font-semibold">Could not load conversations</p>
                   <p className="mt-0.5 text-sm opacity-80">{listError}</p>
                 </div>
-                <button onClick={() => loadConversations(true)} className="btn btn-sm btn-outline shrink-0">
+                <button onClick={refresh} className="btn btn-sm btn-outline shrink-0">
                   Try again
                 </button>
               </div>
             </div>
-          ) : conversations.length === 0 ? (
+          ) : sorted.length === 0 ? (
             <div className="p-5">
               <div className="empty-state">
                 <div className="empty-state-icon">
@@ -203,8 +230,8 @@ export default function MessagesPage() {
                 </div>
                 <p className="empty-state-title">No conversations yet</p>
                 <p className="empty-state-text">
-                  A conversation opens when you start an application, so you can ask questions and
-                  track it in one thread.
+                  Your relationship manager can open a conversation on an application. When they do,
+                  it appears here and you are told what they said.
                 </p>
                 <Link href="/portal/applications" className="btn btn-primary btn-sm mt-4">
                   View your applications
@@ -217,7 +244,8 @@ export default function MessagesPage() {
             </p>
           ) : (
             <ul className="divide-token">
-              {filtered.map(conv => {
+              {filtered.map(row => {
+                const conv = row.conversation;
                 const selected = conv.id === activeId;
                 return (
                   <li key={conv.id}>
@@ -230,8 +258,24 @@ export default function MessagesPage() {
                         borderLeft: selected ? '3px solid var(--brand)' : '3px solid transparent',
                       }}
                     >
-                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {conv.subject || 'Untitled conversation'}
+                      <p className="flex items-center gap-2">
+                        <span
+                          className="min-w-0 flex-1 truncate text-base font-medium"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {threadLabel(row)}
+                        </span>
+                        {row.unreadCount > 0 && (
+                          <span
+                            className="shrink-0 rounded-full px-1.5 text-[10px] font-bold leading-[1.25rem] text-white"
+                            style={{ backgroundColor: 'var(--brand)' }}
+                          >
+                            {row.unreadCount}
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        {previewLine(row)}
                       </p>
                       <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: 'var(--text-muted)' }}>
                         <span className={`badge ${STATUS_BADGES[conv.status] || 'badge-neutral'}`}>
@@ -251,7 +295,7 @@ export default function MessagesPage() {
 
         {/* Right: message thread */}
         <div className="lg:col-span-2">
-          {!active ? (
+          {!active || !activeRow ? (
             <div className="empty-state h-full">
               <div className="empty-state-icon">
                 <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -260,7 +304,7 @@ export default function MessagesPage() {
               </div>
               <p className="empty-state-title">Select a conversation</p>
               <p className="empty-state-text">
-                {conversations.length > 0
+                {sorted.length > 0
                   ? 'Choose a conversation from the list to read and reply to its messages.'
                   : 'Once you have a conversation, its messages will appear here.'}
               </p>
@@ -269,22 +313,28 @@ export default function MessagesPage() {
             <div className="panel flex flex-col">
               <div className="panel-header">
                 <div className="min-w-0">
-                  <h2 className="panel-title truncate">{active.subject || 'Untitled conversation'}</h2>
+                  <h2 className="panel-title truncate">{threadLabel(activeRow)}</h2>
                   <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
                     {STATUS_LABELS[active.status] || active.status}
                     {active.lastMessageAt ? ` · last activity ${formatMessageTime(active.lastMessageAt)}` : ''}
                   </p>
                 </div>
+                <Link
+                  href={`/portal/applications/${active.applicationId}`}
+                  className="btn btn-ghost btn-sm shrink-0"
+                >
+                  View application
+                </Link>
               </div>
 
               <div
                 ref={scrollRef}
                 className="max-h-[28rem] min-h-[16rem] overflow-y-auto p-5"
                 role="region"
-                aria-label={`Messages in ${active.subject || 'this conversation'}, scrollable`}
+                aria-label={`Messages on ${threadLabel(activeRow)}, scrollable`}
                 tabIndex={0}
               >
-                {messagesLoading ? (
+                {messagesLoading && messages.length === 0 ? (
                   <div className="space-y-3">
                     {[1, 2, 3].map(i => (
                       <div key={i} className="skeleton h-14 w-2/3" />

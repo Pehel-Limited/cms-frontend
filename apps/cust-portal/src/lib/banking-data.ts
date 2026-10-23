@@ -35,6 +35,14 @@ export interface BankAccount {
   statusDisplay?: string;
   /** When the balance snapshot was taken (ISO). */
   balanceAsOf?: string;
+  /** Sector inherited from the owning business. Sample accounts have none. */
+  sector?: string;
+  /**
+   * DEPOSIT or CREDIT from account-service. A CREDIT account's balance is capital still
+   * owed, so anything totalling "what the customer has" must leave those out. Sample
+   * accounts have none, so they count as deposits by absence.
+   */
+  accountCategory?: string;
 }
 
 export type CardType = 'DEBIT' | 'CREDIT';
@@ -62,7 +70,7 @@ export interface PaymentCard {
 }
 
 export type TxnDirection = 'IN' | 'OUT';
-export type TxnStatus = 'COMPLETED' | 'PENDING' | 'DECLINED';
+export type TxnStatus = 'COMPLETED' | 'PENDING' | 'DECLINED' | 'REVERSED';
 
 export interface Transaction {
   id: string;
@@ -76,8 +84,19 @@ export interface Transaction {
   status: TxnStatus;
   date: string; // ISO
   note?: string;
+  /**
+   * True when the line was funded by a card rather than a transfer or direct debit. Live rows
+   * carry no cardId — the backend has no card instruments — so card-shaped panels key off this
+   * instead and still describe real spending.
+   */
+  viaCard?: boolean;
 }
 
+/**
+ * Retail categories plus the ones a business statement needs. A sole trader's current account
+ * carries supplier payments and Revenue duties alongside the supermarket shop, and a company's
+ * largest outflow is payroll — none of which fit a retail taxonomy.
+ */
 export type SpendCategory =
   | 'Groceries'
   | 'Eating out'
@@ -90,7 +109,16 @@ export type SpendCategory =
   | 'Income'
   | 'Transfers'
   | 'Cash'
-  | 'Other';
+  | 'Other'
+  | 'Suppliers'
+  | 'Payroll'
+  | 'Tax & Duties'
+  | 'Premises'
+  | 'Materials'
+  | 'Fees & Charges'
+  | 'Takings'
+  | 'Marketing'
+  | 'Operations';
 
 export interface Beneficiary {
   id: string;
@@ -127,6 +155,15 @@ export const CATEGORY_META: Record<SpendCategory, { color: string }> = {
   Transfers: { color: '#64748b', },
   Cash: { color: '#a855f7', },
   Other: { color: '#94a3b8', },
+  Suppliers: { color: '#0d9488', },
+  Payroll: { color: '#7c3aed', },
+  'Tax & Duties': { color: '#b45309', },
+  Premises: { color: '#475569', },
+  Materials: { color: '#65a30d', },
+  'Fees & Charges': { color: '#e11d48', },
+  Takings: { color: '#16a34a', },
+  Marketing: { color: '#db2777', },
+  Operations: { color: '#0284c7', },
 };
 
 /* ──────────────────────────────────────────────────────────────────
@@ -358,6 +395,26 @@ export const TRANSACTIONS: Transaction[] = [
 ];
 
 /* ──────────────────────────────────────────────────────────────────
+ * Active dataset
+ *
+ * Helpers below read this rather than TRANSACTIONS directly, so a screen can render a
+ * customer's real statement through the same maths without every call site being rewritten.
+ * It is only ever replaced on the client, after mount, so a server render never mutates
+ * module state shared between requests.
+ * ────────────────────────────────────────────────────────────────── */
+
+let ACTIVE_TRANSACTIONS: Transaction[] = TRANSACTIONS;
+
+/** Replace the dataset the derived helpers read. Pass the sample set back to restore it. */
+export function setActiveTransactions(rows: Transaction[]): void {
+  ACTIVE_TRANSACTIONS = rows;
+}
+
+export function activeTransactions(): Transaction[] {
+  return ACTIVE_TRANSACTIONS;
+}
+
+/* ──────────────────────────────────────────────────────────────────
  * Derived helpers
  * ────────────────────────────────────────────────────────────────── */
 
@@ -373,13 +430,13 @@ export function getAccount(id: string): BankAccount | undefined {
 }
 
 export function transactionsForAccount(accountId: string): Transaction[] {
-  return TRANSACTIONS.filter(t => t.accountId === accountId).sort(
+  return ACTIVE_TRANSACTIONS.filter(t => t.accountId === accountId).sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 }
 
 export function recentTransactions(limit = 8): Transaction[] {
-  return [...TRANSACTIONS]
+  return [...ACTIVE_TRANSACTIONS]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, limit);
 }
@@ -400,7 +457,7 @@ export function spendByCategory(
   settledOnly = false
 ): CategorySpend[] {
   const totals = new Map<SpendCategory, number>();
-  TRANSACTIONS.filter(
+  ACTIVE_TRANSACTIONS.filter(
     t =>
       t.direction === 'OUT' &&
       t.category !== 'Transfers' &&
@@ -422,8 +479,8 @@ export function spendByCategory(
 }
 
 export function monthlyInOut(): { income: number; spending: number } {
-  const income = TRANSACTIONS.filter(t => t.direction === 'IN').reduce((s, t) => s + t.amount, 0);
-  const spending = TRANSACTIONS.filter(t => t.direction === 'OUT').reduce((s, t) => s + t.amount, 0);
+  const income = ACTIVE_TRANSACTIONS.filter(t => t.direction === 'IN').reduce((s, t) => s + t.amount, 0);
+  const spending = ACTIVE_TRANSACTIONS.filter(t => t.direction === 'OUT').reduce((s, t) => s + t.amount, 0);
   return { income, spending };
 }
 
@@ -460,7 +517,7 @@ export function bucketSpendByDay(rows: Transaction[], days: number): DailySpend[
 /** Daily OUT-spend for the last `days` days, oldest → newest (for bar charts). */
 export function dailySpendSeries(days = 14): DailySpend[] {
   return bucketSpendByDay(
-    TRANSACTIONS.filter(t => t.direction === 'OUT'),
+    ACTIVE_TRANSACTIONS.filter(t => t.direction === 'OUT'),
     days
   );
 }
@@ -489,8 +546,12 @@ export function bucketDaily<T extends { date: string; total: number }>(series: T
 }
 
 export function dailyCardSpend(days: number, cardId?: string): { date: string; total: number }[] {
-  const rows = TRANSACTIONS.filter(
-    t => t.direction === 'OUT' && t.status === 'COMPLETED' && t.cardId && (!cardId || t.cardId === cardId)
+  const rows = ACTIVE_TRANSACTIONS.filter(
+    t =>
+      t.direction === 'OUT' &&
+      t.status === 'COMPLETED' &&
+      (t.cardId || t.viaCard) &&
+      (!cardId || t.cardId === cardId)
   );
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -511,7 +572,14 @@ export function dailyCardSpend(days: number, cardId?: string): { date: string; t
   return buckets;
 }
 
-/** A simple savings-goal model for the radial progress ring. */
+/**
+ * A simple savings-goal model for the radial progress ring.
+ *
+ * Sample-only. The €40,000 target is illustrative and exists nowhere on the bank's
+ * records, so a live customer's real balance must never be measured against it —
+ * that produced "€2,622,981.86 of €40,000.00 saved · 6557%". Use `savingsPosition`
+ * for accounts that came from the account service.
+ */
 export interface SavingsGoal {
   label: string;
   saved: number;
@@ -519,14 +587,51 @@ export interface SavingsGoal {
   currency: string;
 }
 
-export function savingsGoal(): SavingsGoal {
-  const pot = ACCOUNTS.find(a => a.id === 'acc-savings');
+export function savingsGoal(accounts: BankAccount[] = ACCOUNTS): SavingsGoal {
+  const pot = accounts.find(a => a.id === 'acc-savings') ?? accounts.find(a => a.type === 'SAVINGS');
   return {
     label: 'Savings Pot',
     saved: pot?.balance ?? 0,
     target: 40000,
     currency: pot?.currency ?? 'EUR',
   };
+}
+
+/**
+ * What the customer actually holds across their savings-type deposit accounts.
+ *
+ * Deliberately carries no target: nothing in the account service records a savings
+ * goal for anyone, so the only honest figure is the balance itself. A loan account's
+ * balance is capital owed rather than money held, so CREDIT accounts are excluded the
+ * same way every "what the customer has" total excludes them.
+ */
+export interface SavingsPosition {
+  /** The savings account's own name, or a generic label when the figure spans several. */
+  label: string;
+  saved: number;
+  /** Null when the savings accounts do not share one currency. */
+  currency: string | null;
+  accountCount: number;
+}
+
+export function savingsPosition(accounts: BankAccount[]): SavingsPosition {
+  const pots = accounts.filter(a => a.type === 'SAVINGS' && a.accountCategory !== 'CREDIT');
+  const currencies = new Set(pots.map(a => a.currency));
+  return {
+    label: pots.length === 1 ? pots[0].name : 'Savings',
+    saved: pots.reduce((sum, a) => sum + a.balance, 0),
+    currency: currencies.size === 1 ? pots[0]?.currency ?? null : null,
+    accountCount: pots.length,
+  };
+}
+
+/** What sits under a savings figure. There is no target to report against, so it says
+ *  where the money is instead. Shared by the two screens that show the position. */
+export function savingsCaption(s: SavingsPosition): string {
+  if (s.accountCount === 0) return 'No savings account held';
+  if (!s.currency) return 'Held in more than one currency';
+  if (s.accountCount > 1) return `Across ${s.accountCount} savings accounts`;
+  return 'Savings balance';
 }
 
 export function groupTransactionsByDay(list: Transaction[]): { label: string; items: Transaction[] }[] {

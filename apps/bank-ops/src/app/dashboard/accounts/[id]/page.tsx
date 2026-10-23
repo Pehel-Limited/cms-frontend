@@ -20,6 +20,11 @@ import {
   type AccountIdentifierType,
   type LimitType,
 } from '@/services/api/accountService';
+import {
+  referenceDataService,
+  type AccountBusinessActivity,
+  type CustomerClassification,
+} from '@/services/api/referenceDataService';
 
 // ============================================================================
 // Tones — every chip carries its text label; backgrounds use rgba() so both
@@ -104,6 +109,8 @@ export default function AccountDetailPage() {
   const accountId = params.id as string;
 
   const [account, setAccount] = useState<AccountResponse | null>(null);
+  const [classification, setClassification] = useState<CustomerClassification | null>(null);
+  const [accountActivity, setAccountActivity] = useState<AccountBusinessActivity | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -124,7 +131,18 @@ export default function AccountDetailPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      setAccount(await accountService.getAccountById(accountId));
+      const data = await accountService.getAccountById(accountId);
+      setAccount(data);
+
+      // The sector belongs to the owning entity, not to the account. This resolves which of
+      // the owner's activities the account actually serves, plus what a facility funds.
+      referenceDataService
+        .getAccountBusinessActivity(accountId)
+        .then(activity => {
+          setAccountActivity(activity);
+          setClassification(activity?.mainActivity ?? null);
+        })
+        .catch(err => console.error('Failed to load account business activity:', err));
     } catch (err) {
       console.error('Failed to load account:', err);
       setLoadError('We could not load this account. Please try again.');
@@ -336,6 +354,12 @@ export default function AccountDetailPage() {
             value={account.interestRate != null ? `${account.interestRate}%` : '—'}
           />
           <Fact label="Opened" value={account.openedAt ? formatDate(account.openedAt) : 'Not yet opened'} />
+          {classification && (
+            <Fact
+              label="Sector (inherited)"
+              value={classification.sectorName || classification.sectorCode || '—'}
+            />
+          )}
         </dl>
       </header>
 
@@ -452,6 +476,74 @@ export default function AccountDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6 min-w-0">
+          <Panel title="Business activity">
+            {accountActivity?.mainActivity ? (
+              <>
+                <p className="mt-1 text-sm" style={{ color: 'var(--rm-text)' }}>
+                  {accountActivity.mainActivity.businessTypeName ||
+                    accountActivity.mainActivity.sectorName ||
+                    accountActivity.mainActivity.industryName}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                  {accountActivity.mainActivity.industryName}
+                  {accountActivity.mainActivity.sectorName
+                    ? ` · ${accountActivity.mainActivity.sectorName}`
+                    : ''}
+                  {/* Inherited, never owned: the master stays on the legal entity. */}
+                  {' · inherited from the holder, read-only'}
+                </p>
+                {accountActivity.ownerOtherActivities &&
+                  accountActivity.ownerOtherActivities.length > 0 && (
+                    <p className="mt-2 text-xs" style={{ color: 'var(--rm-text-secondary)' }}>
+                      Also trades: {accountActivity.ownerOtherActivities
+                        .map(a => a.sectorName || a.sectorCode)
+                        .filter(Boolean)
+                        .join(', ')}
+                    </p>
+                  )}
+              </>
+            ) : (
+              <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                {classification?.sectorName
+                  ? `Holder classified as ${classification.sectorName}.`
+                  : 'No sector classification on the holder yet.'}
+              </p>
+            )}
+
+            {accountActivity?.useOfProceeds && accountActivity.useOfProceeds.length > 0 && (
+              <dl className="mt-4 space-y-2.5">
+                <dt
+                  className="text-xs uppercase tracking-wide"
+                  style={{ color: 'var(--rm-text-muted)' }}
+                >
+                  What this facility funds
+                </dt>
+                {accountActivity.useOfProceeds.map(f => (
+                  <dd
+                    key={f.sectorCode}
+                    className="rounded-2xl px-4 py-3"
+                    style={{ background: 'var(--rm-input)' }}
+                  >
+                    <p className="text-sm" style={{ color: 'var(--rm-text)' }}>
+                      {f.sectorName || f.sectorCode}
+                      {f.allocationPct != null && ` — ${f.allocationPct}%`}
+                    </p>
+                    {f.rationale && (
+                      <p className="mt-1 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                        {f.rationale}
+                      </p>
+                    )}
+                    {f.approvalStatus && (
+                      <p className="mt-1 text-xs" style={{ color: 'var(--rm-warn)' }}>
+                        {f.approvalStatus.replace(/_/g, ' ').toLowerCase()}
+                      </p>
+                    )}
+                  </dd>
+                ))}
+              </dl>
+            )}
+          </Panel>
+
           <Panel title="Key dates">
             <dl className="mt-1 space-y-4">
               <Row label="Opened" value={account.openedAt ? formatDate(account.openedAt) : 'Not yet opened'} />

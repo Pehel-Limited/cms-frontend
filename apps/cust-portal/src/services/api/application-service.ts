@@ -333,6 +333,9 @@ export interface LoanApplication {
   // Business (for business/corporate loans)
   businessVintageYears?: number;
   businessAnnualRevenue?: number;
+  /** Trading figures, not the applicant income the bank's affordability check divides by. */
+  businessMonthlyIncome?: number;
+  businessMonthlyExpenses?: number;
 
   // Property (home/mortgage)
   propertyAddress?: string;
@@ -411,7 +414,9 @@ export interface CreateApplicationPayload {
   // Business
   businessVintageYears?: number;
   businessAnnualRevenue?: number;
-  facilityType?: string;
+  /** Trading figures, not the applicant income the bank's affordability check divides by. */
+  businessMonthlyIncome?: number;
+  businessMonthlyExpenses?: number;
   facilityPurposeDescription?: string;
 
   // Property
@@ -432,21 +437,6 @@ export interface CreateApplicationPayload {
 }
 
 export type UpdateApplicationPayload = Partial<CreateApplicationPayload>;
-
-// ─── Business Facility Types ──────────────────────────────────
-
-export const FACILITY_TYPE_LABELS: Record<string, string> = {
-  TERM_LOAN: 'Term Loan',
-  WORKING_CAPITAL: 'Working Capital',
-  OVERDRAFT: 'Overdraft',
-  LETTER_OF_CREDIT: 'Letter of Credit',
-  BANK_GUARANTEE: 'Bank Guarantee',
-  BILL_DISCOUNTING: 'Bill Discounting',
-  CASH_CREDIT: 'Cash Credit',
-  EQUIPMENT_FINANCE: 'Equipment Finance',
-  PROJECT_FINANCE: 'Project Finance',
-  TRADE_FINANCE: 'Trade Finance',
-};
 
 // ─── Application Context ──────────────────────────────────────
 

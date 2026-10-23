@@ -36,6 +36,9 @@
   --shadow-md: 0 4px 16px -4px rgba(15, 23, 42, 0.1), 0 2px 6px -2px rgba(15, 23, 42, 0.05);
   --shadow-lg: 0 18px 40px -18px rgba(15, 23, 42, 0.28);
 
+  /* Card artwork — the one size every plastic face is drawn at */
+  --card-art-width: 280px;
+
   /* Focus ring */
   --ring: rgba(127, 43, 123, 0.45);
   --ring-offset: #f4f5f9;
@@ -1180,6 +1183,16 @@
   border: 1px solid var(--hairline);
 }
 
+/* Every face of the plastic is drawn at one width. Sizing it to its container
+   instead let a two-account dashboard row render 700px-wide, 440px-tall cards,
+   while the same card on the cards page measured 268px. The proportion is the
+   ISO/IEC 7810 ID-1 card (85.6 × 54 mm). */
+.card-art {
+  width: 100%;
+  max-width: var(--card-art-width);
+  aspect-ratio: 1.586;
+}
+
 /* Card artwork at list-thumbnail size — plastic gradient, wordmark and scheme.
    The only place colour is allowed to reappear, because it is the product. */
 .mini-plastic {
@@ -1221,11 +1234,11 @@
 }
 
 /* ─── Account list: a swipe rail on phones, inline from 640px ───────────
-   One list, two layouts. Below 640px a fan collapses its neighbours onto the
-   front card, so the accounts become a snap rail with the next one peeking off
-   the right edge. On a desktop the fan left the whole panel empty either side of
-   four small cards, so they simply sit in a row and every one is readable at
-   once — which also retires the "bring it forward" selection it needed. */
+   One list, two layouts. Below 640px the accounts are a snap rail with the next
+   one peeking off the right edge; from 640px they sit in a row and wrap. Either
+   way the card is drawn at the standard size, so a customer with two accounts
+   sees two cards the same size as every other card in the portal rather than
+   two stretched to fill the panel. */
 .acct-list {
   display: flex;
   gap: 12px;
@@ -1237,7 +1250,11 @@
 }
 .acct-list::-webkit-scrollbar { display: none; }
 .acct-list > * {
-  flex: 0 0 76%;
+  flex: 0 0 auto;
+  width: var(--card-art-width);
+  /* On a narrow phone the card gives up a little width rather than cropping,
+     so the next one still peeks and reads as swipeable. */
+  max-width: 76%;
   scroll-snap-align: center;
   scroll-snap-stop: always;
   transition: transform 0.2s ease;
@@ -1245,23 +1262,24 @@
 .acct-list > *:active { transform: scale(0.98); }
 @media (min-width: 640px) {
   .acct-list {
-    display: grid;
-    /* Two across through tablet: an auto-fit floor that also yields four columns on
-       a desktop would give three here, and a fourth account orphaned on its own row
-       reads as a mistake rather than a wrap. */
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
     gap: 16px;
     overflow: visible;
     scroll-snap-type: none;
     padding: 4px 24px 24px;
   }
-  .acct-list > * { flex: none; }
+  .acct-list > * {
+    /* Grow only up to the standard card size, so the spare panel width lands
+       outside the row instead of inside each card: two accounts sit as a
+       centred pair at full size, four still share one row. */
+    flex: 1 1 240px;
+    width: auto;
+    max-width: var(--card-art-width);
+  }
   .acct-list > *:active { transform: none; }
-}
-/* auto-fit, not a fixed four: it collapses the tracks nobody occupies, so a customer
-   with two accounts gets two wide cards rather than two cards and a gap. */
-@media (min-width: 1024px) {
-  .acct-list { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 }
 
 /* ─── Fanned card stack ─── */
@@ -1282,7 +1300,7 @@
 }
 .fan-card {
   position: absolute;
-  width: 268px;
+  width: var(--card-art-width);
   max-width: 74%;
   transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease,
     filter 0.4s ease;
@@ -1352,6 +1370,219 @@
   .glass-foot { padding: 12px 18px; }
   .kpi-cell { padding: 16px 18px; }
   .kpi-value { font-size: 25px; }
+}
+
+/* ─── Ask Rayva: the published-documents chat ───────────────── */
+
+/* Pinned to the viewport, not the page: the panel is mounted in the portal shell, so it
+   stays open and keeps its thread while you move between screens. On a phone it clears the
+   bottom nav, which it must never sit on top of. */
+.rayva-panel {
+  display: none;
+  position: fixed;
+  z-index: 60;
+  right: 16px;
+  bottom: 24px;
+  width: min(92vw, 392px);
+  max-height: min(76vh, 620px);
+  flex-direction: column;
+  overflow: hidden;
+}
+.rayva-panel[data-open='true'] {
+  display: flex;
+  animation: rayvaRise 200ms ease-out;
+}
+@keyframes rayvaRise {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (max-width: 1023px) {
+  .rayva-panel {
+    left: 8px;
+    right: 8px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 70vh;
+  }
+}
+
+.rayva-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--hairline);
+}
+.rayva-avatar {
+  position: relative;
+  display: inline-flex;
+  height: 36px;
+  width: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--tile-active);
+  box-shadow: var(--tile-active-shadow);
+}
+/* Presence, not decoration: it says someone is here and answering. */
+.rayva-live {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  height: 11px;
+  width: 11px;
+  border-radius: 999px;
+  background: #22c55e;
+  border: 2px solid var(--surface-card);
+}
+.rayva-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 14px;
+}
+.rayva-bubble {
+  padding: 11px 14px;
+  border-radius: 20px;
+  border-bottom-left-radius: 6px;
+  background: var(--surface-input);
+  border: 1px solid var(--hairline);
+}
+.rayva-bubble-warn { border-color: var(--down); }
+.rayva-bubble-me {
+  max-width: 86%;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border-bottom-right-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.55;
+}
+/* pre-wrap because the answer is prose the model wrote with line breaks and bullets;
+   re-flowing it into justified blocks would break the shape of a rate table. */
+.rayva-line {
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+}
+.rayva-eyebrow {
+  margin-bottom: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.rayva-handoff { padding-left: 2px; }
+.rayva-grounded { padding-left: 2px; font-size: 12px; color: var(--text-muted); }
+
+/* The model's own [n] markers, made tappable so a claim and its source are one click apart. */
+.rayva-cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin: 0 1px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-on-soft);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.rayva-cite:hover { background: var(--brand-soft-strong); }
+
+.rayva-sources-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-on-soft);
+}
+.rayva-source {
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: var(--glass-bg);
+}
+.rayva-source-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+}
+.rayva-source-head:hover { background: rgb(0 0 0 / 0.03); }
+.dark .rayva-source-head:hover { background: rgb(255 255 255 / 0.05); }
+.rayva-source-no {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  width: 20px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-on-soft);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rayva-source-body {
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 0 12px 11px 42px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.rayva-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 11px 12px;
+  border-top: 1px solid var(--hairline);
+  background: var(--glass-bg-strong);
+}
+.rayva-dots { display: inline-flex; gap: 4px; }
+.rayva-dots span {
+  height: 6px;
+  width: 6px;
+  border-radius: 999px;
+  background: var(--brand);
+  animation: rayvaBounce 1.1s infinite ease-in-out;
+}
+.rayva-dots span:nth-child(2) { animation-delay: 0.16s; }
+.rayva-dots span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes rayvaBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-3px); opacity: 0.9; }
+}
+
+/* Answer landed while the panel was shut. */
+.rayva-ping {
+  height: 7px;
+  width: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.3);
+  animation: rayvaPulse 1.6s ease-in-out infinite;
+}
+@keyframes rayvaPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 

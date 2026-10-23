@@ -21,7 +21,19 @@ import {
   type Recommendation,
 } from '@/services/api/aiCustomerIntelligenceService';
 import { formatCurrency, getCurrencySymbol } from '@/lib/format';
+import {
+  ClassificationFacts,
+  TaxonomyCascade,
+  type ClassificationSelection,
+} from '@/components/customers/TaxonomyCascade';
+import { referenceDataService } from '@/services/api/referenceDataService';
 import config from '@/config';
+
+const NO_CLASSIFICATION: ClassificationSelection = {
+  industryCode: '',
+  sectorCode: '',
+  businessTypeCode: '',
+};
 
 // ============================================================================
 // Shared option lists
@@ -198,6 +210,10 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [applications, setApplications] = useState<ApplicationResponse[]>([]);
   const [accounts, setAccounts] = useState<AccountSummaryResponse[]>([]);
+  const [classification, setClassification] = useState<ClassificationSelection | null>(null);
+  const [editedClassification, setEditedClassification] = useState<ClassificationSelection>(
+    NO_CLASSIFICATION
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -250,6 +266,28 @@ export default function CustomerDetailPage() {
     }
 
     // Loaded independently so an unavailable intelligence service never blocks the page.
+    referenceDataService
+      .getPrimaryActivity(customerId)
+      .then(c => {
+        const selection: ClassificationSelection = {
+          industryCode: c?.industryCode ?? '',
+          sectorCode: c?.sectorCode ?? '',
+          businessTypeCode: c?.businessTypeCode ?? '',
+          industryName: c?.industryName,
+          sectorName: c?.sectorName,
+          businessTypeName: c?.businessTypeName,
+          naceProposedCode: c?.naceCode,
+          naceOfficialTitle: c?.naceOfficialTitle,
+          naceVerified: c?.naceVerified,
+          naceRevision: c?.naceRevision,
+          classificationStatus: c?.classificationStatus,
+          effectiveFrom: c?.effectiveFrom,
+        };
+        setClassification(c ? selection : null);
+        setEditedClassification(selection);
+      })
+      .catch(err => console.error('Failed to load customer classification:', err));
+
     setIntelligenceLoading(true);
     aiCustomerIntelligenceService
       .getCustomerState(customerId, config.bank.defaultBankId)
@@ -311,12 +349,14 @@ export default function CustomerDetailPage() {
     setSaveMessage(null);
     setFieldErrors({});
     setEditedCustomer(customer || {});
+    setEditedClassification(classification ?? NO_CLASSIFICATION);
     setActiveTab('details');
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     setEditedCustomer(customer || {});
+    setEditedClassification(classification ?? NO_CLASSIFICATION);
     setFieldErrors({});
     setSaveMessage(null);
     setIsEditing(false);
@@ -345,6 +385,37 @@ export default function CustomerDetailPage() {
     setIsSaving(true);
     try {
       const updated = await customerService.updateCustomer(customerId, editedCustomer);
+
+      // Classification is a separate, governed write: it appends an effective-dated
+      // activity rather than editing a text column, so the prior assignment survives as
+      // history. Only sent when something actually changed.
+      const changed =
+        editedClassification.industryCode !== (classification?.industryCode ?? '') ||
+        editedClassification.sectorCode !== (classification?.sectorCode ?? '') ||
+        editedClassification.businessTypeCode !== (classification?.businessTypeCode ?? '');
+      if (changed && updated.customerType === 'BUSINESS' && editedClassification.industryCode) {
+        const saved = await referenceDataService.classify(customerId, {
+          industryCode: editedClassification.industryCode,
+          sectorCode: editedClassification.sectorCode || undefined,
+          businessTypeCode: editedClassification.businessTypeCode || undefined,
+          primary: true,
+        });
+        setClassification({
+          industryCode: saved.industryCode ?? '',
+          sectorCode: saved.sectorCode ?? '',
+          businessTypeCode: saved.businessTypeCode ?? '',
+          industryName: saved.industryName,
+          sectorName: saved.sectorName,
+          businessTypeName: saved.businessTypeName,
+          naceProposedCode: saved.naceCode,
+          naceOfficialTitle: saved.naceOfficialTitle,
+          naceVerified: saved.naceVerified,
+          naceRevision: saved.naceRevision,
+          classificationStatus: saved.classificationStatus,
+          effectiveFrom: saved.effectiveFrom,
+        });
+      }
+
       setCustomer(updated);
       setEditedCustomer(updated);
       setIsEditing(false);
@@ -715,7 +786,14 @@ export default function CustomerDetailPage() {
           <Fact label="Segment" value={formatEnum(customer.customerSegment)} />
           <Fact
             label={isBusiness ? 'Industry' : 'Occupation'}
-            value={formatEnum(isBusiness ? customer.industrySector : customer.occupation)}
+            value={
+              isBusiness
+                ? classification?.industryName ||
+                  customer.industryCode ||
+                  formatEnum(customer.industrySector) ||
+                  'Unclassified'
+                : formatEnum(customer.occupation)
+            }
           />
           <Fact label="Relationship manager" value={rmName} />
           <Fact label="Customer since" value={formatDate(customer.customerSince)} />
@@ -1410,6 +1488,13 @@ export default function CustomerDetailPage() {
               tabIndex={0}
               className="mt-4 -mx-2 overflow-x-auto"
             >
+              <p className="mb-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                Sector is inherited from the customer and shown here for reading only —
+                accounts do not carry a classification of their own.{' '}
+                <span style={{ color: 'var(--rm-text-secondary)' }}>
+                  {classification?.sectorName || classification?.sectorCode || 'Unclassified'}
+                </span>
+              </p>
               <table className="w-full" aria-label="Accounts for this customer">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
@@ -1498,15 +1583,38 @@ export default function CustomerDetailPage() {
         )}
 
         {isBusiness ? (
-          <Section title="Business information">
-            <Field label="Business name" k="businessName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
-            <Field label="Legal name" k="businessLegalName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
-            <Field label="Registration number" k="businessRegistrationNumber" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
-            <Field label="Business type" k="businessType" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
-            <Field label="Industry sector" k="industrySector" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
-            <Field label="Years in business" k="yearsInBusiness" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" />
-            <Field label="Number of employees" k="numberOfEmployees" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" />
-          </Section>
+          <>
+            <Section title="Business information">
+              <Field label="Business name" k="businessName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+              <Field label="Legal name" k="businessLegalName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+              <Field label="Registration number" k="businessRegistrationNumber" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+              <Field label="Legal form" k="businessType" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />
+              <Field label="Years in business" k="yearsInBusiness" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" />
+              <Field label="Number of employees" k="numberOfEmployees" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} type="number" />
+            </Section>
+
+            {/* Kept out of Business information: this is governed reference data with its
+                own hierarchy, not another free-text attribute of the customer. */}
+            <Section title="Sector classification">
+              <div className="sm:col-span-2 lg:col-span-3">
+                {isEditing ? (
+                  <>
+                    <TaxonomyCascade
+                      value={editedClassification}
+                      onChange={setEditedClassification}
+                    />
+                    <p className="mt-3 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                      Saved as a dated classification. Changing it closes the previous one
+                      rather than overwriting it, so past portfolio reports keep the
+                      classification that was in force then.
+                    </p>
+                  </>
+                ) : (
+                  <ClassificationFacts classification={classification} />
+                )}
+              </div>
+            </Section>
+          </>
         ) : (
           <Section title="Personal information">
             <Field label="First name" k="firstName" c={customer} e={editedCustomer} ed={isEditing} err={fieldErrors} on={handleEditChange} />

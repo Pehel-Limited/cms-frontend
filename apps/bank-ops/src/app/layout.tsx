@@ -27,7 +27,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0ea5e9',
+  /* Matched to the portal's own ground rather than the old sky blue, so the browser
+     chrome does not sit in a different palette from the page it frames. */
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f1f5f9' },
+    { media: '(prefers-color-scheme: dark)', color: '#060d1a' },
+  ],
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,

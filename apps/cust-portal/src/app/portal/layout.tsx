@@ -7,8 +7,16 @@ import { useState, useRef, useEffect } from 'react';
 import type { RootState, AppDispatch } from '@/store';
 import { logout as logoutAction } from '@/store/slices/authSlice';
 import { authService } from '@/services/api/auth-service';
+import { customerService, type EntityAuthority } from '@/services/api/customer-service';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { RayvaChat } from '@/components/ai/RayvaChat';
 import { useTheme } from '@/app/providers';
+import { useMessagingInbox } from '@/hooks/useMessagingInbox';
+import {
+  formatMessageTime,
+  previewLine,
+  type ConversationInboxRow,
+} from '@/services/api/messaging-service';
 
 /* ─── Nav items ────────────────────────────────────────────── */
 
@@ -34,7 +42,7 @@ const NAV_MAIN = [
     ),
   },
   {
-    name: 'AI Assistant',
+    name: 'Credit Assistant',
     path: '/portal/ai-assistant',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,6 +155,20 @@ const TILE_NAV: NavItem[] = [
 
 const RAIL_NAV: NavItem[] = ['/portal/documents', '/portal/messages'].map(byPath);
 
+/* Only shown to a login that can act for a company. A director signing in as themselves is
+   assessed as an individual for their own borrowing, so the company route cannot be derived
+   from the lending segment — it comes from /me/entities, which answers with the offices held. */
+const COMPANY_NAV: NavItem = {
+  name: 'Company',
+  path: '/portal/company',
+  icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+        d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+    </svg>
+  ),
+};
+
 /* Card and account tools. These are deliberately links rather than switches: the
    freeze toggle, the online/contactless controls and the credit limit all live on
    the Cards screen, which owns their state. The reference's "View Card PIN" and
@@ -202,7 +224,7 @@ const MOBILE_NAV: NavItem[] = ['/portal', '/portal/accounts', '/portal/payments'
 /* Longest-prefix match drives the page name shown in the top bar */
 const PAGE_TITLES: { path: string; title: string; subtitle: string }[] = [
   { path: '/portal/accounts', title: 'Accounts', subtitle: 'Balances and account details' },
-  { path: '/portal/ai-assistant', title: 'AI Assistant', subtitle: 'Get instant answers about your finances' },
+  { path: '/portal/ai-assistant', title: 'Credit Assistant', subtitle: 'Get instant answers about your finances' },
   { path: '/portal/payments', title: 'Payments', subtitle: 'Transfers, payees and scheduled payments' },
   { path: '/portal/cards', title: 'Cards', subtitle: 'Manage your debit and credit cards' },
   { path: '/portal/transactions', title: 'Transactions', subtitle: 'Search and review your activity' },
@@ -239,12 +261,57 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
+  const [askPing, setAskPing] = useState(false);
+  const [lendingSegment, setLendingSegment] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const notifButtonRef = useRef<HTMLButtonElement>(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { unreadTotal, unreadThreads, refresh: refreshInbox } = useMessagingInbox();
+  const askButtonRef = useRef<HTMLButtonElement>(null);
+
+  /* Which range of products this account is in. Read from the profile rather than the login,
+     because a sole trader signs in as a person and is still assessed against the SME range.
+     When it cannot be resolved the line is left out entirely — a guess here would be a claim
+     about the customer's account that nothing backs. */
+  useEffect(() => {
+    let active = true;
+    customerService
+      .getMyProfile()
+      .then(profile => {
+        if (active) setLendingSegment(profile.lendingSegment ?? null);
+      })
+      .catch(() => {
+        /* An account with no customer record behind it has no banking range to name. */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /* Restore the collapsed preference so the shell feels persistent */
   useEffect(() => {
     setSidebarCollapsed(localStorage.getItem('cms-sidebar-collapsed') === '1');
+  }, []);
+
+  /* Companies this login may act for, which is what decides whether the company route
+     appears at all. */
+  const [companies, setCompanies] = useState<EntityAuthority[]>([]);
+  useEffect(() => {
+    let active = true;
+    customerService
+      .getMyEntities()
+      .then(list => {
+        if (active) setCompanies(list);
+      })
+      .catch(() => {
+        if (active) setCompanies([]);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const toggleSidebar = () => {
@@ -260,6 +327,9 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsUserMenuOpen(false);
       }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -273,11 +343,15 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         setIsUserMenuOpen(false);
         menuButtonRef.current?.focus();
       }
+      if (notifOpen) {
+        setNotifOpen(false);
+        notifButtonRef.current?.focus();
+      }
       setMobileSidebarOpen(false);
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isUserMenuOpen]);
+  }, [isUserMenuOpen, notifOpen]);
 
   /* Prevent the page behind the mobile drawer from scrolling */
   useEffect(() => {
@@ -291,6 +365,15 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     await authService.logout();
     dispatch(logoutAction());
     router.push('/portal/login');
+  };
+
+  /* An answer takes ~15s, long enough to close the panel and carry on with something else, so
+     the button says when Rayva finished. Focus moves back to the trigger when the panel closes
+     however it was closed — otherwise Escape drops the keyboard user into the page body. */
+  const toggleAsk = (next: boolean) => {
+    setAskOpen(next);
+    if (next) setAskPing(false);
+    else askButtonRef.current?.focus();
   };
 
   const initials = user
@@ -313,6 +396,20 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   const page =
     PAGE_TITLES.filter(p => pathname.startsWith(p.path)).sort((a, b) => b.path.length - a.path.length)[0] ??
     { title: 'Overview', subtitle: '' };
+
+  /* The rail repeats the header count so a customer who has navigated away from the bar still
+     sees that the bank replied. Only the expanded rail has room for a figure. */
+  function UnreadCount() {
+    if (unreadTotal === 0) return null;
+    return (
+      <span
+        className="ml-auto shrink-0 rounded-full px-1.5 text-[10px] font-bold leading-[1.25rem] text-white"
+        style={{ background: 'var(--brand)' }}
+      >
+        {unreadTotal > 99 ? '99+' : unreadTotal}
+      </span>
+    );
+  }
 
   function NavTile({ item }: { item: NavItem }) {
     const active = isActive(item.path);
@@ -348,6 +445,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       >
         <span className="ghost-ring">{item.icon}</span>
         {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
+        {item.path === '/portal/messages' && !sidebarCollapsed && <UnreadCount />}
       </Link>
     );
   }
@@ -377,9 +475,11 @@ function PortalShell({ children }: { children: React.ReactNode }) {
             <p className="serif truncate text-xl font-medium leading-none tracking-tight" style={{ color: 'var(--text-primary)' }}>
               Rayva
             </p>
-            <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
-              Personal banking
-            </p>
+            {lendingSegment && (
+              <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                {lendingSegment === 'BUSINESS' ? 'Business banking' : 'Personal banking'}
+              </p>
+            )}
           </div>
         )}
         <button
@@ -448,6 +548,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         <div className="my-4 h-px" style={{ background: 'var(--hairline)' }} />
 
         <div className="space-y-1">
+          {companies.length > 0 && <GhostRow item={COMPANY_NAV} />}
           {RAIL_NAV.map(item => (
             <GhostRow key={item.path} item={item} />
           ))}
@@ -587,13 +688,24 @@ function PortalShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {/* Rayva AI — the one action worth a persistent button */}
-            <Link href="/portal/ai-assistant" className="pill-btn pill-btn-solid hidden sm:inline-flex">
+            {/* Rayva answers over the page you are on rather than routing you away to it —
+                asking a question mid-task and losing the task is the same problem twice.
+                The label drops to an icon below sm, where the bar has no room for it. */}
+            <button
+              type="button"
+              ref={askButtonRef}
+              onClick={() => toggleAsk(!askOpen)}
+              aria-expanded={askOpen}
+              aria-controls="rayva-chat"
+              aria-label={askPing ? 'Ask Rayva AI — your answer is ready' : 'Ask Rayva AI'}
+              className="pill-btn pill-btn-solid"
+            >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
               </svg>
-              Ask Rayva AI
-            </Link>
+              <span className="hidden sm:inline">Ask Rayva AI</span>
+              {askPing && <span className="rayva-ping" aria-hidden="true" />}
+            </button>
 
             {/* Theme toggle */}
             <button
@@ -615,13 +727,100 @@ function PortalShell({ children }: { children: React.ReactNode }) {
               )}
             </button>
 
-            {/* Messages */}
-            <Link href="/portal/messages" className="ring-btn hidden sm:inline-flex" aria-label="Messages">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </Link>
+            {/* Messages — an RM reply has to reach the customer without a reload, so this is a
+                live notification control rather than a plain link to the inbox. */}
+            <div className="relative hidden sm:block" ref={notifRef}>
+              <button
+                type="button"
+                ref={notifButtonRef}
+                onClick={() => {
+                  setNotifOpen(v => !v);
+                  if (!notifOpen) refreshInbox();
+                }}
+                aria-expanded={notifOpen}
+                aria-controls="customer-notifications"
+                className="ring-btn"
+                aria-label={unreadTotal > 0 ? `Messages — ${unreadTotal} unread from the bank` : 'Messages'}
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                {unreadTotal > 0 && (
+                  <span
+                    className="absolute -right-1 -top-1 min-w-[1.15rem] rounded-full px-1 text-center text-[10px] font-bold leading-[1.15rem] text-white"
+                    style={{ background: 'var(--brand)' }}
+                  >
+                    {unreadTotal > 99 ? '99+' : unreadTotal}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div
+                  id="customer-notifications"
+                  role="menu"
+                  aria-label="New messages from the bank"
+                  className="animate-fade-in glass-panel absolute right-0 z-50 mt-2 w-80 overflow-hidden !rounded-3xl py-2"
+                >
+                  <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--hairline)' }}>
+                    <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      Messages
+                    </p>
+                    <p className="mt-0.5 truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {unreadTotal > 0
+                        ? `${unreadTotal} unread from your relationship manager`
+                        : 'Nothing unread'}
+                    </p>
+                  </div>
+
+                  {unreadThreads.length === 0 ? (
+                    <p className="px-5 py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                      No new messages from the bank.
+                    </p>
+                  ) : (
+                    <div className="py-1">
+                      {unreadThreads.slice(0, 6).map((row: ConversationInboxRow) => (
+                        <Link
+                          key={row.conversation.id}
+                          role="menuitem"
+                          href={`/portal/messages?application=${row.conversation.applicationId}`}
+                          onClick={() => setNotifOpen(false)}
+                          className="block px-5 py-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                        >
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="min-w-0 truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                              {row.lastMessage?.senderName || 'Your relationship manager'}
+                            </span>
+                            <span className="shrink-0 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                              {row.conversation.lastMessageAt ? formatMessageTime(row.conversation.lastMessageAt) : ''}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 line-clamp-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            {previewLine(row)}
+                          </span>
+                          <span className="mt-1 inline-block text-xs font-medium" style={{ color: 'var(--brand)' }}>
+                            {row.unreadCount > 1 ? `${row.unreadCount} messages — reply` : 'Reply'}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="border-t px-5 py-2" style={{ borderColor: 'var(--hairline)' }}>
+                    <Link
+                      href="/portal/messages"
+                      role="menuitem"
+                      onClick={() => setNotifOpen(false)}
+                      className="text-xs font-semibold"
+                      style={{ color: 'var(--brand)' }}
+                    >
+                      All conversations
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* User menu */}
             <div className="relative" ref={menuRef}>
@@ -752,6 +951,14 @@ function PortalShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </nav>
+
+      {/* Mounted in the shell rather than the page: the thread and any answer in flight
+          outlive a move from Accounts to Payments, which is the point of asking mid-task. */}
+      <RayvaChat
+        open={askOpen}
+        onOpenChange={toggleAsk}
+        onReplyArrived={() => setAskPing(true)}
+      />
     </div>
   );
 }

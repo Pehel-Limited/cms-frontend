@@ -10,17 +10,22 @@ import {
   CARDS,
   SCHEDULED_PAYMENTS,
   TRANSACTIONS,
+  setActiveTransactions,
+  activeTransactions,
   recentTransactions,
   bucketDaily,
   dailyCardSpend,
   spendByCategory,
-  totalBalanceEUR,
   savingsGoal,
+  savingsPosition,
+  savingsCaption,
   dailySpendSeries,
   groupTransactionsByDay,
   type BankAccount,
   type Transaction,
 } from '@/lib/banking-data';
+import { accountService, type AccountSource } from '@/services/api/account-service';
+import { transactionService, type TransactionSampleReason } from '@/services/api/transaction-service';
 import { BalanceAmount, DotMatrix } from '@/components/banking/BankCard';
 import Glyph, { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
 import {
@@ -55,18 +60,19 @@ function signedEUR(n: number): string {
   return `${n >= 0 ? '+' : '−'}${fmtEUR(Math.abs(n))}`;
 }
 
-/* Settled activity compared over two equal, explicit windows. The sample history
-   spans ~25 days, so a 12-day window against the 12 days before it is the
-   widest honest comparison available — anything larger would compare a real
-   period against an empty one and read as a 100% swing. */
-const WINDOW_DAYS = 12;
+/* Settled activity over two equal, explicit 30-day windows. A live statement carries a
+   year of history, so a month against the month before it is now computable — the sample
+   set spanned about a week, which is why this used to compare 12 days against 12 days.
+   The fetch asks for 92 days so the prior window is populated rather than empty. */
+const WINDOW_DAYS = 30;
+const FETCH_DAYS = 92;
 
-function activityFor(direction: 'IN' | 'OUT'): {
+function activityFor(rows: Transaction[], direction: 'IN' | 'OUT'): {
   series: number[];
   total: number;
   prior: number;
 } {
-  const settled = TRANSACTIONS.filter(t => t.status === 'COMPLETED' && t.direction === direction);
+  const settled = rows.filter(t => t.status === 'COMPLETED' && t.direction === direction);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -257,7 +263,7 @@ function KpiCell({
 function AccountPlastic({ acc, hidden }: { acc: BankAccount; hidden: boolean }) {
   return (
     <div
-      className="relative aspect-[1.586] w-full overflow-hidden rounded-2xl p-4 text-white"
+      className="card-art relative overflow-hidden rounded-2xl p-4 text-white"
       style={{
         background: acc.gradient,
         boxShadow: '0 16px 30px -22px rgba(28, 8, 30, 0.7)',
@@ -337,7 +343,7 @@ const QUICK_ACTIONS = [
     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /> },
   { href: '/portal/products', label: 'Products', icon:
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /> },
-  { href: '/portal/ai-assistant', label: 'Rayva AI', icon:
+  { href: '/portal/ai-assistant', label: 'Credit Assistant', icon:
     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" /> },
 ];
 
@@ -346,10 +352,57 @@ export default function PortalDashboard() {
   const [hideBalance, setHideBalance] = useState(false);
   const { preferences, ready } = useAIPreferences();
 
-  const accounts = ACCOUNTS;
-  const txns = useMemo(() => recentTransactions(8), []);
+  /* Accounts are fetched first, and lines are only requested when those accounts are
+     real. Sample accounts next to a live transaction list — or the reverse — would put
+     two different customers on one screen, so the halves move over together. */
+  const [accounts, setAccounts] = useState<BankAccount[]>(ACCOUNTS);
+  const [rows, setRows] = useState<Transaction[]>(TRANSACTIONS);
+  const [accountSource, setAccountSource] = useState<AccountSource>('SAMPLE');
+  const [txnSampleReason, setTxnSampleReason] = useState<TransactionSampleReason | null>('NO_LIVE_TRANSACTIONS');
+  const [balanceAsOf, setBalanceAsOf] = useState<string | null>(null);
+  const [dataReady, setDataReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const acct = await accountService.getAccountsSnapshot();
+      if (cancelled) return;
+
+      const txn =
+        acct.source === 'LIVE'
+          ? await transactionService.getTransactionsSnapshot({
+              from: new Date(Date.now() - FETCH_DAYS * 86400000).toISOString().slice(0, 10),
+            })
+          : {
+              transactions: TRANSACTIONS,
+              source: 'SAMPLE' as const,
+              sampleReason: acct.sampleReason as TransactionSampleReason,
+              totalElements: TRANSACTIONS.length,
+              truncated: false,
+            };
+      if (cancelled) return;
+
+      setActiveTransactions(txn.transactions);
+      setAccounts(acct.accounts);
+      setRows(txn.transactions);
+      setAccountSource(acct.source);
+      setTxnSampleReason(txn.sampleReason);
+      setBalanceAsOf(acct.balanceAsOf);
+      setDataReady(true);
+    })().catch(() => {
+      /* Both services already degrade to labelled sample data internally, so reaching here
+         means something unexpected; the sample set stays on screen rather than a blank page. */
+      if (!cancelled) setDataReady(true);
+    });
+    return () => {
+      cancelled = true;
+      setActiveTransactions(TRANSACTIONS);
+    };
+  }, []);
+
+  const txns = useMemo(() => recentTransactions(8), [dataReady]);
   const txnGroups = useMemo(() => groupTransactionsByDay(txns), [txns]);
-  const spend = useMemo(() => spendByCategory(), []);
+  const spend = useMemo(() => spendByCategory({}, true), [dataReady]);
   const topSpend = spend.slice(0, 5);
   /* The donut's centre must equal the sum of its own slices, so it is built from
      the category totals rather than a separate money-out figure that also counts
@@ -357,19 +410,40 @@ export default function PortalDashboard() {
   const spendTotal = useMemo(() => spend.reduce((sum, c) => sum + c.total, 0), [spend]);
   /* Settled rows only, over two equal windows. The category split beside these
      figures excludes transfers, so the two measure different things and say so. */
-  const inActivity = useMemo(() => activityFor('IN'), []);
-  const outActivity = useMemo(() => activityFor('OUT'), []);
+  const inActivity = useMemo(() => activityFor(rows, 'IN'), [rows]);
+  const outActivity = useMemo(() => activityFor(rows, 'OUT'), [rows]);
   /* The actual span of the history, so the panel never claims "this month" for a
      window that is not a month. */
   const spendWindow = useMemo(() => {
-    const times = TRANSACTIONS.map(t => new Date(t.date).getTime());
+    const times = rows.map(t => new Date(t.date).getTime());
     if (times.length === 0) return null;
     const day = (ms: number) =>
       new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     return `${day(Math.min(...times))} – ${day(Math.max(...times))}`;
-  }, []);
-  const total = useMemo(() => totalBalanceEUR(), []);
-  const goal = useMemo(() => savingsGoal(), []);
+  }, [rows]);
+  /* Deposit accounts only. A loan account's balance is the capital still owed, so adding
+     it to what the customer holds would report borrowed money as their own — a customer
+     with a EUR 15k loan and EUR 6k in the bank was shown a EUR 21k "total balance". */
+  const depositAccounts = useMemo(
+    () => accounts.filter(a => a.accountCategory !== 'CREDIT'),
+    [accounts]
+  );
+  const totalCurrency = useMemo(() => {
+    const set = new Set(depositAccounts.map(a => a.currency));
+    return set.size === 1 ? depositAccounts[0]?.currency ?? null : null;
+  }, [depositAccounts]);
+  const total = useMemo(
+    () => (totalCurrency ? depositAccounts.reduce((sum, a) => sum + a.balance, 0) : 0),
+    [depositAccounts, totalCurrency]
+  );
+  /* A real customer has no savings goal recorded anywhere, so the live tile reports only
+     what they hold. The sample set carries an illustrative target, which is the one case
+     where a percentage against a target means anything. */
+  const goal = useMemo(
+    () => (accountSource === 'LIVE' ? null : savingsGoal(accounts)),
+    [accountSource, accounts]
+  );
+  const savings = useMemo(() => savingsPosition(depositAccounts), [depositAccounts]);
   const scheduledPayments = SCHEDULED_PAYMENTS;
 
   /* The trend the balance sparkline draws: every account's own series summed.
@@ -435,11 +509,11 @@ export default function PortalDashboard() {
   );
   const mask = useCallback((s: string) => (hideBalance ? '••••••' : s), [hideBalance]);
 
-  const goalPct = goal.target > 0 ? Math.min(100, (goal.saved / goal.target) * 100) : 0;
+  const goalPct = goal && goal.target > 0 ? Math.min(100, (goal.saved / goal.target) * 100) : 0;
 
   /* Daily out-spend across the visible history. Days with no payments keep a
      short tick so the axis doesn't stretch the busy days out of proportion. */
-  const dailySpend = useMemo(() => dailySpendSeries(30), []);
+  const dailySpend = useMemo(() => dailySpendSeries(30), [dataReady]);
   const dailyPeak = useMemo(
     () => dailySpend.reduce((m, d) => (d.total > m.total ? d : m), { total: 0, label: '', date: '' }),
     [dailySpend]
@@ -449,7 +523,7 @@ export default function PortalDashboard() {
      would each be too small to compare against their neighbour. */
   const dailyBuckets = useMemo(() => bucketDaily(dailySpend, 3), [dailySpend]);
 
-  const cardDaily = useMemo(() => dailyCardSpend(30), []);
+  const cardDaily = useMemo(() => dailyCardSpend(30), [dataReady]);
   const cardPeak = useMemo(
     () => cardDaily.reduce((m, d) => (d.total > m.total ? d : m), { total: 0, date: '' }),
     [cardDaily]
@@ -480,7 +554,11 @@ export default function PortalDashboard() {
           className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6"
           style={{ borderBottom: '1px solid var(--hairline)' }}
         >
-          <span className="badge badge-neutral !text-[11px]">Sample data</span>
+          <span className="badge badge-neutral !text-[11px]">
+            {accountSource === 'LIVE'
+              ? `Live${balanceAsOf ? ` · ${new Date(balanceAsOf).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}`
+              : 'Sample data'}
+          </span>
           <button
             onClick={() => setHideBalance(v => !v)}
             className="ring-btn !h-8 !w-8"
@@ -494,7 +572,7 @@ export default function PortalDashboard() {
           <KpiCell
             label="Total balance"
             value={mask(fmtEUR(total))}
-            note={`Across ${accounts.length} accounts`}
+            note={`Across ${depositAccounts.length} account${depositAccounts.length === 1 ? '' : 's'}`}
             series={balanceSeries}
           />
           <KpiCell
@@ -514,15 +592,23 @@ export default function PortalDashboard() {
             note={`last ${WINDOW_DAYS} days`}
             series={outActivity.series}
           />
-          <KpiCell
-            label="Savings goal"
-            value={mask(fmtEUR(goal.saved))}
-            note={`of ${hideBalance ? '••••••' : fmtEUR(goal.target)} target`}
-            series={accounts.find(a => a.id === 'acc-savings')?.spark}
-            trailing={
-              <span className="dash-update-chip">{Math.round(goalPct)}%</span>
-            }
-          />
+          {goal ? (
+            <KpiCell
+              label={`${goal.label} goal`}
+              value={mask(fmtEUR(goal.saved))}
+              note={`of ${hideBalance ? '••••••' : fmtEUR(goal.target)} target`}
+              series={accounts.find(a => a.id === 'acc-savings')?.spark}
+              trailing={
+                <span className="dash-update-chip">{Math.round(goalPct)}%</span>
+              }
+            />
+          ) : (
+            <KpiCell
+              label={savings.accountCount === 1 ? savings.label : 'In savings'}
+              value={savings.currency ? mask(fmtEUR(savings.saved)) : '—'}
+              note={savingsCaption(savings)}
+            />
+          )}
         </div>
       </section>
 

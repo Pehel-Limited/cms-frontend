@@ -136,7 +136,7 @@ export function BankCard({
 }) {
   return (
     <div
-      className={`relative aspect-[1.586] w-full rounded-2xl p-5 text-white shadow-xl overflow-hidden ${card.frozen ? 'opacity-95' : ''} ${className}`}
+      className={`card-art relative rounded-2xl p-5 text-white shadow-xl overflow-hidden ${card.frozen ? 'opacity-95' : ''} ${className}`}
       style={{ background: card.gradient }}
     >
       {/* sheen + texture */}

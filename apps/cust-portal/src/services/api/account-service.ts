@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { CustomerClassification } from './customer-service';
 import { ACCOUNTS, type AccountType, type BankAccount } from '@/lib/banking-data';
 
 /**
@@ -26,6 +27,11 @@ export interface CustomerAccount {
   balanceAsOf?: string;
   isJoint?: boolean;
   isFrozen?: boolean;
+  /**
+   * The owning entity's classification, inherited for display. Absent for a personal
+   * customer, and absent on sample accounts.
+   */
+  classification?: CustomerClassification;
 }
 
 /** `SAMPLE` means the figures on screen are not the customer's real money. */
@@ -96,9 +102,13 @@ export function toBankAccount(account: CustomerAccount): BankAccount {
     name: account.accountName || account.accountTypeDisplay || 'Account',
     type,
     typeLabel: account.accountTypeDisplay,
+    accountCategory: account.accountCategory,
     accountNumber: maskAccountNumber(account.accountNumber),
     sortCode: '',
-    iban: account.iban || account.accountNumber,
+    /* account-service does not serve an IBAN yet, only the domestic account number.
+       Passing that through as `iban` made the screens label it as one, so it stays
+       empty and the rows that need an IBAN do not render. */
+    iban: account.iban ?? '',
     currency: account.currency || 'EUR',
     balance: account.currentBalance ?? account.availableBalance ?? 0,
     available: account.availableBalance ?? account.currentBalance ?? 0,
@@ -106,6 +116,7 @@ export function toBankAccount(account: CustomerAccount): BankAccount {
     spark: [],
     statusDisplay: account.statusDisplay,
     balanceAsOf: account.balanceAsOf,
+    sector: account.classification?.sectorName || account.classification?.sectorCode,
   };
 }
 

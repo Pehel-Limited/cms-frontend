@@ -2,10 +2,34 @@ import config from '@/config';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
+/**
+ * The banking classification of a customer legal entity, resolved against the sector
+ * taxonomy. Accounts show this read-only and inherited; an account never holds a sector
+ * of its own.
+ */
+export interface CustomerClassification {
+  industryCode?: string;
+  industryName?: string;
+  sectorCode?: string;
+  sectorName?: string;
+  businessTypeCode?: string;
+  businessTypeName?: string;
+  naceRevision?: string;
+  naceCode?: string;
+  naceMappingStatus?: string;
+  naceOfficialTitle?: string;
+  naceVerified?: boolean;
+  indicativeRiskSegmentName?: string;
+  classificationStatus?: string;
+  effectiveFrom?: string;
+}
+
 export interface CustomerProfile {
   customerId: string;
   customerNumber: string;
   customerType: string;
+  /** BUSINESS | INDIVIDUAL, resolved server-side including the sole-trader rule. */
+  lendingSegment?: string;
   customerStatus: string;
 
   // Personal
@@ -134,6 +158,12 @@ export interface CompanyProfile {
   tradingCountry?: string;
 
   industrySector?: string;
+  /**
+   * Governed classification of the legal entity. Replaces the free-text industrySector
+   * above wherever a screen can show it. naceOfficialTitle is only present once the code
+   * has been verified against the official NACE list.
+   */
+  classification?: CustomerClassification;
   businessDescription?: string;
   yearEstablished?: number;
   numberOfEmployees?: number;
@@ -170,6 +200,24 @@ function authHeaders(): Record<string, string> {
   };
 }
 
+/**
+ * A company this login may act for, and the capacity it holds there. A person signing in as
+ * themselves appears here when they are a director or secretary of a business, which is what
+ * makes the company screens reachable from a personal login.
+ */
+export interface EntityAuthority {
+  entityId: string;
+  customerId: string;
+  legalName: string;
+  entityType: string;
+  registrationNumber?: string;
+  entityStatus?: string;
+  /** AUTHORISED_OFFICIAL | PERMITTED_USER | ADMIN | SIGNATORY | VIEWER | FINANCE_UPLOADER */
+  portalRole: string;
+  canBuild: boolean;
+  canSubmit: boolean;
+}
+
 export const customerService = {
   /** GET /api/customer/me */
   async getMyProfile(): Promise<CustomerProfile> {
@@ -181,6 +229,19 @@ export const customerService = {
         throw { status: 404, message: 'No customer profile linked to your account' };
       throw { status: res.status, message: 'Failed to load profile' };
     }
+    return res.json();
+  },
+
+  /**
+   * GET /api/customer/me/entities — every company this login acts for.
+   * An unreadable answer is an empty list rather than an error: the only caller is the
+   * navigation, where the correct response to not knowing is to show nothing.
+   */
+  async getMyEntities(): Promise<EntityAuthority[]> {
+    const res = await fetch(`${BFF_BASE}/api/customer/me/entities`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return [];
     return res.json();
   },
 

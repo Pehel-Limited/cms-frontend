@@ -7,7 +7,9 @@ import { useAppDispatch, useAppSelector } from '@/store';
 import { clearError, loginUser } from '@/store/slices/authSlice';
 import config from '@/config';
 
-/* Public page — intentionally light themed; it renders outside the dashboard shell. */
+/* Sign-in is the portal's front door now that the landing page is gone, so it carries the same
+   token palette as the dashboard rather than a separate light-only marketing scheme: every colour
+   below is a --rm-* token, which means it follows the theme the user picked instead of overriding it. */
 
 const CAPABILITIES = ['Loan origination', 'Risk analytics', 'KYC / AML', 'Portfolio management'];
 
@@ -44,22 +46,28 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen">
-      {/* ──── Brand panel (decorative, light-on-dark) ──── */}
-      <div className="relative hidden overflow-hidden bg-[#0a1628] lg:flex lg:w-[45%]">
+      {/* ──── Brand panel ──── */}
+      <div
+        className="relative hidden overflow-hidden lg:flex lg:w-[45%]"
+        style={{ background: 'linear-gradient(160deg, var(--rm-auth-ground) 0%, var(--rm-auth-ground-deep) 100%)' }}
+      >
         <div
-          className="absolute -left-24 -top-24 h-96 w-96 rounded-full bg-blue-500/15 blur-3xl motion-safe:animate-float"
+          className="absolute -left-24 -top-24 h-96 w-96 rounded-full blur-3xl motion-safe:animate-float"
+          style={{ background: 'var(--rm-auth-glow-a)' }}
           aria-hidden="true"
         />
         <div
-          className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-indigo-400/15 blur-3xl motion-safe:animate-float-delayed"
+          className="absolute bottom-0 right-0 h-80 w-80 rounded-full blur-3xl motion-safe:animate-float-delayed"
+          style={{ background: 'var(--rm-auth-glow-b)' }}
           aria-hidden="true"
         />
         <div
-          className="absolute right-1/4 top-1/3 h-64 w-64 rounded-full bg-sky-400/10 blur-2xl motion-safe:animate-float"
+          className="absolute right-1/4 top-1/3 h-64 w-64 rounded-full blur-2xl motion-safe:animate-float"
+          style={{ background: 'var(--rm-auth-glow-b)' }}
           aria-hidden="true"
         />
         <div
-          className="absolute inset-0 opacity-[0.04]"
+          className="absolute inset-0 opacity-[0.05]"
           style={{
             backgroundImage:
               "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff' fill-rule='evenodd'%3E%3Ccircle cx='20' cy='20' r='1'/%3E%3C/g%3E%3C/svg%3E\")",
@@ -70,7 +78,8 @@ export default function LoginPage() {
         <div className="relative z-10 flex w-full flex-col justify-between p-12">
           <div className="flex items-center gap-3">
             <span
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15"
+              className="flex h-10 w-10 items-center justify-center rounded-xl"
+              style={{ background: 'var(--rm-auth-chip-border)' }}
               aria-hidden="true"
             >
               <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -82,9 +91,9 @@ export default function LoginPage() {
 
           <div className="space-y-6">
             <p className="text-4xl font-semibold leading-tight tracking-tight text-white xl:text-5xl">
-              Banking intelligence, <span className="text-sky-300">reimagined.</span>
+              Banking intelligence, <span style={{ color: 'var(--rm-brand-on-soft)' }}>reimagined.</span>
             </p>
-            <p className="max-w-md text-lg leading-relaxed text-blue-200/80">
+            <p className="max-w-md text-lg leading-relaxed" style={{ color: 'var(--rm-auth-muted)' }}>
               Loan origination, underwriting and portfolio management in one workspace for modern
               banks.
             </p>
@@ -92,38 +101,57 @@ export default function LoginPage() {
               {CAPABILITIES.map(capability => (
                 <li
                   key={capability}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-sm text-blue-100"
+                  className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm text-white"
+                  style={{
+                    border: '1px solid var(--rm-auth-chip-border)',
+                    background: 'var(--rm-auth-glow-b)',
+                  }}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400" aria-hidden="true" />
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: 'var(--rm-brand-on-soft)' }}
+                    aria-hidden="true"
+                  />
                   {capability}
                 </li>
               ))}
             </ul>
           </div>
 
-          <p className="border-t border-white/10 pt-6 text-sm text-blue-200/70">
+          <p
+            className="border-t pt-6 text-sm"
+            style={{ borderColor: 'var(--rm-auth-chip-border)', color: 'var(--rm-auth-muted)' }}
+          >
             Staff portal — sign in with the credentials issued by your bank.
           </p>
         </div>
       </div>
 
       {/* ──── Sign-in form ──── */}
-      <main className="force-light flex flex-1 items-center justify-center bg-slate-50 px-6 py-12">
+      <main
+        className="flex flex-1 items-center justify-center px-6 py-12"
+        style={{ background: 'var(--rm-bg)' }}
+      >
         <div className="w-full max-w-[420px]">
           <div className="mb-10 flex items-center gap-2.5">
             <span
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-700"
+              className="flex h-9 w-9 items-center justify-center rounded-xl"
+              style={{ background: 'var(--rm-brand)' }}
               aria-hidden="true"
             >
               <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d={BRAND_LOGO_PATH} />
               </svg>
             </span>
-            <span className="text-xl font-semibold tracking-tight text-slate-900">Rayva</span>
+            <span className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+              Rayva
+            </span>
           </div>
 
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Sign in</h1>
-          <p className="mt-2 text-base text-slate-600">
+          <h1 className="text-3xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Sign in
+          </h1>
+          <p className="mt-2 text-base" style={{ color: 'var(--rm-text-secondary)' }}>
             Use your portal credentials to reach your dashboard.
           </p>
 
@@ -131,10 +159,15 @@ export default function LoginPage() {
             <div
               id="login-error"
               role="alert"
-              className="mt-6 flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3"
+              className="mt-6 flex items-start gap-2.5 rounded-2xl px-4 py-3"
+              style={{
+                background: 'var(--rm-danger-soft)',
+                border: '1px solid var(--rm-down)',
+              }}
             >
               <svg
-                className="mt-0.5 h-4 w-4 shrink-0 text-red-600"
+                className="mt-0.5 h-4 w-4 shrink-0"
+                style={{ color: 'var(--rm-down)' }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -147,12 +180,10 @@ export default function LoginPage() {
                   d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
-              <p className="text-sm text-red-700">
-                {error}
-                <span className="mt-0.5 block text-red-600/80">
-                  Check your username and password, then try again.
-                </span>
-              </p>
+              <div className="text-sm" style={{ color: 'var(--rm-down)' }}>
+                <p>{error}</p>
+                <p className="mt-0.5 opacity-80">Check your username and password, then try again.</p>
+              </div>
             </div>
           )}
 
@@ -162,9 +193,13 @@ export default function LoginPage() {
             aria-describedby={error ? 'login-error' : undefined}
           >
             <div>
-              <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label
+                htmlFor="username"
+                className="mb-1.5 block text-sm font-medium"
+                style={{ color: 'var(--rm-text)' }}
+              >
                 Username
-                <span className="text-red-500" aria-hidden="true">
+                <span style={{ color: 'var(--rm-down)' }} aria-hidden="true">
                   {' '}
                   *
                 </span>
@@ -172,7 +207,14 @@ export default function LoginPage() {
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true">
-                  <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg
+                    className="h-4 w-4"
+                    style={{ color: 'var(--rm-text-muted)' }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -190,15 +232,24 @@ export default function LoginPage() {
                   placeholder="Enter your username"
                   value={credentials.username}
                   onChange={event => update('username', event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-base text-slate-900 placeholder:text-slate-400"
+                  className="input-brand w-full rounded-xl border py-2.5 pl-10 pr-4 text-base outline-none transition-colors focus:border-[color:var(--rm-brand)] focus:ring-2 focus:ring-[color:var(--rm-brand-soft)]"
+                  style={{
+                    background: 'var(--rm-input)',
+                    borderColor: 'var(--rm-border)',
+                    color: 'var(--rm-text)',
+                  }}
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label
+                htmlFor="password"
+                className="mb-1.5 block text-sm font-medium"
+                style={{ color: 'var(--rm-text)' }}
+              >
                 Password
-                <span className="text-red-500" aria-hidden="true">
+                <span style={{ color: 'var(--rm-down)' }} aria-hidden="true">
                   {' '}
                   *
                 </span>
@@ -206,7 +257,14 @@ export default function LoginPage() {
               </label>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true">
-                  <svg className="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <svg
+                    className="h-4 w-4"
+                    style={{ color: 'var(--rm-text-muted)' }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -224,14 +282,20 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   value={credentials.password}
                   onChange={event => update('password', event.target.value)}
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-12 text-base text-slate-900 placeholder:text-slate-400"
+                  className="input-brand w-full rounded-xl border py-2.5 pl-10 pr-12 text-base outline-none transition-colors focus:border-[color:var(--rm-brand)] focus:ring-2 focus:ring-[color:var(--rm-brand-soft)]"
+                  style={{
+                    background: 'var(--rm-input)',
+                    borderColor: 'var(--rm-border)',
+                    color: 'var(--rm-text)',
+                  }}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(visible => !visible)}
                   aria-pressed={showPassword}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 transition-colors hover:text-slate-800"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-2 transition-colors hover:opacity-70"
+                  style={{ color: 'var(--rm-text-muted)' }}
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} aria-hidden="true">
                     {showPassword ? (
@@ -255,7 +319,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-700 px-4 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-brand flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-semibold transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading ? (
                 <>
@@ -276,13 +340,13 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-slate-600">
+          <p className="mt-8 text-center text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
             Need access to the portal?{' '}
-            <Link href="/register" className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900">
+            <Link href="/register" className="link-brand font-semibold underline underline-offset-2">
               Register for an account
             </Link>
           </p>
-          <p className="mt-4 text-center text-sm text-slate-500">
+          <p className="mt-4 text-center text-sm" style={{ color: 'var(--rm-text-muted)' }}>
             Forgotten your password? Contact your bank&apos;s portal administrator.
           </p>
         </div>

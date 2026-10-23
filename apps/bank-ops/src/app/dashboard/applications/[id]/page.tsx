@@ -13,6 +13,7 @@ import {
 import { userService, User } from '@/services/api/userService';
 import { ApplicationWorkflowPanel } from '@/components/workflow';
 import { SolicitorTab } from '@/components/solicitor/SolicitorTab';
+import CustomerChatPanel from '@/components/applications/CustomerChatPanel';
 import { ApplicationAiSummaryTab } from '@/components/ai/ApplicationAiSummaryTab';
 import { CreditMemoTab } from '@/components/ai/CreditMemoTab';
 import { STATUS_CONFIG, type LomsApplicationStatus } from '@/types/loms';
@@ -813,6 +814,7 @@ function ActionModal({
 /* ── Tabs ───────────────────────────────────────────────────────────── */
 const TABS = [
   { id: 'workflow', label: 'Loan workflow' },
+  { id: 'customer-chat', label: 'Customer chat' },
   { id: 'solicitor', label: 'Solicitor and legal' },
   { id: 'ai-summary', label: 'AI summary' },
   { id: 'credit-memo', label: 'Credit memo' },
@@ -1303,6 +1305,25 @@ export default function ApplicationDetailPage() {
             onStatusChange={fetchApplication}
             onRequestAssign={() => openModal('assign', 'Assign application')}
           />
+        </div>
+      )}
+
+      {mainTab === 'customer-chat' && (
+        <div
+          role="tabpanel"
+          id="panel-customer-chat"
+          aria-labelledby="tab-customer-chat"
+          className="rounded-3xl p-6 sm:p-7"
+          style={{ backgroundColor: 'var(--rm-card)', border: '1px solid var(--rm-border)' }}
+        >
+          <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--rm-text)' }}>
+            Message {customerName}
+          </h2>
+          <p className="mt-1 mb-5 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+            Anything you send here lands in the customer portal inbox and notifies them. They reply
+            in the same thread.
+          </p>
+          <CustomerChatPanel applicationId={applicationId} customerName={customerName} />
         </div>
       )}
 

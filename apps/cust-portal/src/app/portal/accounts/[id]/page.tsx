@@ -4,13 +4,15 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, notFound } from 'next/navigation';
 import {
-  getAccount,
   transactionsForAccount,
   groupTransactionsByDay,
   CARDS,
+  type BankAccount,
   type PaymentCard,
   type Transaction,
 } from '@/lib/banking-data';
+import { accountService, type AccountSource } from '@/services/api/account-service';
+import { transactionService, toTransaction } from '@/services/api/transaction-service';
 import { BankCard, DotMatrix } from '@/components/banking/BankCard';
 import Glyph, { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
 
@@ -27,10 +29,25 @@ function txTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+function stamp(iso: string): string {
+  return new Date(iso).toLocaleString('en-IE', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** Live statement lines are read over the same window the dashboard uses. */
+const FETCH_DAYS = 92;
+
 const STATUS_BADGE: Record<Transaction['status'], { className: string; label: string } | null> = {
   COMPLETED: null,
   PENDING: { className: 'badge badge-warning', label: 'Pending' },
   DECLINED: { className: 'badge badge-error', label: 'Declined' },
+  // A reversal is not a decline: the purchase happened and was then undone, and the
+  // compensating line appears separately.
+  REVERSED: { className: 'badge badge-neutral', label: 'Reversed' },
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -41,13 +58,22 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 /* ──────────────────────────────────────────────────────────────────
- * Data resolution — every figure below is derived from the account's own
- * transaction history, so the labels never claim a window the data lacks.
+ * Data resolution
+ *
+ * The account is read from the same snapshot the dashboard and the accounts list
+ * are built from, so this page describes whichever customer is actually signed
+ * in. An id that is not one of their accounts is a missing page, not a page of
+ * empty panels — that is the only honest 404 this route can give.
+ *
+ * Every figure below is then derived from that account's own transaction
+ * history, so the labels never claim a window the data lacks.
  * ────────────────────────────────────────────────────────────────── */
 
-type LoadState = 'loading' | 'ready' | 'error';
+type LoadState = 'loading' | 'ready' | 'missing' | 'error';
 
 interface AccountData {
+  account: BankAccount;
+  source: AccountSource;
   transactions: Transaction[];
   linkedCards: PaymentCard[];
   inflow: number;
@@ -57,22 +83,43 @@ interface AccountData {
   windowDays: number;
 }
 
-function resolveAccount(accountId: string): AccountData {
-  const transactions = transactionsForAccount(accountId);
-  const inflowTxns = transactions.filter(t => t.direction === 'IN');
-  const outflowTxns = transactions.filter(t => t.direction === 'OUT');
-  const oldest = transactions.reduce(
+async function resolveAccount(accountId: string): Promise<AccountData | null> {
+  const snapshot = await accountService.getAccountsSnapshot();
+  const account = snapshot.accounts.find(a => a.id === accountId);
+  if (!account) return null;
+
+  /* Live lines come from this account's own feed. The sample history is filtered
+     from the dataset the sample accounts belong to, so the two never mix. */
+  const transactions =
+    snapshot.source === 'LIVE'
+      ? (
+          await transactionService.getAccountPage(accountId, {
+            from: new Date(Date.now() - FETCH_DAYS * 86400000).toISOString().slice(0, 10),
+          })
+        ).content.map(toTransaction)
+      : transactionsForAccount(accountId);
+
+  const ordered = [...transactions].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+  const inflowTxns = ordered.filter(t => t.direction === 'IN');
+  const outflowTxns = ordered.filter(t => t.direction === 'OUT');
+  const oldest = ordered.reduce(
     (min, t) => Math.min(min, new Date(t.date).getTime()),
     Date.now()
   );
   return {
-    transactions,
+    account,
+    source: snapshot.source,
+    transactions: ordered,
     linkedCards: CARDS.filter(c => c.linkedAccountId === accountId),
     inflow: inflowTxns.reduce((s, t) => s + t.amount, 0),
     outflow: outflowTxns.reduce((s, t) => s + t.amount, 0),
     inflowCount: inflowTxns.length,
     outflowCount: outflowTxns.length,
-    windowDays: Math.max(1, Math.round((Date.now() - oldest) / 86400000)),
+    windowDays: ordered.length
+      ? Math.max(1, Math.round((Date.now() - oldest) / 86400000))
+      : FETCH_DAYS,
   };
 }
 
@@ -84,24 +131,62 @@ function useAccountData(accountId: string) {
   useEffect(() => {
     let active = true;
     setState('loading');
-    const timer = window.setTimeout(() => {
-      if (!active) return;
-      try {
-        setData(resolveAccount(accountId));
-        setState('ready');
-      } catch {
+    resolveAccount(accountId)
+      .then(result => {
+        if (!active) return;
+        setData(result);
+        setState(result ? 'ready' : 'missing');
+      })
+      .catch(() => {
+        if (!active) return;
         setData(null);
         setState('error');
-      }
-    }, 220);
+      });
     return () => {
       active = false;
-      window.clearTimeout(timer);
     };
   }, [accountId, attempt]);
 
   const retry = useCallback(() => setAttempt(a => a + 1), []);
   return { data, state, retry };
+}
+
+function Breadcrumb() {
+  return (
+    <nav aria-label="Breadcrumb">
+      <Link
+        href="/portal/accounts"
+        className="inline-flex items-center gap-1.5 text-sm font-medium transition-colors hover:underline"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        All accounts
+      </Link>
+    </nav>
+  );
+}
+
+/* The whole page now waits on one request, so it shows one skeleton rather than
+   rendering a hero from a guess and filling the panels in underneath it. */
+function PageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="skeleton h-56 w-full rounded-3xl" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="stat-tile space-y-2">
+            <div className="skeleton h-3.5 w-24" />
+            <div className="skeleton h-7 w-28" />
+          </div>
+        ))}
+      </div>
+      <div className="panel">
+        <ListSkeleton rows={5} />
+      </div>
+    </div>
+  );
 }
 
 function ListSkeleton({ rows = 4 }: { rows?: number }) {
@@ -147,10 +232,10 @@ function LoadError({ onRetry, what }: { onRetry: () => void; what: string }) {
 
 export default function AccountDetailPage() {
   const params = useParams<{ id: string }>();
-  const account = getAccount(params.id);
   const [query, setQuery] = useState('');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const { data, state, retry } = useAccountData(params.id);
+  const account = data?.account;
 
   const filtered = useMemo(() => {
     const txns = data?.transactions ?? [];
@@ -166,24 +251,29 @@ export default function AccountDetailPage() {
 
   const grouped = useMemo(() => groupTransactionsByDay(filtered), [filtered]);
 
-  const details = useMemo(
-    () =>
-      account
-        ? [
-            ['Account name', account.name],
-            ['Account type', TYPE_LABEL[account.type] ?? account.type],
-            ['Sort code', account.sortCode],
-            ['Account number', account.accountNumber],
-            ['IBAN', account.iban],
-            ['Currency', account.currency],
-          ]
-        : [],
-    [account]
-  );
+  /* One filter drops every field the account service does not serve, so a live
+     account never shows an empty row — or a sample-only label it has no basis for. */
+  const details = useMemo(() => {
+    if (!account) return [] as [string, string][];
+    return (
+      [
+        ['Account name', account.name],
+        ['Account type', account.typeLabel ?? TYPE_LABEL[account.type]],
+        ['Status', account.statusDisplay],
+        ['Sort code', account.sortCode],
+        ['Account number', account.accountNumber],
+        ['IBAN', account.iban],
+        ['Currency', account.currency],
+        ['Balance as of', account.balanceAsOf ? stamp(account.balanceAsOf) : ''],
+        // Inherited from the business, so it only appears on a business account and only
+        // when the bank has classified it. Sample accounts carry none of this.
+        ['Business sector', account.sector],
+      ] as [string, string | undefined][]
+    ).filter((row): row is [string, string] => Boolean(row[1]));
+  }, [account]);
 
   const handleCopy = useCallback(async () => {
-    if (!account) return;
-    const payload = `Account name: ${account.name}\nSort code: ${account.sortCode}\nAccount number: ${account.accountNumber}\nIBAN: ${account.iban}`;
+    const payload = details.map(([k, v]) => `${k}: ${v}`).join('\n');
     try {
       await navigator.clipboard.writeText(payload);
       setCopyState('copied');
@@ -191,27 +281,30 @@ export default function AccountDetailPage() {
       setCopyState('failed');
     }
     window.setTimeout(() => setCopyState('idle'), 3000);
-  }, [account]);
+  }, [details]);
 
-  if (!account) return notFound();
+  if (state === 'missing') return notFound();
+
+  if (!data || !account) {
+    return (
+      <div className="space-y-6">
+        <Breadcrumb />
+        {state === 'error' ? (
+          <div className="panel">
+            <LoadError onRetry={retry} what="this account" />
+          </div>
+        ) : (
+          <PageSkeleton />
+        )}
+      </div>
+    );
+  }
 
   const currency = account.currency;
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb">
-        <Link
-          href="/portal/accounts"
-          className="inline-flex items-center gap-1.5 text-sm font-medium transition-colors hover:underline"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-          All accounts
-        </Link>
-      </nav>
+      <Breadcrumb />
 
       {/* Hero */}
       <div
@@ -230,19 +323,25 @@ export default function AccountDetailPage() {
             <div>
               <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white md:text-[32px]">{account.name}</h1>
               <p className="font-mono text-sm text-white/75">
-                {account.sortCode} · {account.accountNumber}
+                {[account.sortCode, account.accountNumber].filter(Boolean).join(' · ')}
               </p>
             </div>
           </div>
 
-          <p className="mt-6 text-sm text-white/75">Current balance</p>
+          {/* A live balance is a snapshot the service stamps, so it is labelled with
+              when it was taken rather than claimed to be the balance right now. */}
+          <p className="mt-6 text-sm text-white/75">
+            {account.balanceAsOf ? `Balance as of ${stamp(account.balanceAsOf)}` : 'Current balance'}
+          </p>
           <p className="text-4xl font-bold tabular-nums tracking-tight md:text-5xl">
             {fmt(account.balance, currency)}
           </p>
 
-          <div className="mt-4" aria-hidden="true">
-            <DotMatrix data={account.spark} cell={8} rows={8} color="#fff" label={`${account.name} balance trend`} />
-          </div>
+          {account.spark.length > 0 && (
+            <div className="mt-4" aria-hidden="true">
+              <DotMatrix data={account.spark} cell={8} rows={8} color="#fff" label={`${account.name} balance trend`} />
+            </div>
+          )}
 
           {/* Actions */}
           <div className="mt-6 flex flex-wrap gap-3">
@@ -270,48 +369,35 @@ export default function AccountDetailPage() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {state === 'loading' ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="stat-tile space-y-2">
-              <div className="skeleton h-3.5 w-24" />
-              <div className="skeleton h-7 w-28" />
-            </div>
-          ))
-        ) : state === 'error' || !data ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="stat-tile">
-              <p className="stat-label">Unavailable</p>
-              <p className="stat-value">—</p>
-            </div>
-          ))
-        ) : (
-          <>
-            <div className="stat-tile">
-              <p className="stat-label">Money in</p>
-              <p className="stat-value text-emerald-600 dark:text-emerald-400">{fmt(data.inflow, currency)}</p>
-              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                {data.inflowCount} payment{data.inflowCount === 1 ? '' : 's'} over {data.windowDays} days
-              </p>
-            </div>
-            <div className="stat-tile">
-              <p className="stat-label">Money out</p>
-              <p className="stat-value">{fmt(data.outflow, currency)}</p>
-              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                {data.outflowCount} payment{data.outflowCount === 1 ? '' : 's'} over {data.windowDays} days
-              </p>
-            </div>
-            <div className="stat-tile">
-              <p className="stat-label">Available to spend</p>
-              <p className="stat-value">{fmt(account.available, currency)}</p>
-              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>After pending holds</p>
-            </div>
-            <div className="stat-tile">
-              <p className="stat-label">Currency</p>
-              <p className="stat-value">{currency}</p>
-              <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Single-currency account</p>
-            </div>
-          </>
+        <div className="stat-tile">
+          <p className="stat-label">Money in</p>
+          <p className="stat-value text-emerald-600 dark:text-emerald-400">{fmt(data.inflow, currency)}</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+            {data.inflowCount} payment{data.inflowCount === 1 ? '' : 's'} over {data.windowDays} days
+          </p>
+        </div>
+        <div className="stat-tile">
+          <p className="stat-label">Money out</p>
+          <p className="stat-value">{fmt(data.outflow, currency)}</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+            {data.outflowCount} payment{data.outflowCount === 1 ? '' : 's'} over {data.windowDays} days
+          </p>
+        </div>
+        {/* On a credit account `available` is not undrawn spending money — the service
+            reports the same figure as the balance — so the tile is dropped rather than
+            given a label the data does not support. */}
+        {account.accountCategory !== 'CREDIT' && (
+          <div className="stat-tile">
+            <p className="stat-label">Available to spend</p>
+            <p className="stat-value">{fmt(account.available, currency)}</p>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>After pending holds</p>
+          </div>
         )}
+        <div className="stat-tile">
+          <p className="stat-label">Currency</p>
+          <p className="stat-value">{currency}</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Single-currency account</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -320,7 +406,7 @@ export default function AccountDetailPage() {
           <div className="panel-header">
             <h2 className="panel-title">Transactions</h2>
             <span className="chip tabular-nums" aria-live="polite">
-              {state === 'loading' ? 'Loading' : `${filtered.length} shown`}
+              {filtered.length} shown
             </span>
           </div>
 
@@ -348,11 +434,7 @@ export default function AccountDetailPage() {
             </div>
           </div>
 
-          {state === 'loading' ? (
-            <ListSkeleton rows={5} />
-          ) : state === 'error' ? (
-            <LoadError onRetry={retry} what="these transactions" />
-          ) : grouped.length === 0 ? (
+          {grouped.length === 0 ? (
             <div className="p-5">
               <div className="empty-state">
                 <div className="empty-state-icon">
@@ -442,15 +524,7 @@ export default function AccountDetailPage() {
                 Manage <span data-arrow aria-hidden="true">→</span>
               </Link>
             </div>
-            {state === 'loading' ? (
-              <div className="space-y-4 p-5">
-                <div className="skeleton aspect-[1.586] w-full rounded-2xl" />
-              </div>
-            ) : state === 'error' ? (
-              <p className="px-5 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-                Card details are unavailable right now. Use “Try again” on the transactions panel.
-              </p>
-            ) : data && data.linkedCards.length > 0 ? (
+            {data.linkedCards.length > 0 ? (
               <div className="space-y-4 p-5">
                 {data.linkedCards.map(card => (
                   <Link
@@ -472,8 +546,17 @@ export default function AccountDetailPage() {
                     </svg>
                   </div>
                   <p className="empty-state-title">No cards on this account</p>
-                  <p className="empty-state-text">You can order a card for this account from the cards page.</p>
-                  <Link href="/portal/cards" className="btn btn-secondary btn-sm mt-4">Go to cards</Link>
+                  {/* A live account has no card instruments recorded against it at all, which is
+                      a different fact from one nobody has ordered a card for — and there is no
+                      ordering journey to send them to. */}
+                  <p className="empty-state-text">
+                    {data.source === 'LIVE'
+                      ? 'No card is recorded against this account.'
+                      : 'You can order a card for this account from the cards page.'}
+                  </p>
+                  {data.source !== 'LIVE' && (
+                    <Link href="/portal/cards" className="btn btn-secondary btn-sm mt-4">Go to cards</Link>
+                  )}
                 </div>
               </div>
             )}

@@ -34,6 +34,20 @@
 
   --rm-topbar-bg: rgba(255,255,255,0.90);
   --rm-topbar-border: rgba(226,232,240,0.80);
+
+  /* Sign-in ground. The brand panel is the only large surface in the product that
+     carries the plum at full strength, so it gets its own tokens rather than
+     borrowing --rm-brand, which is a text/fill accent. */
+  --rm-auth-ground: #4a1847;
+  --rm-auth-ground-deep: #340f33;
+  --rm-auth-glow-a: rgba(204, 91, 201, 0.30);
+  --rm-auth-glow-b: rgba(226, 182, 224, 0.16);
+  --rm-auth-muted: rgba(255, 255, 255, 0.78);
+  --rm-auth-chip-border: rgba(255, 255, 255, 0.22);
+
+  /* Tint for a stated failure. --rm-down is a sentiment colour for figures, not a
+     danger colour, so error surfaces get their own. */
+  --rm-danger-soft: rgba(207, 67, 105, 0.10);
 }
 
 .dark {
@@ -62,6 +76,17 @@
 
   --rm-topbar-bg: rgba(6,13,26,0.97);
   --rm-topbar-border: rgba(255,255,255,0.08);
+
+  /* Warmed plum-black rather than the navy the page used to carry, so the sign-in
+     ground sits on the same family as --rm-bg instead of fighting it. */
+  --rm-auth-ground: #1c0d20;
+  --rm-auth-ground-deep: #120715;
+  --rm-auth-glow-a: rgba(177, 85, 172, 0.22);
+  --rm-auth-glow-b: rgba(195, 104, 189, 0.12);
+  --rm-auth-muted: rgba(255, 255, 255, 0.66);
+  --rm-auth-chip-border: rgba(255, 255, 255, 0.14);
+
+  --rm-danger-soft: rgba(240, 121, 156, 0.14);
 }
 
 /* ── Auth pages: always light regardless of dark mode ── */
@@ -740,6 +765,60 @@ html.dark .force-light {
   color: var(--rm-text-muted);
 }
 .rm-rule { border-top: 1px solid var(--rm-hairline); }
+
+/* Brand-filled action. btn-primary is the old gradient palette and predates the
+   token system, so surfaces that must follow the theme use this instead. */
+.btn-brand {
+  background: var(--rm-brand);
+  color: #fff;
+  transition: background-color 200ms ease;
+}
+.btn-brand:hover:not(:disabled) { background: var(--rm-brand-strong); }
+.btn-brand:focus-visible { outline: 2px solid var(--rm-brand); outline-offset: 2px; }
+
+/* Action-button hierarchy: one solid brand action, quiet outlines for the rest,
+   and a soft-danger group for actions that end the application. Replaces the
+   saturated hue-per-outcome buttons, which made a worklist read as a legend. */
+.rm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.rm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rm-btn svg { opacity: 0.8; }
+
+.rm-btn-solid { background: var(--rm-brand); color: #fff; }
+.rm-btn-solid:hover:not(:disabled) { background: var(--rm-brand-strong); }
+.rm-btn-solid:focus-visible { outline: 2px solid var(--rm-brand); outline-offset: 2px; }
+
+.rm-btn-quiet {
+  background: transparent;
+  border-color: var(--rm-hairline-strong);
+  color: var(--rm-text-secondary);
+}
+.rm-btn-quiet:hover:not(:disabled) {
+  background: var(--rm-brand-soft);
+  border-color: var(--rm-brand);
+  color: var(--rm-brand-on-soft);
+}
+
+.rm-btn-danger { background: var(--rm-danger-soft); color: #b91c1c; }
+.rm-btn-danger:hover:not(:disabled) { background: rgba(207, 67, 105, 0.2); }
+html.dark .rm-btn-danger { color: var(--rm-down); }
+html.dark .rm-btn-danger:hover:not(:disabled) { background: rgba(240, 121, 156, 0.24); }
+
+/* Placeholder and link colours for token-themed forms. */
+.input-brand::placeholder { color: var(--rm-text-muted); }
+.link-brand { color: var(--rm-brand-on-soft); }
+.link-brand:hover { color: var(--rm-brand); }
 
 /* Hairline-divided metric strip. A restatement-free layout device: it holds the
    same metrics the pill row held, just divided by rules instead of floats. */

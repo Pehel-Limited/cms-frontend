@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { formatCurrency } from '@/lib/format';
+import Glyph from '@/components/ui/Glyph';
 import {
   applicationService,
   LoanApplication,
@@ -89,6 +91,88 @@ const FILTER_GROUPS: Record<FilterStatus, string[] | null> = {
   ],
 };
 
+/* ─── Portfolio journey ───────────────────────────────────────
+   Four customer-facing milestones derived from the application status.
+   The status badge still carries the bank's exact wording; this strip answers
+   the simpler question, "where is it now?". */
+
+const PORTFOLIO_STAGES = ['Submit', 'Review', 'Decision', 'Offer & funds'] as const;
+
+function portfolioStage(status: string): { active: number; done: boolean } {
+  const s = status.toUpperCase();
+  if (s === 'DRAFT') return { active: 0, done: false };
+  if (['DISBURSED', 'ACTIVE', 'CLOSED'].includes(s)) return { active: 3, done: true };
+  if (['WITHDRAWN', 'CANCELLED', 'EXPIRED'].includes(s)) return { active: -1, done: false };
+  if (['PENDING_DECISION', 'APPROVED', 'DECLINED'].includes(s)) return { active: 2, done: false };
+  if (
+    [
+      'OFFER_GENERATED',
+      'OFFER_SENT',
+      'OFFER_ACCEPTED',
+      'OFFER_REJECTED',
+      'OFFER_EXPIRED',
+      'OFFER_COUNTERED',
+      'PENDING_CONDITIONS',
+      'CONDITIONS_MET',
+      'PENDING_ESIGN',
+      'ESIGN_IN_PROGRESS',
+      'ESIGN_COMPLETED',
+      'PENDING_BOOKING',
+      'BOOKING_IN_PROGRESS',
+      'BOOKED',
+      'PENDING_DISBURSEMENT',
+      'DISBURSEMENT_IN_PROGRESS',
+    ].includes(s)
+  ) {
+    return { active: 3, done: false };
+  }
+  return { active: 1, done: false };
+}
+
+function applicationGlyph(productType?: string): string {
+  const t = (productType || '').toUpperCase();
+  if (/MORTGAGE|HOME_LOAN|BRIDGE|CONSTRUCTION|GREEN|PROPERTY/.test(t)) return 'rent';
+  if (/AUTO|VEHICLE|PCP|HIRE_PURCHASE|LEASE|EQUIPMENT/.test(t)) return 'Transport';
+  if (/CARD|OVERDRAFT|CREDIT/.test(t)) return 'current';
+  if (/BUSINESS|SME|AGRI|WORKING|INVOICE|COMMERCIAL/.test(t)) return 'bank';
+  return 'doc';
+}
+
+function nextActionFor(app: LoanApplication): {
+  label: string;
+  tone: 'action' | 'warning' | 'quiet';
+  glyph: string;
+} | null {
+  if (app.status === 'DRAFT') {
+    return { label: 'Continue your draft', tone: 'action', glyph: 'doc' };
+  }
+  if (app.status === 'RETURNED' || app.lomsStatus === 'RETURNED') {
+    return { label: 'Corrections requested', tone: 'warning', glyph: 'alert' };
+  }
+  if ((app.documentsPendingCount ?? 0) > 0) {
+    const count = app.documentsPendingCount ?? 0;
+    return {
+      label: `${count} document${count === 1 ? '' : 's'} still needed`,
+      tone: 'action',
+      glyph: 'doc',
+    };
+  }
+  if (
+    app.offerValidUntil &&
+    !app.offerAccepted &&
+    new Date(app.offerValidUntil).getTime() > Date.now()
+  ) {
+    return { label: 'Offer waiting for you', tone: 'action', glyph: 'sign' };
+  }
+  if (['PENDING_ESIGN', 'ESIGN_IN_PROGRESS'].includes(app.status)) {
+    return { label: 'Signature needed', tone: 'action', glyph: 'sign' };
+  }
+  if (app.slaBreached) {
+    return { label: 'Taking longer than expected', tone: 'warning', glyph: 'clock' };
+  }
+  return null;
+}
+
 /* ─── Skeleton ──────────────────────────────────────────────── */
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`skeleton ${className}`} />;
@@ -150,37 +234,60 @@ export default function ApplicationsPage() {
     COMPLETED: applications.filter(a => FILTER_GROUPS.COMPLETED?.includes(a.status)).length,
   };
 
-  return (
-    <div className="space-y-6">
-      {/* ── Header ─────────────────────────────────────────── */}
-      <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
-        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" />
+  const attentionCount = applications.filter(app => {
+    const next = nextActionFor(app);
+    return next != null && next.tone !== 'quiet';
+  }).length;
 
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">
+  return (
+    <div className="space-y-5">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <section className="mesh-hero relative overflow-hidden rounded-[32px] p-6 shadow-float sm:p-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-28 h-80 w-80 rounded-full border border-white/10"
+          style={{ boxShadow: '0 0 0 40px rgba(255,255,255,.035), 0 0 0 80px rgba(255,255,255,.025)' }}
+        />
+
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
+              Credit with the bank
+            </p>
+            <h1 className="serif mt-2 text-[32px] font-medium leading-tight tracking-tight text-white sm:text-[36px]">
               My applications
             </h1>
-            <p className="mt-1.5 text-sm text-white/70">
+            <p className="mt-2 max-w-xl text-sm text-white/70">
               {loading
                 ? 'Loading your applications…'
-                : `${counts.ACTIVE} in progress · ${counts.ALL} total`}
+                : attentionCount > 0
+                  ? `${counts.ALL} ${counts.ALL === 1 ? 'application' : 'applications'} · ${
+                      attentionCount === counts.ALL
+                        ? 'all need your attention'
+                        : `${attentionCount} need your attention`
+                    }`
+                  : `${counts.ALL} ${
+                      counts.ALL === 1 ? 'application' : 'applications'
+                    } · nothing needs you right now`}
             </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <span className="dash-hero-chip">Total {counts.ALL}</span>
+              <span className="dash-hero-chip">In progress {counts.ACTIVE}</span>
+              <span className="dash-hero-chip">Completed {counts.COMPLETED}</span>
+            </div>
           </div>
           <button
             onClick={() => router.push('/portal/ai-assistant')}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-white/25"
+            className="inline-flex items-center justify-center gap-2 self-start rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#5e1f5b] shadow-lg transition-transform hover:scale-[1.02] lg:self-end"
           >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            <Glyph name="plus" className="h-4 w-4" strokeWidth={2.2} />
             New application
           </button>
         </div>
-      </div>
+      </section>
 
       {/* ── Toolbar: filters + search ──────────────────────── */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="glass-panel flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
         <div
           className="segmented no-scrollbar max-w-full overflow-x-auto"
           role="group"
@@ -194,7 +301,7 @@ export default function ApplicationsPage() {
               aria-pressed={filter === f}
               data-active={filter === f ? 'true' : undefined}
               onClick={() => setFilter(f)}
-              className="segmented-item"
+              className="segmented-item px-2 text-[13px] sm:px-3.5 sm:text-sm"
             >
               {FILTER_LABELS[f]}
               <span className="ml-0.5 text-xs tabular-nums opacity-70">{counts[f]}</span>
@@ -203,21 +310,19 @@ export default function ApplicationsPage() {
         </div>
 
         <div className="relative w-full lg:max-w-xs">
-          <svg
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+          <span
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
             style={{ color: 'var(--text-muted)' }}
-            fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+            <Glyph name="search" className="h-4 w-4" strokeWidth={2} />
+          </span>
           <input
             type="search"
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search by reference, purpose or status"
             aria-label="Search applications"
-            className="input py-2 pl-9 pr-4"
+            className="input !rounded-full py-2 pl-9 pr-4"
           />
         </div>
       </div>
@@ -226,25 +331,23 @@ export default function ApplicationsPage() {
       {loading ? (
         <div className="space-y-3" aria-busy="true">
           <p className="sr-only" role="status">Loading your applications…</p>
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="panel px-5 py-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="glass-panel p-5">
               <div className="flex items-start gap-4">
-                <Skeleton className="h-11 w-11 rounded-xl" />
+                <Skeleton className="h-12 w-12 rounded-2xl" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-48" />
                   <Skeleton className="h-3.5 w-72" />
+                  <Skeleton className="h-1.5 w-full" />
                 </div>
-                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-6 w-24" />
               </div>
             </div>
           ))}
         </div>
       ) : error ? (
         <div className="alert alert-error flex-col text-center sm:flex-row sm:text-left" role="alert">
-          <svg aria-hidden="true" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
+          <Glyph name="alert" className="h-5 w-5 shrink-0" />
           <div className="flex-1">
             <p className="font-semibold">We couldn&apos;t load your applications</p>
             <p className="mt-0.5 text-sm opacity-80">{error}</p>
@@ -254,50 +357,99 @@ export default function ApplicationsPage() {
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <svg aria-hidden="true" className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          {applications.length === 0 ? (
-            <>
-              <h2 className="empty-state-title">No applications yet</h2>
-              <p className="empty-state-text">
-                When you apply for a loan or credit product, you&apos;ll be able to track its
-                progress here.
+        applications.length === 0 ? (
+          <div className="glass-panel-solid relative overflow-hidden px-6 py-12 text-center sm:px-12">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-0 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{
+                background:
+                  'radial-gradient(circle, var(--brand-soft-strong), transparent 68%)',
+              }}
+            />
+            <div className="relative">
+              <span
+                className="mx-auto flex h-16 w-16 items-center justify-center rounded-full"
+                style={{
+                  background: 'var(--brand-soft)',
+                  color: 'var(--brand-on-soft)',
+                  border: '1px solid var(--hairline)',
+                }}
+              >
+                <Glyph name="doc" className="h-7 w-7" strokeWidth={1.5} />
+              </span>
+              <h2 className="serif mt-5 text-[26px] font-medium">Your first application starts here</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6" style={{ color: 'var(--text-muted)' }}>
+                Apply for a loan or credit product, share your details once, and follow every step
+                from submission to drawdown.
               </p>
               <button
                 onClick={() => router.push('/portal/ai-assistant')}
-                className="btn btn-primary mt-5"
+                className="btn btn-primary mt-6"
               >
-                Start an application
+                Start an application <span aria-hidden="true">→</span>
               </button>
-            </>
-          ) : (
-            <>
-              <h2 className="empty-state-title">No matching applications</h2>
-              <p className="empty-state-text">
-                {q
-                  ? `Nothing matches “${query.trim()}”. Try a different reference, purpose or status.`
-                  : 'No applications have this status yet.'}
-              </p>
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                {q && (
-                  <button onClick={() => setQuery('')} className="btn btn-secondary btn-sm">
-                    Clear search
-                  </button>
-                )}
-                {filter !== 'ALL' && (
-                  <button onClick={() => setFilter('ALL')} className="btn btn-ghost btn-sm">
-                    Show all applications
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+
+              <ol className="mx-auto mt-10 grid max-w-2xl gap-3 text-left sm:grid-cols-3">
+                {[
+                  { glyph: 'search', title: 'Choose a product', detail: 'See what is open to you.' },
+                  { glyph: 'doc', title: 'Share your details', detail: 'Bring in your banking.' },
+                  { glyph: 'check', title: 'Track every step', detail: 'Know who is doing what.' },
+                ].map((item, i) => (
+                  <li
+                    key={item.title}
+                    className="rounded-2xl border p-4"
+                    style={{
+                      borderColor: 'var(--hairline)',
+                      backgroundColor: 'var(--surface-input)',
+                    }}
+                  >
+                    <span
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold"
+                      style={{
+                        background: 'var(--brand-soft)',
+                        color: 'var(--brand-on-soft)',
+                      }}
+                      aria-hidden="true"
+                    >
+                      {i + 1}
+                    </span>
+                    <p className="mt-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {item.title}
+                    </p>
+                    <p className="mt-0.5 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
+                      {item.detail}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <div className="empty-state-icon">
+              <Glyph name="search" className="h-7 w-7" strokeWidth={1.5} />
+            </div>
+            <h2 className="empty-state-title">No matching applications</h2>
+            <p className="empty-state-text">
+              {q
+                ? `Nothing matches “${query.trim()}”. Try a different reference, purpose or status.`
+                : 'No applications have this status yet.'}
+            </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+              {q && (
+                <button onClick={() => setQuery('')} className="btn btn-secondary btn-sm">
+                  Clear search
+                </button>
+              )}
+              {filter !== 'ALL' && (
+                <button onClick={() => setFilter('ALL')} className="btn btn-ghost btn-sm">
+                  Show all applications
+                </button>
+              )}
+            </div>
+          </div>
+        )
       ) : (
         <ul className="stagger space-y-3">
           {filtered.map(app => {
@@ -305,122 +457,182 @@ export default function ApplicationsPage() {
               app.product?.productName ||
               LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] ||
               app.loanPurpose;
-            const hasFooter =
-              app.status !== 'DRAFT' &&
-              (app.daysInCurrentStatus != null ||
-                app.slaBreached ||
-                (app.documentsPendingCount != null && app.documentsPendingCount > 0));
+            const stage = portfolioStage(app.status);
+            const nextAction = nextActionFor(app);
+            const closed = [
+              'DECLINED',
+              'WITHDRAWN',
+              'CANCELLED',
+              'EXPIRED',
+              'CLOSED',
+              'KYC_REJECTED',
+              'CREDIT_DECLINED',
+              'UNDERWRITING_DECLINED',
+              'OFFER_REJECTED',
+              'OFFER_EXPIRED',
+            ].includes(app.status);
 
             return (
               <li key={app.applicationId}>
-                <button
-                  type="button"
-                  onClick={() => router.push(`/portal/applications/${app.applicationId}`)}
-                  className="panel group w-full px-5 py-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                <Link
+                  href={`/portal/applications/${app.applicationId}`}
+                  className="glass-panel group block w-full text-left transition-transform duration-200 hover:-translate-y-0.5"
                 >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:flex"
-                      style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
-                    >
-                      <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={1.5}
-                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                        />
-                      </svg>
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                          {purpose || 'Draft application'}
-                        </p>
-                        <StatusBadge status={app.status} />
-                      </div>
-                      <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {app.applicationNumber || 'No reference yet'} · {app.requestedTermMonths}{' '}
-                        months · {app.status === 'DRAFT' ? 'Created' : 'Updated'}{' '}
-                        {formatDate(app.updatedAt || app.createdAt)}
-                      </p>
-                    </div>
-
-                    <div className="shrink-0 text-right">
-                      <p
-                        className="text-base font-semibold tabular-nums"
-                        style={{ color: 'var(--text-primary)' }}
+                  <div className="p-5 sm:p-6">
+                    <div className="flex items-start gap-4">
+                      <span
+                        className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl sm:flex"
+                        style={{
+                          background: 'var(--brand-soft)',
+                          color: 'var(--brand-on-soft)',
+                          border: '1px solid var(--hairline)',
+                        }}
+                        aria-hidden="true"
                       >
-                        {formatCurrency(app.requestedAmount)}
-                      </p>
-                      {app.approvedAmount != null && (
-                        <p className="mt-0.5 text-sm tabular-nums" style={{ color: 'var(--text-muted)' }}>
-                          Approved {formatCurrency(app.approvedAmount)}
+                        <Glyph
+                          name={applicationGlyph(app.product?.productType)}
+                          className="h-5 w-5"
+                        />
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2
+                            className="serif truncate text-[20px] font-medium leading-snug"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            {purpose || 'Draft application'}
+                          </h2>
+                          <StatusBadge status={app.status} />
+                          {nextAction && (
+                            <span
+                              className={`badge ${
+                                nextAction.tone === 'warning' ? 'badge-warning' : 'badge-primary'
+                              }`}
+                            >
+                              Needs you
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+                          {app.applicationNumber || 'No reference yet'} ·{' '}
+                          {app.requestedTermMonths} months ·{' '}
+                          {app.status === 'DRAFT' ? 'Created' : 'Updated'}{' '}
+                          {formatDate(app.updatedAt || app.createdAt)}
                         </p>
-                      )}
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <p
+                          className="text-xl font-bold tracking-tight tabular-nums"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {formatCurrency(app.requestedAmount)}
+                        </p>
+                        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                          Requested
+                        </p>
+                        {app.approvedAmount != null && (
+                          <p
+                            className="mt-1 text-xs font-semibold tabular-nums"
+                            style={{ color: 'var(--up)' }}
+                          >
+                            Approved {formatCurrency(app.approvedAmount)}
+                          </p>
+                        )}
+                      </div>
+
+                      <span
+                        aria-hidden="true"
+                        className="mt-2 hidden transition-transform duration-200 group-hover:translate-x-0.5 sm:block"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        <Glyph name="chevron" className="h-4 w-4 -rotate-90" strokeWidth={2} />
+                      </span>
                     </div>
 
-                    <svg
-                      aria-hidden="true"
-                      className="mt-1 h-5 w-5 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
-                      style={{ color: 'var(--text-muted)' }}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
+                    {/* Position in the customer journey, not the bank's internal workflow. */}
+                    <div className="mt-5 grid grid-cols-4 gap-1.5">
+                      {PORTFOLIO_STAGES.map((label, i) => {
+                        const reached = stage.done || (stage.active >= 0 && i <= stage.active);
+                        const isCurrent = !stage.done && i === stage.active;
+                        return (
+                          <div key={label}>
+                            <div
+                              className="h-1.5 rounded-full transition-colors"
+                              style={{
+                                backgroundColor: reached
+                                  ? 'var(--brand)'
+                                  : 'var(--hairline-strong)',
+                                opacity: reached && !isCurrent ? 0.65 : 1,
+                              }}
+                            />
+                            <p
+                              className="mt-1.5 text-[10px] font-medium"
+                              style={{
+                                color: isCurrent
+                                  ? 'var(--text-primary)'
+                                  : reached
+                                    ? 'var(--text-secondary)'
+                                    : 'var(--text-muted)',
+                              }}
+                            >
+                              {label}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                  {hasFooter && (
                     <div
-                      className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-sm"
-                      style={{ borderColor: 'var(--surface-border)', color: 'var(--text-muted)' }}
+                      className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs"
+                      style={{ borderColor: 'var(--hairline)' }}
                     >
-                      {app.daysInCurrentStatus != null && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        {nextAction ? (
+                          <span
+                            className="inline-flex items-center gap-1.5 font-semibold"
+                            style={{
+                              color:
+                                nextAction.tone === 'warning'
+                                  ? 'var(--down)'
+                                  : 'var(--brand-on-soft)',
+                            }}
+                          >
+                            <Glyph
+                              name={nextAction.glyph}
+                              className="h-3.5 w-3.5"
                               strokeWidth={2}
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                             />
-                          </svg>
-                          {app.daysInCurrentStatus} {app.daysInCurrentStatus === 1 ? 'day' : 'days'} in
-                          this status
+                            {nextAction.label}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>
+                            {closed ? 'This application is closed' : 'No action needed from you'}
+                          </span>
+                        )}
+                        {app.daysInCurrentStatus != null && app.status !== 'DRAFT' && (
+                          <span style={{ color: 'var(--text-muted)' }}>
+                            {app.daysInCurrentStatus}{' '}
+                            {app.daysInCurrentStatus === 1 ? 'day' : 'days'} in this status
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className="inline-flex items-center gap-1 font-semibold"
+                        style={{ color: 'var(--brand-on-soft)' }}
+                      >
+                        {app.status === 'DRAFT' ? 'Continue' : 'Open'}
+                        <span
+                          aria-hidden="true"
+                          className="transition-transform duration-200 group-hover:translate-x-0.5"
+                        >
+                          →
                         </span>
-                      )}
-                      {app.slaBreached && (
-                        <span className="inline-flex items-center gap-1.5 font-medium text-red-600 dark:text-red-300">
-                          <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path
-                              fillRule="evenodd"
-                              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                          Taking longer than expected
-                        </span>
-                      )}
-                      {app.documentsPendingCount != null && app.documentsPendingCount > 0 && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                            />
-                          </svg>
-                          {app.documentsPendingCount}{' '}
-                          {app.documentsPendingCount === 1 ? 'document' : 'documents'} still needed
-                        </span>
-                      )}
+                      </span>
                     </div>
-                  )}
-                </button>
+                  </div>
+                </Link>
               </li>
             );
           })}

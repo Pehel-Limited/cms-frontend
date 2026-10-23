@@ -336,6 +336,7 @@ export interface LoanApplication {
   /** Trading figures, not the applicant income the bank's affordability check divides by. */
   businessMonthlyIncome?: number;
   businessMonthlyExpenses?: number;
+  facilityPurposeDescription?: string;
 
   // Property (home/mortgage)
   propertyAddress?: string;

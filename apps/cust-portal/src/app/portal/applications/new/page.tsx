@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAIPreferences } from '@/lib/ai-preferences';
-import { PageHero } from '@/components/ui/PageHero';
 import {
   applicationService,
   ApplicationContext,
@@ -23,9 +22,14 @@ import {
 import { documentExtractionService, DocumentType, DocumentExtractionResult } from '@/services/api/document-extraction-service';
 import { statementAnalysisService, type CashFlowAnalysis } from '@/services/api/statement-analysis-service';
 import { customerService } from '@/services/api/customer-service';
-import { formatCurrency } from '@/lib/format';
-import { useBankQuote, QuoteFigures, QuoteHeadline } from '@/components/applications/QuoteFigures';
+import { formatCurrency, getCurrencySymbol } from '@/lib/format';
+import { useBankQuote } from '@/components/applications/QuoteFigures';
 import type { Quote } from '@/services/api/quote-service';
+import {
+  ApplicationRail,
+  ApplicationMobileProgress,
+} from '@/components/applications/ApplicationRail';
+import Glyph from '@/components/ui/Glyph';
 import {
   partyService,
   PartyMember,
@@ -54,6 +58,57 @@ const BUSINESS_STEPS: { key: WizardStep; label: string }[] = [
   { key: 'financial', label: 'Financials' },
   { key: 'review', label: 'Review and submit' },
 ];
+
+/* The headline for each step, kept apart from its validation. The rail carries
+   position; this carries the one sentence that tells the customer what the step
+   is for before they meet the fields. */
+const STEP_META: Record<WizardStep, { title: string; subtitle: string; glyph: string }> = {
+  product: {
+    title: 'Find your fit',
+    subtitle:
+      'Choose the product you want to apply for. Every option shown here is open to you.',
+    glyph: 'doc',
+  },
+  loan: {
+    title: 'Shape the loan',
+    subtitle:
+      'Set the amount, term and purpose. Your indicative repayment updates from the bank as you type.',
+    glyph: 'bank',
+  },
+  parties: {
+    title: 'Who signs for the company',
+    subtitle:
+      'Confirm the people linked to your business and choose at least two authorised signatories.',
+    glyph: 'joint',
+  },
+  financial: {
+    title: 'Show us the numbers',
+    subtitle:
+      'Optional, but it helps us assess faster. Add whatever you are comfortable sharing.',
+    glyph: 'chart',
+  },
+  employment: {
+    title: 'Tell us about your work',
+    subtitle:
+      'Optional. Add employment details if you want us to take them into account.',
+    glyph: 'user',
+  },
+  review: {
+    title: 'One last look',
+    subtitle:
+      'Check your answers against the bank’s figures, then accept the declarations to submit.',
+    glyph: 'shield',
+  },
+};
+
+const quoteMoney = (amount: number) =>
+  new Intl.NumberFormat('en-IE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+  }).format(amount);
+
+const COMMON_TERM_MONTHS = [12, 24, 36, 48, 60, 72, 84, 120, 180, 240, 300, 360];
 
 const EMPLOYMENT_STATUSES = [
   { value: 'EMPLOYED', label: 'Employed' },
@@ -91,7 +146,6 @@ const RATE_PLAN_PRODUCT_TYPES = new Set(['MORTGAGE', 'HOME_LOAN', 'COMMERCIAL_MO
 
 export default function NewApplicationPage() {
   const router = useRouter();
-  const { preferences, ready } = useAIPreferences();
   const searchParams = useSearchParams();
   const preselectedCode = searchParams.get('product');
   // Carried over from a confirmed Rayva AI Credit Assistant journey — lets us
@@ -223,6 +277,17 @@ export default function NewApplicationPage() {
       loadParties();
     }
   }, [step, isBusiness]);
+
+  /* A failed save or submit can happen while the customer is at the bottom of a
+     long step. Bring the explanation into view rather than leaving the button
+     looking like it did nothing. */
+  useEffect(() => {
+    if (error) {
+      document
+        .getElementById('application-error')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [error]);
 
   // Restore a signatory choice already saved against the draft
   useEffect(() => {
@@ -664,270 +729,305 @@ export default function NewApplicationPage() {
 
   // ─── Render ──────────────────────────────────────────────────
 
+  const meta = STEP_META[step];
+  const stepNumber = stepIndex + 1;
+  const allDeclarationsAccepted =
+    declarations.informationAccurate &&
+    declarations.consentCreditCheck &&
+    declarations.termsAccepted;
+
   return (
-    <div className="mx-auto max-w-3xl">
-      {/* Header */}
-      <div className="mb-7 flex items-center gap-3">
+    <div className="mx-auto max-w-6xl">
+      {/* The rail carries the studio on desktop; the phone gets a compact
+          equivalent above the step. */}
+      <div className="mb-4 flex items-center gap-3 lg:hidden">
         <button
           onClick={() => router.push('/portal/applications')}
           className="icon-btn"
           aria-label="Back to applications"
           type="button"
         >
-          <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10 19l-7-7m0 0l7-7m-7 7h18"
-            />
-          </svg>
+          <Glyph name="chevron" className="h-4 w-4 rotate-90" strokeWidth={2} />
         </button>
-        <div>
-          <h1 className="serif text-[26px] font-medium leading-tight tracking-tight sm:text-[30px]" style={{ color: 'var(--text-primary)' }}>
-            New application
-          </h1>
-          <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-            {savedApp
-              ? `Draft saved — ${savedApp.applicationNumber || 'no reference yet'}`
-              : 'Fill in the details to apply for a loan'}
-          </p>
-        </div>
+        <p
+          className="serif min-w-0 truncate text-[21px] font-medium leading-tight"
+          style={{ color: 'var(--text-primary)' }}
+        >
+          New application
+        </p>
+        {savedApp && <span className="chip ml-auto shrink-0 !py-1 !text-xs">Draft saved</span>}
       </div>
 
-      {/* What the figures typed so far actually cost. Step position is carried by the
-          stepper below, so it is not restated here, and the document uploads live on the
-          two steps whose fields they fill rather than on a step with none. */}
-      {selectedProduct && step !== 'product' && (quote || quoting || quoteError) && (
-        <section className="panel mb-6 px-5 py-4" aria-label="Indicative repayment">
-          <QuoteHeadline
+      <div className="grid gap-6 lg:grid-cols-[290px_minmax(0,1fr)] xl:grid-cols-[310px_minmax(0,1fr)]">
+        <ApplicationRail
+          steps={STEPS}
+          activeIndex={stepIndex}
+          onStepClick={i => goToStep(STEPS[i].key)}
+          savedReference={savedApp?.applicationNumber || (savedApp ? 'Draft' : null)}
+          productName={selectedProduct?.productName}
+          quote={quote}
+          quoting={quoting}
+          quoteError={quoteError}
+          onRetryQuote={retryQuote}
+        />
+
+        <div className="min-w-0">
+          <ApplicationMobileProgress
+            steps={STEPS}
+            activeIndex={stepIndex}
             quote={quote}
             quoting={quoting}
-            quoteError={quoteError}
-            onRetry={retryQuote}
           />
-        </section>
-      )}
 
-      {/* Stepper — plain step position, no scoring */}
-      <nav
-        className="no-scrollbar mb-6 overflow-x-auto"
-        aria-label={`Application steps: step ${stepIndex + 1} of ${STEPS.length}, ${
-          stepIndex >= 0 ? STEPS[stepIndex].label : ''
-        }`}
-        tabIndex={0}
-      >
-        <p className="mb-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-          Step {stepIndex + 1} of {STEPS.length}
-          {stepIndex >= 0 ? ` · ${STEPS[stepIndex].label}` : ''}
-        </p>
-        <ol className="flex min-w-max items-center gap-1 sm:min-w-0">
-          {STEPS.map((s, i) => {
-            const isActive = i === stepIndex;
-            const isComplete = i < stepIndex;
-            return (
-              <li key={s.key} className="flex flex-1 items-center">
-                <button
-                  onClick={() => {
-                    if (isComplete) goToStep(s.key);
-                  }}
-                  disabled={!isComplete && !isActive}
-                  aria-current={isActive ? 'step' : undefined}
-                  aria-label={`Step ${i + 1} of ${STEPS.length}: ${s.label}${
-                    isComplete ? ' (completed)' : isActive ? ' (current step)' : ' (not reached yet)'
-                  }`}
-                  className="flex items-center gap-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-default"
-                  style={{
-                    color: isActive || isComplete ? 'var(--brand-on-soft)' : 'var(--text-muted)',
-                    fontWeight: isActive ? 600 : 500,
-                  }}
-                  type="button"
-                >
-                  <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors"
-                    style={
-                      isActive
-                        ? { borderColor: 'var(--brand)', backgroundColor: 'var(--brand)', color: '#fff' }
-                        : isComplete
-                          ? {
-                              borderColor: 'var(--brand)',
-                              backgroundColor: 'var(--brand-soft)',
-                              color: 'var(--brand-on-soft)',
-                            }
-                          : {
-                              borderColor: 'var(--surface-border-strong)',
-                              color: 'var(--text-muted)',
-                            }
-                    }
-                    aria-hidden="true"
+          {/* Error — the customer's answers are never cleared on a failed save */}
+          {error && (
+            <div id="application-error" className="alert alert-error mb-4" role="alert">
+              <Glyph name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error} Your answers have been kept — you can try again.</span>
+            </div>
+          )}
+
+          <section className="glass-panel-solid overflow-hidden" aria-labelledby="step-title">
+            <header
+              className="relative overflow-hidden border-b px-6 py-6 sm:px-8 sm:py-7"
+              style={{ borderColor: 'var(--hairline)' }}
+            >
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full"
+                style={{
+                  background:
+                    'radial-gradient(circle, var(--brand-soft-strong), transparent 68%)',
+                }}
+              />
+              <div className="relative flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p
+                    className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+                    style={{ color: 'var(--brand-on-soft)' }}
                   >
-                    {isComplete ? '✓' : i + 1}
-                  </span>
-                  <span className="hidden sm:inline">{s.label}</span>
-                </button>
-                {i < STEPS.length - 1 && (
-                  <div
-                    className="mx-2 h-0.5 flex-1 rounded-full"
-                    aria-hidden="true"
-                    style={{
-                      backgroundColor:
-                        i < stepIndex ? 'var(--brand)' : 'var(--surface-border-strong)',
-                    }}
-                  />
+                    Step {stepNumber} of {STEPS.length} · {STEPS[stepIndex]?.label}
+                  </p>
+                  <h1
+                    id="step-title"
+                    className="serif mt-2 text-[27px] font-medium leading-tight tracking-tight sm:text-[31px]"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {meta.title}
+                  </h1>
+                  <p
+                    className="mt-2 max-w-xl text-sm leading-6"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    {meta.subtitle}
+                  </p>
+                </div>
+                <span
+                  className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-2xl sm:flex"
+                  style={{
+                    background: 'var(--brand-soft)',
+                    color: 'var(--brand-on-soft)',
+                    border: '1px solid var(--hairline)',
+                  }}
+                  aria-hidden="true"
+                >
+                  <Glyph name={meta.glyph} className="h-6 w-6" />
+                </span>
+              </div>
+            </header>
+
+            <div key={step} className="animate-slide-up px-6 py-6 sm:px-8 sm:py-7">
+              {step === 'product' && (
+                <StepProduct
+                  products={visibleProducts}
+                  loading={loadingProducts}
+                  selected={selectedProduct}
+                  onSelect={selectProduct}
+                  error={productsError}
+                  onRetry={loadProducts}
+                />
+              )}
+
+              {step === 'loan' && selectedProduct && (
+                <StepLoan
+                  form={form}
+                  product={selectedProduct}
+                  onChange={handleChange}
+                  onValueChange={(name, value) => {
+                    setForm(prev => ({ ...prev, [name]: value }));
+                    setSeededFromProfile(prev =>
+                      prev[name] ? { ...prev, [name]: '' } : prev
+                    );
+                  }}
+                  errors={attemptedNext ? loanErrors : {}}
+                  quote={quote}
+                  quoting={quoting}
+                  quoteError={quoteError}
+                  onRetryQuote={retryQuote}
+                />
+              )}
+
+              {step === 'parties' && (
+                <StepParties
+                  members={partyMembers}
+                  validation={partyValidation}
+                  loading={loadingParties}
+                  error={partyError}
+                  signatoryIds={signatoryIds}
+                  showShortfall={attemptedNext}
+                  onToggleSignatory={customerId =>
+                    setSignatoryIds(prev =>
+                      prev.includes(customerId)
+                        ? prev.filter(id => id !== customerId)
+                        : [...prev, customerId]
+                    )
+                  }
+                  onRefresh={loadParties}
+                />
+              )}
+
+              {step === 'financial' && (
+                <StepFinancial
+                  form={form}
+                  onChange={handleChange}
+                  isBusiness={isBusiness}
+                  showPersonalFinancials={showPersonalFinancials}
+                  seededFromProfile={seededFromProfile}
+                  onApplyExtracted={applyExtractedFields}
+                />
+              )}
+
+              {step === 'employment' && (
+                <StepEmployment
+                  form={form}
+                  onChange={handleChange}
+                  seededFromProfile={seededFromProfile}
+                  onApplyExtracted={applyExtractedFields}
+                />
+              )}
+
+              {step === 'review' && selectedProduct && (
+                <StepReview
+                  form={form}
+                  product={selectedProduct}
+                  isBusiness={isBusiness}
+                  showPersonalFinancials={showPersonalFinancials}
+                  quote={quote}
+                  signatories={partyMembers
+                    .filter(m => signatoryIds.includes(m.customerId))
+                    .map(m => m.customerName || 'Unnamed officer')}
+                  declarations={declarations}
+                  onEdit={goToStep}
+                  onDeclarationChange={(key, val) =>
+                    setDeclarations(prev => ({ ...prev, [key]: val }))
+                  }
+                />
+              )}
+
+              {/* A resumed draft enters on 'loan' before its product has arrived.
+                  Show the wait rather than an empty panel, and a way out if the
+                  product could not be read at all. */}
+              {step !== 'product' && !selectedProduct && (
+                loadingProducts ? (
+                  <div className="space-y-4" aria-busy="true">
+                    <p className="sr-only" role="status">Loading your application’s product…</p>
+                    <div className="skeleton h-40 rounded-[24px]" />
+                    <div className="skeleton h-10 w-2/3" />
+                    <div className="skeleton h-10 w-1/2" />
+                  </div>
+                ) : (
+                  <div className="alert alert-error flex-col sm:flex-row sm:items-center" role="alert">
+                    <p className="flex-1">
+                      We could not load the product for this application. Your saved answers are
+                      still here.
+                    </p>
+                    <button onClick={loadProducts} className="btn btn-sm btn-outline shrink-0" type="button">
+                      Try again
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+
+            <footer
+              className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4 sm:px-8"
+              style={{
+                borderColor: 'var(--hairline)',
+                backgroundColor: 'var(--glass-bg-strong)',
+              }}
+            >
+              <div className="flex items-center gap-3">
+                {stepIndex > 0 ? (
+                  <button onClick={goBack} className="btn btn-ghost" type="button">
+                    <span aria-hidden="true">&larr;</span> Back
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => router.push('/portal/applications')}
+                    className="btn btn-ghost"
+                    type="button"
+                  >
+                    Cancel
+                  </button>
                 )}
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
+                <span className="hidden text-xs sm:block" style={{ color: 'var(--text-muted)' }}>
+                  Step {stepNumber} of {STEPS.length}
+                </span>
+              </div>
 
-      {/* Error — the customer's answers are never cleared on a failed save */}
-      {error && (
-        <div className="alert alert-error mb-5" role="alert">
-          <span>
-            {error} Your answers have been kept — you can try again.
-          </span>
-        </div>
-      )}
+              <div className="flex flex-wrap items-center gap-2">
+                {step !== 'review' && selectedProduct && (
+                  <button
+                    onClick={saveDraft}
+                    /* Saving work in progress must not wait for the step to validate — otherwise the
+                       only way to keep what you have typed is to finish it first. */
+                    disabled={saving}
+                    className="btn btn-ghost"
+                    type="button"
+                  >
+                    {saving ? 'Saving…' : savedApp ? 'Update draft' : 'Save draft'}
+                  </button>
+                )}
 
-      {/* Step Content */}
-      <div className="card p-6">
-        {step === 'product' && (
-          <StepProduct
-            products={visibleProducts}
-            loading={loadingProducts}
-            selected={selectedProduct}
-            onSelect={selectProduct}
-            error={productsError}
-            onRetry={loadProducts}
-          />
-        )}
+                {step === 'product' ? (
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Select a product to continue
+                  </span>
+                ) : step === 'review' ? (
+                  <button
+                    onClick={submitApplication}
+                    disabled={submitting || !allDeclarationsAccepted}
+                    className="btn btn-primary"
+                    type="button"
+                    aria-describedby={allDeclarationsAccepted ? undefined : 'declarations-hint'}
+                  >
+                    {submitting ? 'Submitting…' : 'Submit application'}
+                    {!submitting && <span aria-hidden="true">&rarr;</span>}
+                  </button>
+                ) : (
+                  /* Stays clickable on the steps that explain themselves — the loan step names
+                     the field, the parties step counts what is still needed — so a missing
+                     answer reads as a reason rather than as a dead button. */
+                  <button
+                    onClick={goNext}
+                    disabled={step !== 'loan' && step !== 'parties' && !canGoNext()}
+                    className="btn btn-primary"
+                    type="button"
+                  >
+                    Continue <span aria-hidden="true">&rarr;</span>
+                  </button>
+                )}
+              </div>
+            </footer>
+          </section>
 
-        {step === 'loan' && selectedProduct && (
-          <StepLoan
-            form={form}
-            product={selectedProduct}
-            onChange={handleChange}
-            isBusiness={isBusiness}
-            errors={attemptedNext ? loanErrors : {}}
-          />
-        )}
-
-        {step === 'parties' && (
-          <StepParties
-            members={partyMembers}
-            validation={partyValidation}
-            loading={loadingParties}
-            error={partyError}
-            signatoryIds={signatoryIds}
-            showShortfall={attemptedNext}
-            onToggleSignatory={customerId =>
-              setSignatoryIds(prev =>
-                prev.includes(customerId)
-                  ? prev.filter(id => id !== customerId)
-                  : [...prev, customerId]
-              )
-            }
-            onRefresh={loadParties}
-          />
-        )}
-
-        {step === 'financial' && (
-          <StepFinancial
-            form={form}
-            onChange={handleChange}
-            isBusiness={isBusiness}
-            showPersonalFinancials={showPersonalFinancials}
-            seededFromProfile={seededFromProfile}
-            onApplyExtracted={applyExtractedFields}
-          />
-        )}
-
-        {step === 'employment' && (
-          <StepEmployment
-            form={form}
-            onChange={handleChange}
-            seededFromProfile={seededFromProfile}
-            onApplyExtracted={applyExtractedFields}
-          />
-        )}
-
-        {step === 'review' && selectedProduct && (
-          <StepReview
-            form={form}
-            product={selectedProduct}
-            isBusiness={isBusiness}
-            showPersonalFinancials={showPersonalFinancials}
-            quote={quote}
-            signatories={partyMembers
-              .filter(m => signatoryIds.includes(m.customerId))
-              .map(m => m.customerName || 'Unnamed officer')}
-            declarations={declarations}
-            onEdit={goToStep}
-            onDeclarationChange={(key, val) => setDeclarations(prev => ({ ...prev, [key]: val }))}
-          />
-        )}
-      </div>
-
-      {/* Navigation */}
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <div>
-          {stepIndex > 0 && (
-            <button onClick={goBack} className="btn btn-ghost" type="button">
-              <span aria-hidden="true">&larr;</span> Back
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {step !== 'review' && selectedProduct && (
-            <button
-              onClick={saveDraft}
-              /* Saving work in progress must not wait for the step to validate — otherwise the
-                 only way to keep what you have typed is to finish it first. */
-              disabled={saving}
-              className="btn btn-ghost"
-              type="button"
-            >
-              {saving ? 'Saving…' : savedApp ? 'Update draft' : 'Save draft'}
-            </button>
-          )}
-          {step === 'review' ? (
-            <button
-              onClick={submitApplication}
-              disabled={
-                submitting ||
-                !declarations.informationAccurate ||
-                !declarations.consentCreditCheck ||
-                !declarations.termsAccepted
-              }
-              className="btn btn-primary"
-              type="button"
-              aria-describedby={
-                declarations.informationAccurate &&
-                declarations.consentCreditCheck &&
-                declarations.termsAccepted
-                  ? undefined
-                  : 'declarations-hint'
-              }
-            >
-              {submitting ? 'Submitting…' : 'Submit application'}
-            </button>
-          ) : (
-            /* Stays clickable on the loan step so missing or out-of-range
-               values are explained next to the field instead of silently
-               disabling the way forward. */
-            /* Stays clickable on the steps that explain themselves — the loan step names the
-               field, the parties step counts what is still needed — so a missing answer reads
-               as a reason rather than as a dead button. */
-            <button
-              onClick={goNext}
-              disabled={step !== 'loan' && step !== 'parties' && !canGoNext()}
-              className="btn btn-primary"
-              type="button"
-            >
-              Continue <span aria-hidden="true">&rarr;</span>
-            </button>
-          )}
+          <p
+            className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <Glyph name="shield" className="h-3.5 w-3.5" strokeWidth={1.8} />
+            Your answers go only to the bank and stay attached to this application.
+          </p>
         </div>
       </div>
     </div>
@@ -954,6 +1054,20 @@ function ProfileSeededNote() {
   );
 }
 
+/* Product families get a family glyph, not a per-product colour. The tile is
+   always monochrome so the name and the figures stay the loudest things. */
+function productGlyph(type?: string): string {
+  const t = (type || '').toUpperCase();
+  if (/MORTGAGE|HOME_LOAN|BRIDGE_LOAN|CONSTRUCTION_LOAN|GREEN_LOAN|COMMERCIAL_MORTGAGE|COMMERCIAL_REAL_ESTATE/.test(t)) {
+    return 'rent';
+  }
+  if (/AUTO_LOAN|PCP|HIRE_PURCHASE|EQUIPMENT_FINANCING|ASSET_LEASING/.test(t)) return 'Transport';
+  if (/CREDIT_CARD|BNPL|OVERDRAFT|REVOLVING/.test(t)) return 'current';
+  if (/STUDENT|EDUCATION/.test(t)) return 'doc';
+  if (/AGRI|FARM/.test(t)) return 'savings';
+  return 'bank';
+}
+
 function StepProduct({
   products,
   loading,
@@ -969,22 +1083,58 @@ function StepProduct({
   error: string | null;
   onRetry: () => void;
 }) {
+  const [query, setQuery] = useState('');
+
   if (loading) {
     return (
       <div className="space-y-3" aria-busy="true">
-        <h2 className="section-title">Choose a product</h2>
         <p className="sr-only" role="status">Loading products…</p>
         {[1, 2, 3].map(i => (
-          <div key={i} className="skeleton h-20" />
+          <div key={i} className="skeleton h-40 rounded-[24px]" />
         ))}
       </div>
     );
   }
 
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? products.filter(p =>
+        [p.productName, p.shortDescription, p.productType]
+          .filter(Boolean)
+          .some(value => String(value).toLowerCase().includes(q))
+      )
+    : products;
+
   return (
     <div>
-      <h2 className="section-title">Choose a product</h2>
-      <p className="field-hint">Select the loan product you want to apply for.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="section-title">Available to you</h2>
+          <p className="field-hint">
+            {products.length} lending {products.length === 1 ? 'option is' : 'options are'} open
+            to you online.
+          </p>
+        </div>
+        {products.length > 3 && (
+          <div className="relative w-full sm:w-64">
+            <span
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              <Glyph name="search" className="h-4 w-4" strokeWidth={2} />
+            </span>
+            <input
+              id="product-search"
+              type="search"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search products"
+              aria-label="Search products"
+              className="input !rounded-full py-2 pl-9 pr-4"
+            />
+          </div>
+        )}
+      </div>
 
       {error && (
         <div className="alert alert-error mt-4 flex-col sm:flex-row sm:items-center" role="alert">
@@ -998,13 +1148,7 @@ function StepProduct({
       {!error && products.length === 0 ? (
         <div className="empty-state mt-4">
           <div className="empty-state-icon">
-            <svg aria-hidden="true" className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-              />
-            </svg>
+            <Glyph name="bank" className="h-7 w-7" strokeWidth={1.5} />
           </div>
           <h3 className="empty-state-title">No products available</h3>
           <p className="empty-state-text">
@@ -1012,43 +1156,126 @@ function StepProduct({
             relationship manager to discuss your options.
           </p>
         </div>
+      ) : shown.length === 0 ? (
+        <div className="empty-state mt-4">
+          <div className="empty-state-icon">
+            <Glyph name="search" className="h-7 w-7" strokeWidth={1.5} />
+          </div>
+          <h3 className="empty-state-title">Nothing matches “{query.trim()}”</h3>
+          <p className="empty-state-text">
+            Try a different name, or clear the search to see every product open to you.
+          </p>
+          <button onClick={() => setQuery('')} className="btn btn-secondary btn-sm mt-5" type="button">
+            Clear search
+          </button>
+        </div>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {products.map(p => {
+        <ul className="mt-5 space-y-3">
+          {shown.map(p => {
             const isSelected = selected?.productId === p.productId;
+            const rate =
+              p.minInterestRate === p.maxInterestRate
+                ? `${p.minInterestRate}% p.a.`
+                : `${p.minInterestRate}% – ${p.maxInterestRate}% p.a.`;
+
             return (
               <li key={p.productId}>
                 <button
                   onClick={() => onSelect(p)}
                   aria-pressed={isSelected}
-                  className="w-full rounded-xl border-2 px-5 py-4 text-left transition-all"
+                  className="group w-full rounded-[24px] border p-5 text-left transition-all duration-200 hover:-translate-y-0.5"
                   style={{
-                    borderColor: isSelected ? 'var(--brand)' : 'var(--surface-border)',
-                    backgroundColor: isSelected ? 'var(--brand-soft)' : 'transparent',
+                    borderColor: isSelected ? 'var(--brand)' : 'var(--hairline-strong)',
+                    background: isSelected ? 'var(--brand-soft)' : 'var(--surface-card)',
+                    boxShadow: isSelected
+                      ? '0 12px 28px -20px rgba(69,32,75,.55)'
+                      : 'var(--shadow-xs)',
                   }}
                   type="button"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        {p.productName}
-                      </h3>
+                  <div className="flex items-start gap-4">
+                    <span
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
+                      style={{
+                        background: 'var(--brand-soft)',
+                        color: 'var(--brand-on-soft)',
+                        border: '1px solid var(--hairline)',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <Glyph name={productGlyph(p.productType)} className="h-5 w-5" />
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                        <h3
+                          className="serif text-[19px] font-medium leading-snug"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {p.productName}
+                        </h3>
+                        <span className="badge badge-neutral">Open online</span>
+                      </div>
+
                       {/* The description alone: the product type label is nearly always the
                           product's own name again, which read as the name twice. */}
                       {p.shortDescription && (
-                        <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                        <p
+                          className="mt-1 text-sm leading-6"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
                           {p.shortDescription}
                         </p>
                       )}
-                    </div>
-                    <div className="text-right text-sm" style={{ color: 'var(--text-muted)' }}>
-                      <p className="tabular-nums">
-                        {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
-                      </p>
-                      <p className="tabular-nums">
-                        {p.minInterestRate === p.maxInterestRate
-                          ? `${p.minInterestRate}% p.a.`
-                          : `${p.minInterestRate}% – ${p.maxInterestRate}% p.a.`}
+
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        <div
+                          className="rounded-2xl px-3.5 py-3"
+                          style={{ backgroundColor: 'var(--surface-input)' }}
+                        >
+                          <p
+                            className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            Amount
+                          </p>
+                          <p
+                            className="mt-1 text-sm font-semibold tabular-nums"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            {formatCurrency(p.minLoanAmount)} – {formatCurrency(p.maxLoanAmount)}
+                          </p>
+                        </div>
+                        <div
+                          className="rounded-2xl px-3.5 py-3"
+                          style={{ backgroundColor: 'var(--surface-input)' }}
+                        >
+                          <p
+                            className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            Rate
+                          </p>
+                          <p
+                            className="mt-1 text-sm font-semibold tabular-nums"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            {rate}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p
+                        className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold"
+                        style={{ color: 'var(--brand-on-soft)' }}
+                      >
+                        Choose this product
+                        <span
+                          aria-hidden="true"
+                          className="transition-transform duration-200 group-hover:translate-x-0.5"
+                        >
+                          →
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -1066,16 +1293,24 @@ function StepLoan({
   form,
   product,
   onChange,
-  isBusiness,
+  onValueChange,
   errors,
+  quote,
+  quoting,
+  quoteError,
+  onRetryQuote,
 }: {
   form: Record<string, string>;
   product: LoanProduct;
-  isBusiness: boolean;
   errors: { requestedAmount?: string; requestedTermMonths?: string; loanPurpose?: string };
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => void;
+  onValueChange: (name: string, value: string) => void;
+  quote: Quote | null;
+  quoting: boolean;
+  quoteError: string | null;
+  onRetryQuote: () => void;
 }) {
   const isHomePurpose = HOME_PURPOSES.includes(form.loanPurpose);
   const isVehiclePurpose = VEHICLE_PURPOSES.includes(form.loanPurpose);
@@ -1120,59 +1355,206 @@ function StepLoan({
   }, [product.productCode, canChooseRate]);
 
   const shownRate = form.requestedInterestRate || String(product.defaultInterestRate ?? '');
+  const currencySymbol = getCurrencySymbol();
+
+  const range = product.maxLoanAmount - product.minLoanAmount;
+  const amountStep = range >= 200000 ? 5000 : range >= 50000 ? 1000 : range >= 10000 ? 500 : 100;
+  const parsedAmount = Number(form.requestedAmount);
+  const sliderValue = Number.isFinite(parsedAmount)
+    ? Math.min(Math.max(parsedAmount, product.minLoanAmount), product.maxLoanAmount)
+    : product.minLoanAmount;
+  const sliderPercent =
+    product.maxLoanAmount > product.minLoanAmount
+      ? ((sliderValue - product.minLoanAmount) / range) * 100
+      : 0;
+
+  const inRangeTerms = COMMON_TERM_MONTHS.filter(
+    t => t >= product.minTermMonths && t <= product.maxTermMonths
+  );
+  const quickTerms = Array.from(
+    new Set([
+      ...(inRangeTerms.length ? inRangeTerms.slice(0, 8) : [product.minTermMonths, product.maxTermMonths]),
+      ...(Number(form.requestedTermMonths) >= product.minTermMonths &&
+      Number(form.requestedTermMonths) <= product.maxTermMonths &&
+      !inRangeTerms.includes(Number(form.requestedTermMonths))
+        ? [Number(form.requestedTermMonths)]
+        : []),
+    ])
+  );
 
   return (
-    <div>
-      <h2 className="section-title">Loan details</h2>
-      <p className="field-hint">
-        Applying for{' '}
-        <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>
-          {product.productName}
-        </span>
-        . Fields marked <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
-        <span className="sr-only">with an asterisk</span> are required.
-      </p>
+    <div className="space-y-6">
+      {/* ─── The amount composer and the number it produces ───
+          On desktop the persistent rail already carries the quote; repeating the
+          same dark card beside the field made the step feel twice as heavy. */}
+      <div className="space-y-4">
+        <div
+          className="rounded-[24px] border p-5"
+          style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <label className="field-label !mb-1" htmlFor="requestedAmount">
+                Loan amount{' '}
+                <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+                <span className="sr-only">(required)</span>
+              </label>
+              <p className="field-hint !mt-0">
+                Between {formatCurrency(product.minLoanAmount)} and{' '}
+                {formatCurrency(product.maxLoanAmount)}
+              </p>
+            </div>
+            <span className="chip !py-1 !text-xs">{product.productName}</span>
+          </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-        {/* Amount */}
-        <div>
-          <label className="field-label" htmlFor="requestedAmount">
-            Loan amount{' '}
-            <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
-            <span className="sr-only">(required)</span>
-          </label>
-          <input
-            id="requestedAmount"
-            type="number"
-            name="requestedAmount"
-            value={form.requestedAmount}
-            onChange={onChange}
-            min={product.minLoanAmount}
-            max={product.maxLoanAmount}
-            placeholder={`${product.minLoanAmount} – ${product.maxLoanAmount}`}
-            className="input tabular-nums"
-            required
-            aria-required="true"
-            aria-invalid={errors.requestedAmount ? true : undefined}
-            aria-describedby="requestedAmount-hint"
-          />
+          <div className="relative mt-4">
+            <span
+              aria-hidden="true"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-medium"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              {currencySymbol}
+            </span>
+            <input
+              id="requestedAmount"
+              type="number"
+              name="requestedAmount"
+              value={form.requestedAmount}
+              onChange={onChange}
+              min={product.minLoanAmount}
+              max={product.maxLoanAmount}
+              placeholder="0"
+              className="input no-spinner !rounded-2xl !py-3.5 pl-11 pr-4 text-[28px] font-bold tabular-nums sm:text-[32px]"
+              required
+              aria-required="true"
+              aria-invalid={errors.requestedAmount ? true : undefined}
+              aria-describedby="requestedAmount-hint"
+            />
+          </div>
+
+          <div className="mt-5">
+            <input
+              type="range"
+              min={product.minLoanAmount}
+              max={product.maxLoanAmount}
+              step={amountStep}
+              value={sliderValue}
+              onChange={e => onValueChange('requestedAmount', e.target.value)}
+              className="range-brand w-full"
+              style={{
+                background: `linear-gradient(to right, var(--brand) ${sliderPercent}%, var(--hairline-strong) ${sliderPercent}%)`,
+              }}
+              aria-label="Loan amount slider"
+              aria-valuetext={formatCurrency(sliderValue)}
+            />
+            <div
+              className="mt-2 flex justify-between text-[11px] tabular-nums"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              <span>{formatCurrency(product.minLoanAmount)}</span>
+              <span>{formatCurrency(product.maxLoanAmount)}</span>
+            </div>
+          </div>
+
           {errors.requestedAmount ? (
             <p
               id="requestedAmount-hint"
-              className="mt-1.5 text-sm font-medium text-red-600 dark:text-red-300"
+              className="mt-2 text-sm font-medium text-red-600 dark:text-red-300"
               role="alert"
             >
               {errors.requestedAmount}
             </p>
           ) : (
             <p id="requestedAmount-hint" className="field-hint">
-              Between {formatCurrency(product.minLoanAmount)} and{' '}
-              {formatCurrency(product.maxLoanAmount)}
+              Drag the slider or type the exact figure you need.
             </p>
           )}
         </div>
 
-        {/* Term */}
+        <aside
+          className="overflow-hidden rounded-[24px] p-5 text-white lg:hidden"
+          style={{ background: 'var(--tile-active)', boxShadow: 'var(--tile-active-shadow)' }}
+          aria-live="polite"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+            Your indicative repayment
+          </p>
+
+          {quote ? (
+            <>
+              <p className="mt-2 flex items-baseline gap-1.5">
+                <span className="text-[32px] font-bold leading-none tracking-tight tabular-nums">
+                  {quoteMoney(quote.monthlyRepayment)}
+                </span>
+                <span className="text-xs font-medium text-white/60">/ month</span>
+              </p>
+              <p className="mt-2 text-xs text-white/70">
+                {quoteMoney(quote.totalRepayable)} over {quote.termMonths} months
+              </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2.5">
+                  <p className="text-[9px] uppercase tracking-[0.12em] text-white/55">APRC</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">
+                    {quote.aprcAvailable ? `${quote.aprcPct}%` : 'Not published'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2.5">
+                  <p className="text-[9px] uppercase tracking-[0.12em] text-white/55">
+                    Cost of credit
+                  </p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">
+                    {quoteMoney(quote.costOfCredit)}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-3 text-[10px] leading-4 text-white/50">
+                Illustrative, not an offer. {quote.calculatedRatePct}% rate from{' '}
+                {quote.rateProvenance === 'PRODUCT_RATE_PLAN'
+                  ? 'a published rate plan'
+                  : 'the product’s standard rate'}
+                . Holds until{' '}
+                {new Date(quote.expiresAt).toLocaleDateString('en-IE', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+                .
+              </p>
+              {quoting && (
+                <p className="mt-2 text-[10px] text-white/50">Updating with your latest figures…</p>
+              )}
+            </>
+          ) : quoteError ? (
+            <>
+              <p className="mt-3 text-sm text-white/80">{quoteError}</p>
+              <button
+                type="button"
+                onClick={onRetryQuote}
+                className="mt-3 text-xs font-semibold text-white underline underline-offset-4"
+              >
+                Try again
+              </button>
+            </>
+          ) : quoting ? (
+            <div className="mt-4 flex items-center gap-2 text-sm text-white/70">
+              <span
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                aria-hidden="true"
+              />
+              Getting your quote…
+            </div>
+          ) : (
+            <p className="mt-3 text-sm leading-5 text-white/70">
+              Enter an amount and term to see what the bank would quote.
+            </p>
+          )}
+        </aside>
+      </div>
+
+      {/* ─── Term, rate, purpose ─── */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <label className="field-label" htmlFor="requestedTermMonths">
             Term (months){' '}
@@ -1188,12 +1570,35 @@ function StepLoan({
             min={product.minTermMonths}
             max={product.maxTermMonths}
             placeholder={`${product.minTermMonths} – ${product.maxTermMonths}`}
-            className="input tabular-nums"
+            className="input no-spinner tabular-nums"
             required
             aria-required="true"
             aria-invalid={errors.requestedTermMonths ? true : undefined}
             aria-describedby="requestedTermMonths-hint"
           />
+          {quickTerms.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {quickTerms.map(term => {
+                const active = form.requestedTermMonths === String(term);
+                return (
+                  <button
+                    key={term}
+                    type="button"
+                    onClick={() => onValueChange('requestedTermMonths', String(term))}
+                    aria-pressed={active}
+                    className="rounded-full border px-3 py-1 text-xs font-semibold tabular-nums transition-colors"
+                    style={{
+                      borderColor: active ? 'var(--brand)' : 'var(--hairline-strong)',
+                      backgroundColor: active ? 'var(--brand-soft)' : 'transparent',
+                      color: active ? 'var(--brand-on-soft)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {term} mo
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {errors.requestedTermMonths ? (
             <p
               id="requestedTermMonths-hint"
@@ -1209,7 +1614,6 @@ function StepLoan({
           )}
         </div>
 
-        {/* Interest Rate */}
         <div>
           <label className="field-label" htmlFor="requestedInterestRate">
             Interest rate
@@ -1258,7 +1662,6 @@ function StepLoan({
           )}
         </div>
 
-        {/* Loan Purpose */}
         <div>
           <label className="field-label" htmlFor="loanPurpose">
             Loan purpose{' '}
@@ -1298,8 +1701,7 @@ function StepLoan({
           )}
         </div>
 
-        {/* Purpose Description */}
-        <div className="sm:col-span-2">
+        <div>
           <label className="field-label" htmlFor="loanPurposeDescription">
             Purpose description
           </label>
@@ -1318,10 +1720,30 @@ function StepLoan({
 
       {/* ─── Property Details (HOME purposes) ─────────────── */}
       {isHomePurpose && (
-        <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
-          <h3 className="section-title">Property details</h3>
-          <p className="field-hint mb-4">Enter details about the property for your home loan.</p>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <section
+          className="rounded-[24px] border p-5 sm:p-6"
+          style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              style={{
+                background: 'var(--brand-soft)',
+                color: 'var(--brand-on-soft)',
+                border: '1px solid var(--hairline)',
+              }}
+              aria-hidden="true"
+            >
+              <Glyph name="rent" className="h-5 w-5" />
+            </span>
+            <div>
+              <h3 className="section-title">Property details</h3>
+              <p className="field-hint !mt-0.5">
+                Optional. It helps us understand the security behind a home loan.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="field-label" htmlFor="propertyAddress">
                 Property address
@@ -1404,7 +1826,7 @@ function StepLoan({
                 value={form.propertyValue}
                 onChange={onChange}
                 placeholder="e.g. 350000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
             </div>
             <div>
@@ -1418,19 +1840,39 @@ function StepLoan({
                 value={form.downPaymentAmount}
                 onChange={onChange}
                 placeholder="e.g. 50000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* ─── Vehicle Details (VEHICLE purposes) ───────────── */}
       {isVehiclePurpose && (
-        <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
-          <h3 className="section-title">Vehicle details</h3>
-          <p className="field-hint mb-4">Enter details about the vehicle you plan to purchase.</p>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <section
+          className="rounded-[24px] border p-5 sm:p-6"
+          style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              style={{
+                background: 'var(--brand-soft)',
+                color: 'var(--brand-on-soft)',
+                border: '1px solid var(--hairline)',
+              }}
+              aria-hidden="true"
+            >
+              <Glyph name="Transport" className="h-5 w-5" />
+            </span>
+            <div>
+              <h3 className="section-title">Vehicle details</h3>
+              <p className="field-hint !mt-0.5">
+                Optional. It helps us understand what the finance is secured against.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className="field-label" htmlFor="vehicleMake">
                 Make / brand
@@ -1472,7 +1914,7 @@ function StepLoan({
                 min={2000}
                 max={2030}
                 placeholder="e.g. 2024"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
             </div>
             <div>
@@ -1505,11 +1947,11 @@ function StepLoan({
                 value={form.vehicleValue}
                 onChange={onChange}
                 placeholder="e.g. 30000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
             </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
@@ -1735,215 +2177,354 @@ function StatementSources({
   const readableCount = documents.length + (useBankRecords ? 1 : 0);
 
   return (
-    <div
-      className="mb-6 rounded-xl border bg-[var(--brand-soft)] p-5"
-      style={{ borderColor: 'var(--surface-border-strong)' }}
+    <section
+      className="overflow-hidden rounded-[24px] border"
+      style={{
+        borderColor: 'var(--hairline-strong)',
+        background:
+          'linear-gradient(135deg, var(--brand-soft), transparent 52%), var(--surface-card)',
+      }}
+      aria-labelledby="statement-sources-title"
     >
-      <p className="field-label mb-1">
-        Your income and expenditure <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
-      </p>
-      <p className="field-hint mb-4">
-        Show us as much of your banking as you like — from us and from other banks — and we&apos;ll
-        work out your monthly income, outgoings and turnover from the transaction lines. Nothing is
-        entered on the form until you apply it.
-      </p>
-
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          className="mt-1 h-4 w-4 shrink-0"
-          checked={useBankRecords}
-          onChange={e => setUseBankRecords(e.target.checked)}
-        />
-        <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
-            Use the accounts I hold with the bank
+      <div className="flex flex-wrap items-start justify-between gap-3 p-5 sm:p-6">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+            style={{
+              background: 'var(--surface-card)',
+              color: 'var(--brand-on-soft)',
+              border: '1px solid var(--hairline)',
+            }}
+            aria-hidden="true"
+          >
+            <Glyph name="bank" className="h-5 w-5" />
           </span>
-          <span className="mt-0.5 block field-hint">
-            We read your transaction history for this application only. It does not change any
-            account, limit or standing instruction.
-          </span>
-        </span>
-      </label>
-
-      <div className="mt-4">
-        <p className="field-label mb-2">Statements from other banks</p>
-        {documents.length > 0 && (
-          <ul className="mb-3 space-y-2">
-            {documents.map((doc, i) => {
-              const institution = String(doc.extractedFields.institutionName ?? '').trim();
-              const start = String(doc.extractedFields.statementPeriodStart ?? '');
-              const end = String(doc.extractedFields.statementPeriodEnd ?? '');
-              const lineCount = Array.isArray(doc.extractedFields.transactions)
-                ? doc.extractedFields.transactions.length
-                : 0;
-              return (
-                <li
-                  key={doc.documentKey ?? `unnamed-${i}`}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2"
-                  style={{ backgroundColor: 'var(--surface-input)' }}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                      {institution || 'Statement with no readable bank name'}
-                    </span>
-                    <span className="block text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
-                      {start && end ? `${start} to ${end}` : 'Period not read'} ·{' '}
-                      {lineCount === 0
-                        ? 'no lines read'
-                        : `${lineCount} transaction line${lineCount === 1 ? '' : 's'}`}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => doc.documentKey && handleRemove(doc.documentKey)}
-                    disabled={!doc.documentKey}
-                    className="btn btn-ghost btn-sm"
-                  >
-                    Remove
-                    <span className="sr-only">: {institution || 'this statement'}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <label className="btn btn-ghost btn-sm inline-block cursor-pointer">
-          {uploading ? 'Reading…' : 'Add a statement'}
-          <input
-            type="file"
-            accept="application/pdf,image/jpeg,image/png,image/webp"
-            className="sr-only"
-            disabled={uploading}
-            onChange={handleFileSelected}
-          />
-        </label>
-        {uploading && (
-          <div className="mt-3 flex items-center justify-between gap-3" role="status" aria-live="polite">
-            <p className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-              <span
-                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
-                aria-hidden="true"
-              />
-              Reading this statement
-              <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
-                {elapsedSeconds}s
-              </span>
+          <div className="min-w-0">
+            <h3 id="statement-sources-title" className="section-title">
+              Bring your banking into the application
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+              Show us as much of your banking as you like — from us and from other banks — and
+              we&apos;ll work out your monthly income, outgoings and turnover from the transaction
+              lines. Nothing is entered on the form until you apply it.
             </p>
-            <button type="button" onClick={() => uploadRef.current?.abort()} className="btn btn-ghost btn-sm">
-              Cancel
+          </div>
+        </div>
+        <span className="chip !py-1 !text-xs">Optional</span>
+      </div>
+
+      <div className="border-t p-5 sm:p-6" style={{ borderColor: 'var(--hairline)' }}>
+        <label
+          className="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors"
+          style={{
+            borderColor: useBankRecords ? 'var(--brand)' : 'var(--hairline)',
+            backgroundColor: useBankRecords ? 'var(--brand-soft)' : 'var(--surface-input)',
+          }}
+        >
+          <input
+            type="checkbox"
+            className="sr-only"
+            checked={useBankRecords}
+            onChange={e => setUseBankRecords(e.target.checked)}
+          />
+          <span
+            aria-hidden="true"
+            className="relative mt-0.5 flex h-6 w-11 shrink-0 items-center rounded-full transition-colors"
+            style={{
+              backgroundColor: useBankRecords ? 'var(--brand)' : 'var(--hairline-strong)',
+            }}
+          >
+            <span
+              className="absolute h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200"
+              style={{
+                left: 2,
+                transform: useBankRecords ? 'translateX(20px)' : 'translateX(0)',
+              }}
+            />
+          </span>
+          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Use the accounts I hold with the bank
+            </span>
+            <span className="mt-0.5 block field-hint">
+              We read your transaction history for this application only. It does not change any
+              account, limit or standing instruction.
+            </span>
+          </span>
+        </label>
+
+        <div className="mt-5">
+          <p className="field-label mb-2">Statements from other banks</p>
+
+          {documents.length > 0 && (
+            <ul className="mb-3 space-y-2">
+              {documents.map((doc, i) => {
+                const institution = String(doc.extractedFields.institutionName ?? '').trim();
+                const start = String(doc.extractedFields.statementPeriodStart ?? '');
+                const end = String(doc.extractedFields.statementPeriodEnd ?? '');
+                const lineCount = Array.isArray(doc.extractedFields.transactions)
+                  ? doc.extractedFields.transactions.length
+                  : 0;
+                return (
+                  <li
+                    key={doc.documentKey ?? `unnamed-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3"
+                    style={{
+                      borderColor: 'var(--hairline)',
+                      backgroundColor: 'var(--surface-card)',
+                    }}
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                        style={{
+                          backgroundColor: 'var(--surface-input)',
+                          color: 'var(--text-secondary)',
+                        }}
+                        aria-hidden="true"
+                      >
+                        <Glyph name="doc" className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span
+                          className="block truncate text-sm font-semibold"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {institution || 'Statement with no readable bank name'}
+                        </span>
+                        <span
+                          className="block text-xs tabular-nums"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          {start && end ? `${start} to ${end}` : 'Period not read'} ·{' '}
+                          {lineCount === 0
+                            ? 'no lines read'
+                            : `${lineCount} transaction line${lineCount === 1 ? '' : 's'}`}
+                        </span>
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => doc.documentKey && handleRemove(doc.documentKey)}
+                      disabled={!doc.documentKey}
+                      className="btn btn-ghost btn-sm"
+                    >
+                      Remove
+                      <span className="sr-only">: {institution || 'this statement'}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <label
+            className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed px-4 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+            style={{ borderColor: 'var(--hairline-strong)' }}
+          >
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+              style={{ background: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+              aria-hidden="true"
+            >
+              <Glyph name="plus" className="h-4 w-4" strokeWidth={2} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {uploading ? 'Reading this statement…' : 'Add a statement'}
+              </span>
+              <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+                PDF, JPG, PNG or WebP · up to 10 MB
+              </span>
+            </span>
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              className="sr-only"
+              disabled={uploading}
+              onChange={handleFileSelected}
+            />
+          </label>
+
+          {uploading && (
+            <div
+              className="mt-3 flex items-center justify-between gap-3 rounded-2xl px-4 py-3"
+              style={{ backgroundColor: 'var(--surface-input)' }}
+              role="status"
+              aria-live="polite"
+            >
+              <p className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                <span
+                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                  aria-hidden="true"
+                />
+                Reading this statement
+                <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                  {elapsedSeconds}s
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => uploadRef.current?.abort()}
+                className="btn btn-ghost btn-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+
+        {hasStatementSource && (
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <p className="field-label !mb-0 !mr-1">Period to review</p>
+            <div className="segmented" role="group" aria-label="Statement period">
+              {[3, 6, 12].map(months => (
+                <button
+                  key={months}
+                  type="button"
+                  onClick={() => setWindowMonths(months)}
+                  aria-pressed={windowMonths === months}
+                  data-active={windowMonths === months ? 'true' : undefined}
+                  className="segmented-item"
+                >
+                  Last {months} months
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-300" role="alert">
+            {error}
+          </p>
+        )}
+
+        {analysing && (
+          <p className="mt-4 flex items-center gap-2 text-sm" style={{ color: 'var(--text-muted)' }} role="status">
+            <span
+              className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+              aria-hidden="true"
+            />
+            Adding up the transaction lines…
+          </p>
+        )}
+
+        {analysis && !analysing && (
+          <div
+            className="mt-4 rounded-[20px] border p-4 sm:p-5"
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--surface-input)' }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {readableCount > 1
+                  ? `Combined picture from ${readableCount} sources`
+                  : 'From your transaction lines'}
+              </p>
+              <span className="chip !py-1 !text-xs">
+                {applied ? 'Applied to the form' : 'Draft figures'}
+              </span>
+            </div>
+
+            {totals.map(group => (
+              <div key={group.currency} className="mt-4">
+                {totals.length > 1 && <p className="field-label mb-2">{group.currency}</p>}
+                <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <AnalysisFigure
+                    label="Monthly in"
+                    value={
+                      group.suggestedFields[
+                        isBusiness && !showPersonalFinancials
+                          ? 'businessMonthlyIncome'
+                          : 'statedMonthlyIncome'
+                      ]
+                    }
+                    currency={group.currency}
+                  />
+                  <AnalysisFigure
+                    label="Monthly out"
+                    value={
+                      group.suggestedFields[
+                        isBusiness && !showPersonalFinancials
+                          ? 'businessMonthlyExpenses'
+                          : 'statedMonthlyExpenses'
+                      ]
+                    }
+                    currency={group.currency}
+                  />
+                  <AnalysisFigure
+                    label="Net over period"
+                    value={String(group.net)}
+                    currency={group.currency}
+                  />
+                  {isBusiness && (
+                    <AnalysisFigure
+                      label="Turnover, annualised"
+                      value={group.suggestedFields.businessAnnualRevenue}
+                      currency={group.currency}
+                    />
+                  )}
+                </dl>
+                <p className="field-hint mt-2">
+                  Across {group.monthsCovered} month{group.monthsCovered === 1 ? '' : 's'} with
+                  activity.
+                </p>
+              </div>
+            ))}
+
+            {analysis.sources.length > 0 && (
+              <ul
+                className="mt-4 space-y-1.5 border-t pt-3 text-sm"
+                style={{ borderColor: 'var(--hairline)', color: 'var(--text-secondary)' }}
+              >
+                {analysis.sources.map((source, i) => (
+                  <li
+                    key={`${source.label}-${source.currency}-${i}`}
+                    className="flex flex-wrap justify-between gap-2"
+                  >
+                    <span style={{ color: 'var(--text-muted)' }}>{source.label}</span>
+                    <span className="tabular-nums">
+                      {formatAmount(source.credits, source.currency)} in ·{' '}
+                      {formatAmount(source.debits, source.currency)} out · {source.lineCount} lines{' '}
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        ({source.firstDate}–{source.lastDate})
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {analysis.warnings.length > 0 && (
+              <ul className="mt-3 space-y-1 text-sm text-amber-700 dark:text-amber-300">
+                {analysis.warnings.map((warning, i) => (
+                  <li key={i}>{warning}</li>
+                ))}
+              </ul>
+            )}
+
+            <p className="field-hint mt-3">{analysis.basis}</p>
+
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={applied || Object.keys(analysis.suggestedFields).length === 0}
+              className="btn btn-primary btn-sm mt-4"
+            >
+              {applied ? (
+                <>
+                  <Glyph name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />
+                  Applied
+                  <span className="sr-only">— figures copied into the form</span>
+                </>
+              ) : (
+                'Apply to the form'
+              )}
             </button>
           </div>
         )}
       </div>
-
-      {hasStatementSource && (
-        <div className="mt-5 flex flex-wrap items-end gap-4">
-          <div>
-            <label className="field-label" htmlFor="analysisWindow">
-              Period to review
-            </label>
-            <select
-              id="analysisWindow"
-              value={windowMonths}
-              onChange={e => setWindowMonths(Number(e.target.value))}
-              className="input"
-            >
-              <option value={3}>Last 3 months</option>
-              <option value={6}>Last 6 months</option>
-              <option value={12}>Last 12 months</option>
-            </select>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-300" role="alert">
-          {error}
-        </p>
-      )}
-
-      {analysing && (
-        <p className="mt-4 text-sm" style={{ color: 'var(--text-muted)' }} role="status">
-          Adding up the transaction lines…
-        </p>
-      )}
-
-      {analysis && !analysing && (
-        <div className="mt-4 rounded-xl p-4" style={{ backgroundColor: 'var(--surface-input)' }}>
-          <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-            {readableCount > 1
-              ? `Combined picture from ${readableCount} sources`
-              : 'From your transaction lines'}
-          </p>
-          {totals.map(group => (
-            <div key={group.currency} className="mt-3">
-              {totals.length > 1 && (
-                <p className="field-label mb-2">{group.currency}</p>
-              )}
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-                <AnalysisFigure label="Monthly in" value={group.suggestedFields[isBusiness && !showPersonalFinancials ? 'businessMonthlyIncome' : 'statedMonthlyIncome']} currency={group.currency} />
-                <AnalysisFigure label="Monthly out" value={group.suggestedFields[isBusiness && !showPersonalFinancials ? 'businessMonthlyExpenses' : 'statedMonthlyExpenses']} currency={group.currency} />
-                <AnalysisFigure label="Net over the period" value={String(group.net)} currency={group.currency} />
-                {isBusiness && (
-                  <AnalysisFigure
-                    label="Turnover, annualised"
-                    value={group.suggestedFields.businessAnnualRevenue}
-                    currency={group.currency}
-                  />
-                )}
-              </dl>
-              <p className="field-hint mt-2">
-                Across {group.monthsCovered} month{group.monthsCovered === 1 ? '' : 's'} with activity.
-              </p>
-            </div>
-          ))}
-
-          {analysis.sources.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {analysis.sources.map((source, i) => (
-                <li key={`${source.label}-${source.currency}-${i}`} className="flex flex-wrap justify-between gap-2">
-                  <span style={{ color: 'var(--text-muted)' }}>{source.label}</span>
-                  <span className="tabular-nums">
-                    {formatAmount(source.credits, source.currency)} in ·{' '}
-                    {formatAmount(source.debits, source.currency)} out · {source.lineCount} lines{' '}
-                    <span style={{ color: 'var(--text-muted)' }}>
-                      ({source.firstDate}–{source.lastDate})
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {analysis.warnings.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm text-amber-700 dark:text-amber-300">
-              {analysis.warnings.map((warning, i) => (
-                <li key={i}>{warning}</li>
-              ))}
-            </ul>
-          )}
-
-          <p className="field-hint mt-3">{analysis.basis}</p>
-
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={applied || Object.keys(analysis.suggestedFields).length === 0}
-            className="btn btn-primary btn-sm mt-4"
-          >
-            {applied ? (
-              <>
-                Applied <span aria-hidden="true">✓</span>
-                <span className="sr-only">— figures copied into the form</span>
-              </>
-            ) : (
-              'Apply to the form'
-            )}
-          </button>
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
 
@@ -1958,11 +2539,20 @@ function AnalysisFigure({
 }) {
   const amount = value == null ? NaN : Number(value);
   return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+    <div
+      className="min-w-0 rounded-xl border px-3 py-2.5"
+      style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--surface-card)' }}
+    >
+      <dt
+        className="text-[10px] font-semibold uppercase tracking-[0.12em]"
+        style={{ color: 'var(--text-muted)' }}
+      >
         {label}
       </dt>
-      <dd className="text-lg font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+      <dd
+        className="mt-1 truncate text-base font-bold tabular-nums"
+        style={{ color: 'var(--text-primary)' }}
+      >
         {Number.isFinite(amount) ? formatAmount(amount, currency) : '—'}
       </dd>
     </div>
@@ -2049,114 +2639,158 @@ function DocumentExtractionUpload({
   if (!ready || !preferences.documents) return null;
 
   return (
-    <div
-      className="mb-6 rounded-xl border border-dashed bg-[var(--brand-soft)] p-5"
-      style={{ borderColor: 'var(--surface-border-strong)' }}
+    <section
+      className="mb-6 overflow-hidden rounded-[24px] border"
+      style={{
+        borderColor: 'var(--hairline-strong)',
+        background:
+          'linear-gradient(135deg, var(--brand-soft), transparent 55%), var(--surface-card)',
+      }}
+      aria-labelledby="payslip-upload-title"
     >
-      <p className="field-label mb-1">
-        Upload a {label} <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
-      </p>
-      <p className="field-hint mb-3">
-        We&apos;ll read it and suggest values below for you to review — nothing is filled in
-        automatically. PDF, JPG, PNG or WebP, up to 10 MB.
-      </p>
-      <label className="btn btn-ghost btn-sm inline-block cursor-pointer">
-        {uploading ? 'Reading…' : `Choose ${label} file`}
-        <input
-          type="file"
-          accept="application/pdf,image/jpeg,image/png,image/webp"
-          className="sr-only"
-          disabled={uploading}
-          onChange={handleFileSelected}
-        />
-      </label>
-
-      {uploading && (
-        <div
-          className="mt-4 rounded-xl p-4"
-          style={{ backgroundColor: 'var(--surface-input)' }}
-          role="status"
-          aria-live="polite"
-        >
-          <p
-            className="flex items-center gap-2 text-base font-medium"
-            style={{ color: 'var(--text-primary)' }}
+      <div className="flex flex-wrap items-start justify-between gap-3 p-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+            style={{
+              background: 'var(--surface-card)',
+              color: 'var(--brand-on-soft)',
+              border: '1px solid var(--hairline)',
+            }}
+            aria-hidden="true"
           >
-            <span
-              className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
-              aria-hidden="true"
-            />
-            Reading your {label}
-          </p>
-          <p className="field-hint mt-2">
-            We&apos;re pulling the figures out for you to check — this usually takes under a minute.
-          </p>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-sm tabular-nums" style={{ color: 'var(--text-muted)' }}>
-              {elapsedSeconds}s elapsed
-            </span>
-            <button type="button" onClick={handleCancel} className="btn btn-ghost btn-sm">
-              Cancel
-            </button>
+            <Glyph name="doc" className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h3 id="payslip-upload-title" className="section-title">
+              Have a {label}?
+            </h3>
+            <p className="mt-1 max-w-xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+              We&apos;ll read it and suggest values below for you to review — nothing is filled in
+              automatically.
+            </p>
           </div>
         </div>
-      )}
+        <span className="chip !py-1 !text-xs">Optional</span>
+      </div>
 
-      {uploadError && (
-        <p
-          className="mt-3 text-sm font-medium text-red-600 dark:text-red-300"
-          role="alert"
+      <div className="border-t p-5" style={{ borderColor: 'var(--hairline)' }}>
+        <label
+          className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed px-4 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+          style={{ borderColor: 'var(--hairline-strong)' }}
         >
-          {uploadError}
-        </p>
-      )}
-
-      {draft && (
-        <div
-          className="mt-4 rounded-xl p-4"
-          style={{ backgroundColor: 'var(--surface-input)' }}
-        >
-          <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-            Extracted values (draft)
-          </p>
-          <ul className="mt-2 space-y-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            {Object.entries(draft.extractedFields)
-              .filter(([key]) => key !== 'transactions')
-              .map(([key, value]) => (
-                <li key={key} className="flex flex-wrap justify-between gap-2">
-                  <span style={{ color: 'var(--text-muted)' }}>{humaniseFieldKey(key)}</span>
-                  <span className="font-medium tabular-nums">{String(value)}</span>
-                </li>
-              ))}
-          </ul>
-          {draft.warnings.length > 0 && (
-            <ul className="mt-3 space-y-1 text-sm text-amber-700 dark:text-amber-300">
-              {draft.warnings.map((w, i) => (
-                <li key={i}>
-                  <span aria-hidden="true">⚠ </span>
-                  {w}
-                </li>
-              ))}
-            </ul>
-          )}
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={applied}
-            className="btn btn-primary btn-sm mt-4"
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
+            aria-hidden="true"
           >
-            {applied ? (
-              <>
-                Applied <span aria-hidden="true">✓</span>
-                <span className="sr-only">— suggested values copied into the form</span>
-              </>
-            ) : (
-              'Apply suggested values'
+            <Glyph name="plus" className="h-4 w-4" strokeWidth={2} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {uploading ? 'Reading…' : `Choose ${label} file`}
+            </span>
+            <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
+              PDF, JPG, PNG or WebP · up to 10 MB
+            </span>
+          </span>
+          <input
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/webp"
+            className="sr-only"
+            disabled={uploading}
+            onChange={handleFileSelected}
+          />
+        </label>
+
+        {uploading && (
+          <div
+            className="mt-3 rounded-2xl p-4"
+            style={{ backgroundColor: 'var(--surface-input)' }}
+            role="status"
+            aria-live="polite"
+          >
+            <p
+              className="flex items-center gap-2 text-sm font-semibold"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              <span
+                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                aria-hidden="true"
+              />
+              Reading your {label}
+            </p>
+            <p className="field-hint mt-2">
+              We&apos;re pulling the figures out for you to check — this usually takes under a
+              minute.
+            </p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                {elapsedSeconds}s elapsed
+              </span>
+              <button type="button" onClick={handleCancel} className="btn btn-ghost btn-sm">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {uploadError && (
+          <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-300" role="alert">
+            {uploadError}
+          </p>
+        )}
+
+        {draft && (
+          <div
+            className="mt-3 rounded-2xl border p-4"
+            style={{ backgroundColor: 'var(--surface-input)', borderColor: 'var(--hairline)' }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Extracted values
+              </p>
+              <span className="chip !py-1 !text-xs">
+                {applied ? 'Applied to the form' : 'Draft — review first'}
+              </span>
+            </div>
+            <ul className="mt-3 space-y-1.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
+              {Object.entries(draft.extractedFields)
+                .filter(([key]) => key !== 'transactions')
+                .map(([key, value]) => (
+                  <li key={key} className="flex flex-wrap justify-between gap-2">
+                    <span style={{ color: 'var(--text-muted)' }}>{humaniseFieldKey(key)}</span>
+                    <span className="font-medium tabular-nums">{String(value)}</span>
+                  </li>
+                ))}
+            </ul>
+            {draft.warnings.length > 0 && (
+              <ul className="mt-3 space-y-1 text-sm text-amber-700 dark:text-amber-300">
+                {draft.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
             )}
-          </button>
-        </div>
-      )}
-    </div>
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={applied}
+              className="btn btn-primary btn-sm mt-4"
+            >
+              {applied ? (
+                <>
+                  <Glyph name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />
+                  Applied
+                  <span className="sr-only">— suggested values copied into the form</span>
+                </>
+              ) : (
+                'Apply suggested values'
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -2178,12 +2812,10 @@ function StepFinancial({
   onApplyExtracted: (patch: Record<string, string>) => void;
 }) {
   return (
-    <div>
-      <h2 className="section-title">
-        {isBusiness ? 'Business and financial information' : 'Financial information'}
-      </h2>
-      <p className="field-hint">
-        Every field on this step is optional. Providing them helps us assess your application.
+    <div className="space-y-6">
+      <p className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <Glyph name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />
+        All fields on this step are optional. Anything you share helps us assess the application.
       </p>
 
       {seededFromProfile.statedAnnualIncome && <ProfileSeededNote />}
@@ -2196,9 +2828,31 @@ function StepFinancial({
 
       {/* Business-specific fields */}
       {isBusiness && (
-        <div className="mt-6">
-          <h3 className="section-title mb-3">Business financials</h3>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <section
+          className="rounded-[24px] border p-5 sm:p-6"
+          style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              style={{
+                background: 'var(--brand-soft)',
+                color: 'var(--brand-on-soft)',
+                border: '1px solid var(--hairline)',
+              }}
+              aria-hidden="true"
+            >
+              <Glyph name="chart" className="h-5 w-5" />
+            </span>
+            <div>
+              <h3 className="section-title">Business financials</h3>
+              <p className="field-hint !mt-0.5">
+                Trading figures for the business, not a director&apos;s salary.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className="field-label" htmlFor="businessAnnualRevenue">
                 Annual revenue
@@ -2210,7 +2864,7 @@ function StepFinancial({
                 value={form.businessAnnualRevenue}
                 onChange={onChange}
                 placeholder="e.g. 2500000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
               <p className="field-hint">Annual turnover of the business</p>
             </div>
@@ -2225,7 +2879,7 @@ function StepFinancial({
                 value={form.businessMonthlyIncome}
                 onChange={onChange}
                 placeholder="e.g. 210000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
               <p className="field-hint">Average paid into the business accounts each month</p>
             </div>
@@ -2240,7 +2894,7 @@ function StepFinancial({
                 value={form.businessMonthlyExpenses}
                 onChange={onChange}
                 placeholder="e.g. 145000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
               <p className="field-hint">Average paid out of them each month</p>
             </div>
@@ -2257,7 +2911,7 @@ function StepFinancial({
                 min={0}
                 max={200}
                 placeholder="e.g. 5"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
               <p className="field-hint">How many years the business has been operating</p>
             </div>
@@ -2276,15 +2930,41 @@ function StepFinancial({
               />
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Personal financial fields. A company's affordability is its trading figures, asked
           for above; these three describe a person. */}
       {showPersonalFinancials && (
-        <div className="mt-6">
-          {isBusiness && <h3 className="section-title mb-3">Personal financials</h3>}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <section
+          className="rounded-[24px] border p-5 sm:p-6"
+          style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              style={{
+                background: 'var(--brand-soft)',
+                color: 'var(--brand-on-soft)',
+                border: '1px solid var(--hairline)',
+              }}
+              aria-hidden="true"
+            >
+              <Glyph name="user" className="h-5 w-5" />
+            </span>
+            <div>
+              <h3 className="section-title">
+                {isBusiness ? 'Personal financials' : 'Your financial picture'}
+              </h3>
+              <p className="field-hint !mt-0.5">
+                {isBusiness
+                  ? 'Your own household figures, alongside the business.'
+                  : 'The figures that describe your household.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className="field-label" htmlFor="statedAnnualIncome">
                 Annual income
@@ -2296,7 +2976,7 @@ function StepFinancial({
                 value={form.statedAnnualIncome}
                 onChange={onChange}
                 placeholder="e.g. 60000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
             </div>
 
@@ -2311,7 +2991,7 @@ function StepFinancial({
                 value={form.statedMonthlyIncome}
                 onChange={onChange}
                 placeholder="e.g. 5000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
             </div>
 
@@ -2326,11 +3006,11 @@ function StepFinancial({
                 value={form.statedMonthlyExpenses}
                 onChange={onChange}
                 placeholder="e.g. 2000"
-                className="input"
+                className="input no-spinner tabular-nums"
               />
             </div>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
@@ -2355,85 +3035,109 @@ function StepEmployment({
     seededFromProfile.jobTitle
   );
   return (
-    <div>
-      <h2 className="section-title">Employment details</h2>
-      <p className="field-hint">
-        Every field on this step is optional. Add your employment details if you want us to take
-        them into account.
+    <div className="space-y-6">
+      <p className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <Glyph name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />
+        Optional. Add what you are comfortable sharing — it helps us understand your income.
       </p>
 
       {anySeeded && <ProfileSeededNote />}
 
       <DocumentExtractionUpload documentType="PAYSLIP" onApplyExtracted={onApplyExtracted} />
 
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-        <div>
-          <label className="field-label" htmlFor="employmentStatus">
-            Employment status
-          </label>
-          <select
-            id="employmentStatus"
-            name="employmentStatus"
-            value={form.employmentStatus}
-            onChange={onChange}
-            className="select"
+      <section
+        className="rounded-[24px] border p-5 sm:p-6"
+        style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+      >
+        <div className="flex items-center gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+            style={{
+              background: 'var(--brand-soft)',
+              color: 'var(--brand-on-soft)',
+              border: '1px solid var(--hairline)',
+            }}
+            aria-hidden="true"
           >
-            <option value="">Select status…</option>
-            {EMPLOYMENT_STATUSES.map(s => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+            <Glyph name="user" className="h-5 w-5" />
+          </span>
+          <div>
+            <h3 className="section-title">Employment details</h3>
+            <p className="field-hint !mt-0.5">
+              Your work, as it stands today. You can change any of it later.
+            </p>
+          </div>
         </div>
 
-        <div>
-          <label className="field-label" htmlFor="employerName">
-            Employer name
-          </label>
-          <input
-            id="employerName"
-            type="text"
-            name="employerName"
-            value={form.employerName}
-            onChange={onChange}
-            placeholder="e.g. Acme Ltd"
-            className="input"
-          />
-        </div>
+        <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div>
+            <label className="field-label" htmlFor="employmentStatus">
+              Employment status
+            </label>
+            <select
+              id="employmentStatus"
+              name="employmentStatus"
+              value={form.employmentStatus}
+              onChange={onChange}
+              className="select"
+            >
+              <option value="">Select status…</option>
+              {EMPLOYMENT_STATUSES.map(s => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <div>
-          <label className="field-label" htmlFor="jobTitle">
-            Job title
-          </label>
-          <input
-            id="jobTitle"
-            type="text"
-            name="jobTitle"
-            value={form.jobTitle}
-            onChange={onChange}
-            placeholder="e.g. Software Engineer"
-            className="input"
-          />
-        </div>
+          <div>
+            <label className="field-label" htmlFor="employerName">
+              Employer name
+            </label>
+            <input
+              id="employerName"
+              type="text"
+              name="employerName"
+              value={form.employerName}
+              onChange={onChange}
+              placeholder="e.g. Acme Ltd"
+              className="input"
+            />
+          </div>
 
-        <div>
-          <label className="field-label" htmlFor="yearsWithEmployer">
-            Years with employer
-          </label>
-          <input
-            id="yearsWithEmployer"
-            type="number"
-            name="yearsWithEmployer"
-            value={form.yearsWithEmployer}
-            onChange={onChange}
-            min={0}
-            max={50}
-            placeholder="e.g. 3"
-            className="input"
-          />
+          <div>
+            <label className="field-label" htmlFor="jobTitle">
+              Job title
+            </label>
+            <input
+              id="jobTitle"
+              type="text"
+              name="jobTitle"
+              value={form.jobTitle}
+              onChange={onChange}
+              placeholder="e.g. Software Engineer"
+              className="input"
+            />
+          </div>
+
+          <div>
+            <label className="field-label" htmlFor="yearsWithEmployer">
+              Years with employer
+            </label>
+            <input
+              id="yearsWithEmployer"
+              type="number"
+              name="yearsWithEmployer"
+              value={form.yearsWithEmployer}
+              onChange={onChange}
+              min={0}
+              max={50}
+              placeholder="e.g. 3"
+              className="input no-spinner tabular-nums"
+            />
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -2460,10 +3164,9 @@ function StepParties({
   if (loading) {
     return (
       <div className="space-y-3" aria-busy="true">
-        <h2 className="section-title">People and roles</h2>
         <p className="sr-only" role="status">Loading the people linked to your company…</p>
         {[1, 2, 3].map(i => (
-          <div key={i} className="skeleton h-14" />
+          <div key={i} className="skeleton h-20 rounded-2xl" />
         ))}
       </div>
     );
@@ -2471,23 +3174,27 @@ function StepParties({
 
   const active = members.filter(m => m.isActive);
   const summary = validation?.summary;
+  const shortfall = showShortfall && signatoryIds.length < MIN_SIGNATORIES;
+  const chosenPercent = Math.min((signatoryIds.length / MIN_SIGNATORIES) * 100, 100);
 
   return (
     <div>
-      <h2 className="section-title">People and roles</h2>
-      <p className="field-hint">
-        Confirm the directors, shareholders, beneficial owners and signatories linked to your
-        company.
-      </p>
-
       {/* Validation Banner — also carries the "you can still proceed" note so the
           same information is not restated twice on the step. */}
       {validation && (
         <div
-          className={`alert mt-4 items-start ${validation.isComplete ? 'alert-success' : 'alert-warning'}`}
+          className={`alert items-start ${validation.isComplete ? 'alert-success' : 'alert-warning'}`}
         >
-          <span className="text-lg leading-none" aria-hidden="true">
-            {validation.isComplete ? '✓' : '⚠'}
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+            style={{ border: '1px solid currentColor' }}
+            aria-hidden="true"
+          >
+            <Glyph
+              name={validation.isComplete ? 'check' : 'alert'}
+              className="h-4 w-4"
+              strokeWidth={2.4}
+            />
           </span>
           <div className="flex-1">
             <h3 className="text-base font-semibold">
@@ -2506,9 +3213,14 @@ function StepParties({
               </p>
             )}
             {summary && (
-              <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums opacity-90">
+              <ul className="mt-3 flex flex-wrap gap-1.5 text-sm tabular-nums">
                 {partySummaryCounts(summary).map(text => (
-                  <li key={text}>{text}</li>
+                  <li
+                    key={text}
+                    className="rounded-full border border-current bg-white/30 px-2.5 py-1 dark:bg-white/10"
+                  >
+                    {text}
+                  </li>
                 ))}
               </ul>
             )}
@@ -2521,78 +3233,121 @@ function StepParties({
           is not on the list rather than finding them missing. */}
       {active.length > 0 ? (
         <fieldset className="mt-5 border-0 p-0">
-          <legend className="field-label">Who will sign this application</legend>
-          <p
-            className="mb-3 mt-1 text-sm"
-            style={{
-              color:
-                showShortfall && signatoryIds.length < MIN_SIGNATORIES
-                  ? 'var(--down, #b42318)'
-                  : 'var(--text-muted)',
-            }}
-            role={showShortfall && signatoryIds.length < MIN_SIGNATORIES ? 'alert' : undefined}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <legend className="field-label !mb-0">Who will sign this application</legend>
+            <span
+              className="chip !py-1 !text-xs"
+              style={
+                signatoryIds.length >= MIN_SIGNATORIES
+                  ? { color: 'var(--up)' }
+                  : undefined
+              }
+            >
+              {signatoryIds.length} of {MIN_SIGNATORIES} chosen
+            </span>
+          </div>
+          <div
+            className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={MIN_SIGNATORIES}
+            aria-valuenow={Math.min(signatoryIds.length, MIN_SIGNATORIES)}
+            aria-label="Authorised signatories chosen"
+            style={{ backgroundColor: 'var(--hairline-strong)' }}
           >
-            Choose at least {MIN_SIGNATORIES}.{' '}
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${chosenPercent}%`,
+                backgroundColor:
+                  signatoryIds.length >= MIN_SIGNATORIES ? 'var(--up)' : 'var(--brand)',
+              }}
+            />
+          </div>
+          <p
+            className="mb-3 mt-2 text-sm"
+            style={{
+              color: shortfall ? 'var(--down, #b42318)' : 'var(--text-muted)',
+            }}
+            role={shortfall ? 'alert' : undefined}
+          >
             {signatoryIds.length >= MIN_SIGNATORIES
-              ? `${signatoryIds.length} selected.`
-              : `${signatoryIds.length} selected — pick ${MIN_SIGNATORIES - signatoryIds.length} more.`}
+              ? `At least ${MIN_SIGNATORIES} chosen — ${signatoryIds.length} selected.`
+              : `Choose at least ${MIN_SIGNATORIES}. ${signatoryIds.length} selected — pick ${
+                  MIN_SIGNATORIES - signatoryIds.length
+                } more.`}
           </p>
-          <ul className="space-y-3">
+
+          <ul className="mt-2 space-y-2.5">
             {active.map(m => {
               const canSign = !!m.isAuthorizedSignatory;
               const chosen = signatoryIds.includes(m.customerId);
+
               const details = (
                 <>
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
-                      style={{ backgroundColor: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
-                      aria-hidden="true"
-                    >
-                      {(m.customerName || '?')[0]}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                  <span
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                    style={{
+                      backgroundColor: chosen ? 'var(--brand)' : 'var(--brand-soft)',
+                      color: chosen ? '#fff' : 'var(--brand-on-soft)',
+                    }}
+                    aria-hidden="true"
+                  >
+                    {(m.customerName || '?')[0]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                      <p
+                        className="min-w-0 truncate text-[15px] font-semibold"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
                         {m.customerName || 'Name not provided'}
                       </p>
-                      {m.customerEmail && (
-                        <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                          {m.customerEmail}
-                        </p>
+                      {m.isAuthorizedSignatory ? (
+                        <span className="badge badge-info">Signatory</span>
+                      ) : (
+                        <span className="badge badge-neutral">Not a recorded signatory</span>
+                      )}
+                    </div>
+                    {m.customerEmail && (
+                      <p className="mt-0.5 truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {m.customerEmail}
+                      </p>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="badge badge-neutral">
+                        {PARTY_ROLE_LABELS[m.role] || m.role}
+                      </span>
+                      {m.ownershipPercentage != null && (
+                        <span className="badge badge-neutral tabular-nums">
+                          {m.ownershipPercentage}% owned
+                        </span>
+                      )}
+                      {m.isBeneficialOwner && (
+                        <span className="badge badge-info">Beneficial owner</span>
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <span className="badge badge-neutral">{PARTY_ROLE_LABELS[m.role] || m.role}</span>
-                    {m.ownershipPercentage != null && (
-                      <span className="badge badge-neutral tabular-nums">
-                        {m.ownershipPercentage}% owned
-                      </span>
-                    )}
-                    {m.isAuthorizedSignatory && <span className="badge badge-info">Signatory</span>}
-                    {m.isBeneficialOwner && <span className="badge badge-info">Beneficial owner</span>}
-                  </div>
                 </>
               );
-
-              /* Three fixed columns — marker, person, badges — shared by both kinds of row, so
-                 the name starts in the same place whether or not the officer can be selected.
-                 Letting the marker take flexible space instead slid every avatar to a different
-                 x, and left the unselectable rows out of line with the rest. */
-              const columns = '1rem minmax(0, 1fr) auto';
 
               if (!canSign) {
                 return (
                   <li
                     key={m.id}
-                    className="grid items-center gap-3 rounded-xl border px-5 py-4 opacity-60"
+                    className="flex items-start gap-3 rounded-2xl border px-4 py-4 opacity-65"
                     style={{
-                      gridTemplateColumns: columns,
                       backgroundColor: 'var(--surface-input)',
-                      borderColor: 'var(--surface-border)',
+                      borderColor: 'var(--hairline)',
                     }}
                   >
-                    <span aria-hidden="true" />
+                    <span
+                      aria-hidden="true"
+                      className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      <Glyph name="shield" className="h-4 w-4" strokeWidth={1.8} />
+                    </span>
                     {details}
                   </li>
                 );
@@ -2601,10 +3356,9 @@ function StepParties({
               return (
                 <li key={m.id}>
                   <label
-                    className="grid cursor-pointer items-center gap-3 rounded-xl border-2 px-5 py-4 transition-colors"
+                    className="flex cursor-pointer items-start gap-3 rounded-2xl border-2 px-4 py-4 transition-all"
                     style={{
-                      gridTemplateColumns: columns,
-                      borderColor: chosen ? 'var(--brand)' : 'var(--surface-border)',
+                      borderColor: chosen ? 'var(--brand)' : 'var(--hairline-strong)',
                       backgroundColor: chosen ? 'var(--brand-soft)' : 'var(--surface-input)',
                     }}
                   >
@@ -2612,7 +3366,7 @@ function StepParties({
                       type="checkbox"
                       checked={chosen}
                       onChange={() => onToggleSignatory(m.customerId)}
-                      className="h-4 w-4 shrink-0 rounded"
+                      className="mt-1 h-4 w-4 shrink-0 rounded"
                       style={{ accentColor: 'var(--brand)' }}
                       aria-label={`${m.customerName || 'This officer'} signs this application`}
                     />
@@ -2632,20 +3386,15 @@ function StepParties({
               with your relationship manager.
             </p>
             <button onClick={onRefresh} className="btn btn-ghost btn-sm mt-3" type="button">
-              <span aria-hidden="true">↻</span> Try again
+              <Glyph name="swap" className="h-3.5 w-3.5" strokeWidth={2} />
+              Try again
             </button>
           </div>
         </div>
       ) : (
         <div className="empty-state mt-4">
           <div className="empty-state-icon">
-            <svg aria-hidden="true" className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
-              />
-            </svg>
+            <Glyph name="joint" className="h-7 w-7" strokeWidth={1.5} />
           </div>
           <h3 className="empty-state-title">No people recorded for your company yet</h3>
           {/* The step never gated submission — canGoNext passes it and a failed party link is
@@ -2668,7 +3417,8 @@ function StepParties({
           Manage people and roles <span data-arrow aria-hidden="true">→</span>
         </a>
         <button onClick={onRefresh} className="btn btn-ghost btn-sm" type="button">
-          <span aria-hidden="true">↻</span> Refresh
+          <Glyph name="swap" className="h-3.5 w-3.5" strokeWidth={2} />
+          Refresh
         </button>
       </div>
     </div>
@@ -2823,45 +3573,183 @@ function StepReview({
           },
         ]
       : []),
+    // Employment is a personal-flow step. A company journey has no such step,
+    // so offering it here would send "Edit" to a screen outside the stepper.
+    ...(!isBusiness
+      ? [
+          {
+            title: 'Employment',
+            step: 'employment' as WizardStep,
+            items: [
+              row('Status', EMPLOYMENT_STATUSES.find(s => s.value === form.employmentStatus)?.label),
+              row('Employer', form.employerName),
+              row('Job title', form.jobTitle),
+              row(
+                'Years with employer',
+                form.yearsWithEmployer ? `${form.yearsWithEmployer} years` : null
+              ),
+            ].filter(Boolean) as { label: string; value: string }[],
+          },
+        ]
+      : []),
+  ];
+
+  const declarationsList: { key: keyof typeof declarations; text: string }[] = [
     {
-      title: 'Employment',
-      step: 'employment',
-      items: [
-        row('Status', EMPLOYMENT_STATUSES.find(s => s.value === form.employmentStatus)?.label),
-        row('Employer', form.employerName),
-        row('Job title', form.jobTitle),
-        row('Years with employer', form.yearsWithEmployer ? `${form.yearsWithEmployer} years` : null),
-      ].filter(Boolean) as { label: string; value: string }[],
+      key: 'informationAccurate',
+      text: 'I declare that all information provided in this application is true, accurate, and complete to the best of my knowledge.',
+    },
+    {
+      key: 'consentCreditCheck',
+      text: 'I consent to the bank performing credit checks, verifying my identity, and sharing my information with credit bureaus and regulatory authorities as required.',
+    },
+    {
+      key: 'termsAccepted',
+      text: 'I have read and agree to the terms and conditions, privacy policy, and the product-specific disclosures.',
     },
   ];
 
-  return (
-    <div>
-      <h2 className="section-title">Review your application</h2>
-      <p className="field-hint">Check everything below, then accept the declarations to submit.</p>
+  const submittedSteps = [
+    { title: 'Submitted', detail: 'Your application reaches the bank.' },
+    { title: 'Review', detail: 'Identity, documents and credit are assessed.' },
+    { title: 'Decision', detail: 'The bank makes its lending decision.' },
+    { title: 'Offer', detail: 'You receive an offer and sign if you accept.' },
+  ];
 
+  return (
+    <div className="space-y-6">
       {/* The number the whole application resolves to, restated here so the customer signs
           the declarations against it rather than against a figure two steps back. */}
-      {quote && (
-        <div className="mt-5 rounded-2xl p-4 sm:p-5" style={{ background: 'var(--surface-input)' }}>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-            What you would be repaying
-          </h3>
-          <QuoteFigures quote={quote} />
+      <section
+        className="relative overflow-hidden rounded-[28px] p-6 text-white"
+        style={{ background: 'var(--tile-active)', boxShadow: 'var(--tile-active-shadow)' }}
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(255,255,255,.14), transparent 65%)' }}
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-6">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+              You are applying for
+            </p>
+            <h2 className="serif mt-2 text-[26px] font-medium leading-tight sm:text-[30px]">
+              {product.productName}
+            </h2>
+            <p className="mt-1 text-sm text-white/70">
+              {LOAN_PURPOSE_LABELS[form.loanPurpose as LoanPurpose] || form.loanPurpose || 'Purpose not set'}
+            </p>
+          </div>
+          <div className="sm:text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+              Requested
+            </p>
+            <p className="mt-1 text-[32px] font-bold leading-none tracking-tight tabular-nums">
+              {form.requestedAmount ? formatCurrency(parseFloat(form.requestedAmount)) : '—'}
+            </p>
+            <p className="mt-1.5 text-xs text-white/60">
+              {form.requestedTermMonths ? `${form.requestedTermMonths} months` : 'Term not set'}
+            </p>
+          </div>
         </div>
-      )}
 
-      <div className="mt-6 space-y-6">
+        {quote ? (
+          <div className="relative mt-6">
+            <div className="grid gap-2 sm:grid-cols-3">
+              {[
+                ['Monthly repayment', quoteMoney(quote.monthlyRepayment)],
+                ['Total cost of credit', quoteMoney(quote.costOfCredit)],
+                ['Total repayable', quoteMoney(quote.totalRepayable)],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3"
+                >
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-white/55">{label}</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums">{value}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[10px] leading-4 text-white/50">
+              Illustrative, not an offer. {quote.calculatedRatePct}% rate
+              {quote.aprcAvailable ? `, APRC ${quote.aprcPct}%` : ''}. Quote{' '}
+              {quote.quoteId.slice(0, 8)} holds until{' '}
+              {new Date(quote.expiresAt).toLocaleDateString('en-IE', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })}
+              .
+            </p>
+          </div>
+        ) : (
+          <p className="relative mt-5 text-sm text-white/70">
+            The bank&apos;s indicative figures will appear here once a quote is available.
+          </p>
+        )}
+      </section>
+
+      {/* What happens after submission — the process, not a promise about a decision. */}
+      <section
+        className="rounded-[24px] border p-5 sm:p-6"
+        style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="section-title">What happens after you submit</h3>
+          <span className="chip !py-1 !text-xs">You can track it here</span>
+        </div>
+        <ol className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {submittedSteps.map((item, i) => (
+            <li key={item.title} className="relative">
+              <span
+                className="flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-bold"
+                style={{
+                  borderColor: 'var(--hairline-strong)',
+                  backgroundColor: 'var(--brand-soft)',
+                  color: 'var(--brand-on-soft)',
+                }}
+                aria-hidden="true"
+              >
+                {i + 1}
+              </span>
+              <p
+                className="mt-2 text-sm font-semibold"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {item.title}
+              </p>
+              <p className="mt-0.5 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
+                {item.detail}
+              </p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* Every answer, grouped and editable in place. */}
+      <div className="grid gap-4 sm:grid-cols-2">
         {sections.map(section => (
-          <section key={section.title} aria-label={section.title}>
-            <div className="mb-3 flex items-center justify-between gap-3 border-b pb-2" style={{ borderColor: 'var(--surface-border)' }}>
-              <h3 className="text-base font-semibold" style={{ color: 'var(--text-secondary)' }}>
+          <section
+            key={section.title}
+            aria-label={section.title}
+            className="rounded-[24px] border p-5"
+            style={{
+              borderColor: 'var(--hairline-strong)',
+              backgroundColor: 'var(--surface-card)',
+            }}
+          >
+            <div
+              className="mb-3 flex items-center justify-between gap-3 border-b pb-3"
+              style={{ borderColor: 'var(--hairline)' }}
+            >
+              <h3 className="serif text-base font-medium" style={{ color: 'var(--text-primary)' }}>
                 {section.title}
               </h3>
               <button
                 type="button"
                 onClick={() => onEdit(section.step)}
-                className="link-arrow text-sm"
+                className="link-arrow !text-xs"
               >
                 {section.items.length ? 'Edit' : 'Add'}{' '}
                 <span className="sr-only">{section.title}</span>
@@ -2873,14 +3761,14 @@ function StepReview({
                 Not added — it is optional, but it helps us assess your application.
               </p>
             ) : (
-              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <dl className="space-y-2.5">
                 {section.items.map(item => (
-                  <div key={item.label} className="flex justify-between gap-4 sm:block">
+                  <div key={item.label} className="flex items-baseline justify-between gap-4">
                     <dt className="text-sm" style={{ color: 'var(--text-muted)' }}>
                       {item.label}
                     </dt>
                     <dd
-                      className="text-base font-medium tabular-nums sm:mt-0.5"
+                      className="text-right text-sm font-semibold tabular-nums"
                       style={{ color: 'var(--text-primary)' }}
                     >
                       {item.value}
@@ -2894,74 +3782,79 @@ function StepReview({
       </div>
 
       {/* ─── Declarations & Consent ─────────────────────── */}
-      <div className="mt-8 border-t pt-6" style={{ borderColor: 'var(--surface-border)' }}>
-        <h3 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-secondary)' }}>
-          Declarations and consent
-        </h3>
-        <p className="mb-4 text-sm" style={{ color: 'var(--text-muted)' }} id="declarations-hint">
-          {acceptedDeclarations === 3
-            ? 'All three accepted — you can submit.'
-            : `${acceptedDeclarations} of 3 accepted. Accept all three to submit.`}
-        </p>
-        <div className="space-y-4">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={declarations.informationAccurate}
-              onChange={e => onDeclarationChange('informationAccurate', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded"
-              style={{ borderColor: 'var(--surface-border-strong)' }}
-              required
-              aria-required="true"
-            />
-            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              I declare that all information provided in this application is true, accurate, and
-              complete to the best of my knowledge.{' '}
-              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
-              <span className="sr-only">(required)</span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={declarations.consentCreditCheck}
-              onChange={e => onDeclarationChange('consentCreditCheck', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded"
-              style={{ borderColor: 'var(--surface-border-strong)' }}
-              required
-              aria-required="true"
-            />
-            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              I consent to the bank performing credit checks, verifying my identity, and sharing my
-              information with credit bureaus and regulatory authorities as required.{' '}
-              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
-              <span className="sr-only">(required)</span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={declarations.termsAccepted}
-              onChange={e => onDeclarationChange('termsAccepted', e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded"
-              style={{ borderColor: 'var(--surface-border-strong)' }}
-              required
-              aria-required="true"
-            />
-            <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              I have read and agree to the terms and conditions, privacy policy, and the
-              product-specific disclosures.{' '}
-              <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
-              <span className="sr-only">(required)</span>
-            </span>
-          </label>
+      <section
+        className="rounded-[24px] border p-5 sm:p-6"
+        style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="section-title">Declarations and consent</h3>
+            <p className="field-hint">
+              Three confirmations and the application is on its way.
+            </p>
+          </div>
+          <span
+            className="chip !py-1 !text-xs"
+            style={
+              acceptedDeclarations === 3
+                ? { color: 'var(--up)' }
+                : undefined
+            }
+          >
+            {acceptedDeclarations} of 3 accepted
+          </span>
         </div>
 
-        {(!declarations.informationAccurate ||
-          !declarations.consentCreditCheck ||
-          !declarations.termsAccepted) && (
+        <div
+          className="mt-4 h-1.5 w-full overflow-hidden rounded-full"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={3}
+          aria-valuenow={acceptedDeclarations}
+          aria-label="Declarations accepted"
+          style={{ backgroundColor: 'var(--hairline-strong)' }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${(acceptedDeclarations / 3) * 100}%`,
+              backgroundColor: acceptedDeclarations === 3 ? 'var(--up)' : 'var(--brand)',
+            }}
+          />
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {declarationsList.map(declaration => {
+            const checked = declarations[declaration.key];
+            return (
+              <label
+                key={declaration.key}
+                className="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors"
+                style={{
+                  borderColor: checked ? 'var(--brand)' : 'var(--hairline-strong)',
+                  backgroundColor: checked ? 'var(--brand-soft)' : 'var(--surface-input)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={e => onDeclarationChange(declaration.key, e.target.checked)}
+                  className="mt-0.5 h-5 w-5 shrink-0 rounded"
+                  style={{ accentColor: 'var(--brand)' }}
+                  required
+                  aria-required="true"
+                />
+                <span className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                  {declaration.text}{' '}
+                  <span className="text-red-500 dark:text-red-300" aria-hidden="true">*</span>
+                  <span className="sr-only">(required)</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+
+        {acceptedDeclarations < 3 && (
           <p
             id="declarations-hint"
             className="mt-4 text-sm text-amber-600 dark:text-amber-400"
@@ -2970,7 +3863,7 @@ function StepReview({
             Accept all three declarations to enable “Submit application”.
           </p>
         )}
-      </div>
+      </section>
     </div>
   );
 }

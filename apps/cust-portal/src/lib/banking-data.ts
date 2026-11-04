@@ -45,29 +45,8 @@ export interface BankAccount {
   accountCategory?: string;
 }
 
-export type CardType = 'DEBIT' | 'CREDIT';
-export type CardScheme = 'VISA' | 'MASTERCARD';
-
-export interface PaymentCard {
-  id: string;
-  type: CardType;
-  scheme: CardScheme;
-  label: string;
-  /** Masked PAN, only last 4 are real */
-  last4: string;
-  expiry: string;
-  holder: string;
-  linkedAccountId: string;
-  frozen: boolean;
-  contactless: boolean;
-  online: boolean;
-  /** Gradient class pair for the plastic art */
-  gradient: string;
-  /** Credit-card only */
-  creditLimit?: number;
-  creditUsed?: number;
-  apr?: number;
-}
+/* There is no card instrument in the bank's data, so no card type or scheme is
+   modelled here — see `AccountCard` below for what a card face is derived from. */
 
 export type TxnDirection = 'IN' | 'OUT';
 export type TxnStatus = 'COMPLETED' | 'PENDING' | 'DECLINED' | 'REVERSED';
@@ -228,72 +207,26 @@ export const ACCOUNTS: BankAccount[] = [
 
 /* ──────────────────────────────────────────────────────────────────
  * Cards
+ *
+ * Cards are issued records now: credit.card, served through bff-customer and read by
+ * card-service. What stays here is the one rule that connects a statement line to a plastic,
+ * because two screens need it and they must not disagree.
  * ────────────────────────────────────────────────────────────────── */
 
-export const CARDS: PaymentCard[] = [
-  {
-    id: 'card-debit-1',
-    type: 'DEBIT',
-    scheme: 'VISA',
-    label: 'Everyday Debit',
-    last4: '4827',
-    expiry: '08/28',
-    holder: 'Card Holder',
-    linkedAccountId: 'acc-current',
-    frozen: false,
-    contactless: true,
-    online: true,
-    gradient: 'linear-gradient(135deg, #2d0e2b 0%, #4a1747 50%, #7f2b7b 100%)',
-  },
-  {
-    id: 'card-credit-1',
-    type: 'CREDIT',
-    scheme: 'MASTERCARD',
-    label: 'Rayva Signature',
-    last4: '7731',
-    expiry: '11/27',
-    holder: 'Card Holder',
-    linkedAccountId: 'acc-current',
-    frozen: false,
-    contactless: true,
-    online: true,
-    gradient: 'linear-gradient(135deg, #18181b 0%, #3f3f46 50%, #71717a 100%)',
-    creditLimit: 10000,
-    creditUsed: 2340.18,
-    apr: 22.9,
-  },
-  {
-    id: 'card-debit-2',
-    type: 'DEBIT',
-    scheme: 'VISA',
-    label: 'Travel Vault',
-    last4: '1170',
-    expiry: '03/29',
-    holder: 'Card Holder',
-    linkedAccountId: 'acc-vault',
-    frozen: true,
-    contactless: true,
-    online: false,
-    gradient: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #0ea5e9 100%)',
-  },
-  {
-    id: 'card-credit-2',
-    type: 'CREDIT',
-    scheme: 'VISA',
-    label: 'Rayva Rewards',
-    last4: '5508',
-    expiry: '06/26',
-    holder: 'Card Holder',
-    linkedAccountId: 'acc-current',
-    frozen: false,
-    contactless: true,
-    online: true,
-    gradient: 'linear-gradient(135deg, #3b0764 0%, #6d28d9 50%, #a855f7 100%)',
-    creditLimit: 5000,
-    creditUsed: 612.4,
-    apr: 19.9,
-  },
-];
+/**
+ * Whether a line was spent on this card.
+ *
+ * The ledger names the card when it can. Lines written before the card records existed — and any
+ * line the feed did not attribute — carry no card id, so a card-funded payment on the account the
+ * card spends from still counts. A line that names a different card never does.
+ */
+export function isCardActivity(
+  t: Transaction,
+  card: { cardId: string; accountId: string }
+): boolean {
+  if (t.cardId) return t.cardId === card.cardId;
+  return Boolean(t.viaCard) && t.accountId === card.accountId;
+}
 
 /* ──────────────────────────────────────────────────────────────────
  * Beneficiaries & scheduled payments
@@ -522,11 +455,6 @@ export function dailySpendSeries(days = 14): DailySpend[] {
   );
 }
 
-/** Card-funded, completed out-payments per day for the last `days` days, oldest
-    → newest. A separate series from `dailySpendSeries` because it counts only
-    transactions carrying a cardId — transfers and direct debits are excluded, so
-    the two measure overlapping but different sets. Pass `cardId` to scope it to
-    one card. */
 /**
  * Collapse a daily series into `size`-day sums.
  *
@@ -545,13 +473,29 @@ export function bucketDaily<T extends { date: string; total: number }>(series: T
   return out;
 }
 
-export function dailyCardSpend(days: number, cardId?: string): { date: string; total: number }[] {
-  const rows = ACTIVE_TRANSACTIONS.filter(
+/**
+ * Card-funded, completed out-payments per day for the last `days` days, oldest →
+ * newest. A separate series from `dailySpendSeries` because it counts only rows the
+ * ledger marks as paid by card — transfers, ATM cash and direct debits are excluded,
+ * so the two measure overlapping but different sets.
+ *
+ * It reads the rows it is handed rather than the module's active set, because the
+ * cards screen resolves its own snapshot and must not chart another customer's
+ * history. Pass `card` to scope the series to one plastic.
+ */
+export function dailyCardSpend(
+  source: Transaction[],
+  days: number,
+  card?: { cardId: string; accountId: string }
+): { date: string; total: number }[] {
+  const rows = source.filter(
     t =>
       t.direction === 'OUT' &&
       t.status === 'COMPLETED' &&
+      // Card-funded always; scoped to one plastic only when one was named. Without this the
+      // all-cards figure would silently include transfers, cash and direct debits.
       (t.cardId || t.viaCard) &&
-      (!cardId || t.cardId === cardId)
+      (!card || isCardActivity(t, card))
   );
   const today = new Date();
   today.setHours(0, 0, 0, 0);

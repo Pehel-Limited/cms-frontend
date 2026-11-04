@@ -4,11 +4,20 @@ import { useRouter } from 'next/navigation';
 import { DottedRing, rampTone } from '@/components/dashboard/DotMatrix';
 import type { PerformanceMetrics, MissingItem } from '@/services/api/dashboard-service';
 
+const ACRONYMS = new Set(['AML', 'KYC', 'CFT']);
+
 function humanise(s: string): string {
   return s
     .toLowerCase()
     .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
+    .split(' ')
+    .filter(Boolean)
+    .map((word, index) => {
+      const upper = word.toUpperCase();
+      if (ACRONYMS.has(upper)) return upper;
+      return index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+    })
+    .join(' ');
 }
 
 /* Outline paths only, and no per-category hue: an icon tile identifies *what*

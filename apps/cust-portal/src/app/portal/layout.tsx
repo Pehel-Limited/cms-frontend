@@ -169,10 +169,10 @@ const COMPANY_NAV: NavItem = {
   ),
 };
 
-/* Card and account tools. These are deliberately links rather than switches: the
-   freeze toggle, the online/contactless controls and the credit limit all live on
-   the Cards screen, which owns their state. The reference's "View Card PIN" and
-   "Manage Subscriptions" have no counterpart in this portal, so they are not here. */
+/* Card and account tools. These are links rather than switches: the freeze state, the
+   online / contactless / ATM / international controls and the limits all live on the Cards
+   screen, which reads and writes them on the bank's own card record. "View Card PIN" and
+   "Manage Subscriptions" still have no counterpart here, so they are not listed. */
 const TOOL_NAV: { name: string; path: string; icon: React.ReactNode }[] = [
   {
     name: 'Freeze card',
@@ -226,7 +226,7 @@ const PAGE_TITLES: { path: string; title: string; subtitle: string }[] = [
   { path: '/portal/accounts', title: 'Accounts', subtitle: 'Balances and account details' },
   { path: '/portal/ai-assistant', title: 'Credit Assistant', subtitle: 'Get instant answers about your finances' },
   { path: '/portal/payments', title: 'Payments', subtitle: 'Transfers, payees and scheduled payments' },
-  { path: '/portal/cards', title: 'Cards', subtitle: 'Manage your debit and credit cards' },
+  { path: '/portal/cards', title: 'Cards', subtitle: 'Details, controls and spending on your cards' },
   { path: '/portal/transactions', title: 'Transactions', subtitle: 'Search and review your activity' },
   { path: '/portal/applications', title: 'Applications', subtitle: 'Track your credit applications' },
   { path: '/portal/documents', title: 'Documents', subtitle: 'Upload and manage your paperwork' },
@@ -668,10 +668,13 @@ function PortalShell({ children }: { children: React.ReactNode }) {
           <div className="min-w-0 flex-1">
             {isHome ? (
               <>
-                <p className="serif truncate text-2xl font-medium leading-tight sm:text-[27px]" style={{ color: 'var(--text-primary)' }}>
-                  {getGreeting()}, {user?.firstName ?? 'there'}
+                <p className="serif truncate text-lg font-medium leading-tight sm:text-xl lg:text-[27px]" style={{ color: 'var(--text-primary)' }}>
+                  <span className="sm:hidden">{getGreeting()}</span>
+                  <span className="hidden sm:inline">
+                    {getGreeting()}, {user?.firstName ?? 'there'}
+                  </span>
                 </p>
-                <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                <p className="truncate text-xs sm:text-sm" style={{ color: 'var(--text-muted)' }}>
                   {new Date().toLocaleDateString(undefined, LONG_DATE)}
                 </p>
               </>
@@ -703,7 +706,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
               </svg>
-              <span className="hidden sm:inline">Ask Rayva AI</span>
+              <span className="hidden lg:inline">Ask Rayva AI</span>
               {askPing && <span className="rayva-ping" aria-hidden="true" />}
             </button>
 

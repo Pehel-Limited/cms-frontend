@@ -15,6 +15,8 @@ import {
 export interface CustomerTransaction {
   transactionId: string;
   accountId: string;
+  /** Which of the customer's cards paid this line. Absent on transfers, cash and direct debits. */
+  cardId?: string;
   accountName?: string;
   accountTypeDisplay?: string;
   transactionType: string;
@@ -126,6 +128,10 @@ export function toTransaction(row: CustomerTransaction): Transaction {
   return {
     id: row.transactionId,
     accountId: row.accountId,
+    // The card that paid it, when the line was a card payment and the paying account carries a
+    // card. Lines written before cards were issued carry none, so card panels must cope with a
+    // missing id rather than assume one.
+    cardId: row.cardId || undefined,
     merchant: row.counterpartyName || row.description || 'Transaction',
     category: toCategory(row),
     // Amounts arrive unsigned; direction carries the sign, same as the sample set.
@@ -137,8 +143,8 @@ export function toTransaction(row: CustomerTransaction): Transaction {
     date: row.initiatedAt || `${row.valueDate}T12:00:00`,
     // The descriptor line is the narrative; the statement text is what the payer wrote.
     note: row.remittanceInfo || undefined,
-    // There are no card instruments in the backend yet, so a live line names no card — but a
-    // card-funded one is still card-funded, and card-shaped panels key off that instead.
+    // Card-funded by channel, which is what the cards screen falls back to for any line that
+    // predates the card records or names no plastic.
     viaCard: row.channel === 'CARD',
   };
 }

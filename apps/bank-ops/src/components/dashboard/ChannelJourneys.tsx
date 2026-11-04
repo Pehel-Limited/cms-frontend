@@ -159,13 +159,22 @@ interface Props {
   rmNameById?: Map<string, string>;
   title?: string;
   onSelectRm?: (rmUserId: string) => void;
+  /** Oversight view: preview one journey per customer, with a show-all control. */
+  collapsible?: boolean;
 }
 
 const HEAD_CLASS = 'min-w-0 truncate px-2 py-2.5 text-xs font-medium';
 
-export default function ChannelJourneys({ journeys, rmNameById, title = 'With the customer', onSelectRm }: Props) {
+export default function ChannelJourneys({
+  journeys,
+  rmNameById,
+  title = 'With the customer',
+  onSelectRm,
+  collapsible = false,
+}: Props) {
   const [stalledOnly, setStalledOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -180,6 +189,32 @@ export default function ChannelJourneys({ journeys, rmNameById, title = 'With th
   if (journeys.length === 0) return null;
 
   const notSubmitted = journeys.filter(j => !j.applicationId).length;
+  const quietCount = journeys.filter(j => j.daysStalled >= 7).length;
+  const uniqueCustomers = new Set(journeys.map(j => j.customerId)).size;
+  const filteredCustomers = new Set(rows.map(j => j.customerId)).size;
+
+  const journeyCounts = new Map<string, number>();
+  journeys.forEach(j => journeyCounts.set(j.customerId, (journeyCounts.get(j.customerId) ?? 0) + 1));
+
+  /* One row per customer for the collapsed oversight preview: the quietest
+     journey is the one that needs a look, and the count on the row says how
+     many product attempts sit behind that customer. */
+  const previewRows: ChannelJourney[] = [];
+  if (collapsible) {
+    const seen = new Set<string>();
+    for (const journey of rows) {
+      if (seen.has(journey.customerId)) continue;
+      seen.add(journey.customerId);
+      previewRows.push(journey);
+      if (previewRows.length >= 8) break;
+    }
+  } else {
+    previewRows.push(...rows);
+  }
+
+  const visibleRows = collapsible && !showAll ? previewRows : rows;
+  const canExpand = collapsible && rows.length > previewRows.length;
+  const showingAll = collapsible && (showAll || !canExpand);
 
   const toggle = (journeyId: string) => setExpanded(open => (open === journeyId ? null : journeyId));
 
@@ -189,8 +224,10 @@ export default function ChannelJourneys({ journeys, rmNameById, title = 'With th
         <div className="min-w-0">
           <h2 className="rm-title">{title}</h2>
           <p className="rm-sub">
-            <span className="num">{journeys.length}</span> in progress on the customer side ·{' '}
-            <span className="num">{notSubmitted}</span> never reached submission, so they are not in your pipeline
+            <span className="num">{journeys.length}</span> in progress across{' '}
+            <span className="num">{uniqueCustomers}</span> customers ·{' '}
+            <span className="num">{notSubmitted}</span> never reached submission ·{' '}
+            <span className="num">{quietCount}</span> quiet for 7+ days
           </p>
         </div>
         <button
@@ -210,8 +247,9 @@ export default function ChannelJourneys({ journeys, rmNameById, title = 'With th
 
       <div className="rm-body">
         <p className="text-sm mb-4" style={{ color: 'var(--rm-text-muted)' }}>
-          These are the ones you can still help. Nothing here has been submitted, so the figures below are only
-          what the customer has told us so far — an em dash means we were never given one.
+          These are the ones you can still help. The figures below are only what the customer has told us so
+          far — an em dash means we were never given one. A customer can appear more than once if they
+          started more than one product.
         </p>
 
         {rows.length === 0 ? (
@@ -219,8 +257,12 @@ export default function ChannelJourneys({ journeys, rmNameById, title = 'With th
             Nothing quiet for a week or more right now.
           </p>
         ) : (
+          <>
+          <p className="mb-2 text-[13px] sm:hidden" style={{ color: 'var(--rm-text-muted)' }}>
+            Swipe the table for amount, status and last activity.
+          </p>
           <div className="overflow-x-auto no-scrollbar">
-            <table className="rm-table w-full table-fixed border-collapse text-left">
+            <table className="rm-table w-full min-w-[720px] table-fixed border-collapse text-left">
               <thead>
                 <tr>
                   <th scope="col" className={`${HEAD_CLASS} w-[36%]`}>
@@ -246,12 +288,13 @@ export default function ChannelJourneys({ journeys, rmNameById, title = 'With th
                 </tr>
               </thead>
               <tbody>
-                {rows.map(journey => {
+                {visibleRows.map(journey => {
                   const isOpen = expanded === journey.journeyId;
                   const rmName = journey.rmUserId ? rmNameById?.get(journey.rmUserId) : undefined;
                   const status = statusOf(journey);
                   const tint = pillTint(status);
                   const quiet = journey.daysStalled >= 7;
+                  const journeyCount = journeyCounts.get(journey.customerId) ?? 1;
                   const detailId = `journey-facts-${journey.journeyId}`;
 
                   return (
@@ -295,6 +338,9 @@ export default function ChannelJourneys({ journeys, rmNameById, title = 'With th
                                   {journey.customerNumber || sentenceCase(journey.customerType)}
                                 </span>
                                 {rmName && onSelectRm ? ` · ${rmName}` : null}
+                                {collapsible && !showAll && journeyCount > 1
+                                  ? ` · ${journeyCount} journeys`
+                                  : null}
                               </span>
                             </span>
                           </button>
@@ -422,8 +468,29 @@ export default function ChannelJourneys({ journeys, rmNameById, title = 'With th
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
+
+      {collapsible && rows.length > 0 && (
+        <div className="rm-foot flex flex-wrap items-center justify-between gap-3">
+          <span>
+            {showingAll
+              ? `Showing all ${rows.length} journeys across ${filteredCustomers} customers`
+              : `Showing the quietest journey for ${previewRows.length} of ${filteredCustomers} customers`}
+          </span>
+          {canExpand && (
+            <button
+              type="button"
+              onClick={() => setShowAll(value => !value)}
+              className="text-sm font-medium hover:underline"
+              style={{ color: 'var(--rm-accent)' }}
+            >
+              {showAll ? 'Show customer view' : `Show all ${rows.length} journeys`}
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

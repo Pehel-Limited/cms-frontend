@@ -1,11 +1,6 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import ExecutiveOverview from '@/components/dashboard/ExecutiveOverview';
-
-/*
- * The executive view of the whole bank. The staff register that used to live here is at
- * /dashboard/admin/staff.
- */
+/* The executive overview moved to /dashboard/executive; keep old links working. */
 export default function AdminPage() {
-  return <ExecutiveOverview />;
+  redirect('/dashboard/executive');
 }

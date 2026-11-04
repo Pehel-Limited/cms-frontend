@@ -1,62 +1,147 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { customerService, type Customer } from '@/services/api/customerService';
-import { referenceDataService, type CustomerClassification, type TaxonomyNode } from '@/services/api/referenceDataService';
-import { formatCurrency, getCurrencySymbol } from '@/lib/format';
 import {
-  SortableHeader,
-  type SortConfig,
-  handleSortToggle,
-  sortData,
-} from '@/components/SortableHeader';
+  referenceDataService,
+  type CustomerClassification,
+  type TaxonomyNode,
+} from '@/services/api/referenceDataService';
+import { compactCurrency } from '@/lib/format';
+import { SortableHeader, type SortConfig, handleSortToggle, sortData } from '@/components/SortableHeader';
 
-/* ------------------------------------------------------------------ */
-/* Derivation helpers — every value below comes from the Customer record */
-/* ------------------------------------------------------------------ */
+/*
+ * The customer register.
+ *
+ * The register is the bank's customer book, not a scoped RM portfolio: the customer
+ * endpoint carries no bank identifier, so the page says so at the foot rather than
+ * claiming ownership. Every summary figure is derived from the returned records; the
+ * four compliance gaps (KYC, AML, risk rating and segmentation) drive the cover, the
+ * metric strip and the quick filters. The list is paginated — 321 customers in one
+ * table was 29,000px of page — and the segments/type/industry view is kept as a
+ * second reading of the same book.
+ */
 
-/** Declared annual figure for the relationship (revenue for entities, income for people). */
+type Tone = 'positive' | 'warning' | 'negative' | 'neutral' | 'accent';
+type View = 'register' | 'segments';
+
+const PAGE_SIZE = 25;
+
+const TONE_COLOR: Record<Tone, string> = {
+  positive: 'var(--rm-up)',
+  warning: 'var(--rm-warn)',
+  negative: 'var(--rm-down)',
+  neutral: 'var(--rm-text-muted)',
+  accent: 'var(--rm-brand)',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Pending',
+  APPROVED: 'Approved',
+  CLEAR: 'Clear',
+  REJECTED: 'Rejected',
+  EXPIRED: 'Expired',
+  NOT_STARTED: 'Not started',
+  NOT_RATED: 'Not rated',
+  EXCELLENT: 'Excellent',
+  GOOD: 'Good',
+  FAIR: 'Fair',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+  POOR: 'Poor',
+  BAD: 'Bad',
+};
+
+const RISK_RANK: Record<string, number> = {
+  EXCELLENT: 0,
+  GOOD: 1,
+  FAIR: 2,
+  MEDIUM: 3,
+  HIGH: 4,
+  POOR: 5,
+  BAD: 6,
+  NOT_RATED: 7,
+};
+
+const GLYPH = {
+  plus: 'M12 4.5v15m7.5-7.5h-15',
+  refresh:
+    'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+  search: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z',
+  chevron: 'M9 5l7 7-7 7',
+};
+
+function Glyph({ path, className = 'h-5 w-5' }: { path: string; className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      strokeWidth={1.8}
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d={path} />
+    </svg>
+  );
+}
+
+function humanise(value?: string): string {
+  if (!value) return '—';
+  return value
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/^\w/, c => c.toUpperCase());
+}
+
+function labelStatus(value?: string): string {
+  if (!value) return 'No record';
+  return STATUS_LABEL[value.toUpperCase()] ?? humanise(value);
+}
+
+function typeLabel(type?: string): string {
+  if (!type) return '—';
+  return customerService.formatCustomerType(type);
+}
+
+function segmentOf(c: Customer): string {
+  return c.customerSegment?.trim() || 'Unsegmented';
+}
+
 function declaredIncomeOf(c: Customer): number {
   return c.annualRevenue ?? c.annualIncome ?? 0;
 }
 
-function isActive(c: Customer): boolean {
-  return (c.customerStatus || '').toUpperCase() === 'ACTIVE';
-}
-
-function isAtRisk(c: Customer): boolean {
-  const r = (c.riskRating || '').toUpperCase();
-  return r === 'HIGH' || r === 'VERY_HIGH' || r === 'POOR' || r === 'BAD';
-}
-
-function needsKycReview(c: Customer): boolean {
-  const k = (c.kycStatus || '').toUpperCase();
-  return k === '' || k === 'NOT_STARTED' || k === 'PENDING' || k === 'EXPIRED' || k === 'REJECTED';
-}
-
-function kycTone(c: Customer): Tone {
-  const k = (c.kycStatus || '').toUpperCase();
-  if (/APPROV|COMPLET|VERIF/.test(k)) return 'positive';
-  if (k === 'REJECTED') return 'negative';
-  if (needsKycReview(c)) return 'warning';
+function kycTone(status?: string): Tone {
+  const value = (status ?? '').toUpperCase();
+  if (value === 'APPROVED') return 'positive';
+  if (value === 'PENDING' || value === 'NOT_STARTED') return 'warning';
+  if (value === 'REJECTED' || value === 'EXPIRED') return 'negative';
   return 'neutral';
 }
 
-function riskTone(c: Customer): Tone {
-  const r = (c.riskRating || '').toUpperCase();
-  if (!r || r === 'NOT_RATED') return 'neutral';
-  if (r === 'LOW') return 'positive';
-  if (r === 'MEDIUM') return 'warning';
-  return 'negative';
+function amlTone(status?: string): Tone {
+  const value = (status ?? '').toUpperCase();
+  if (value === 'CLEAR' || value === 'APPROVED') return 'positive';
+  if (value === 'PENDING') return 'warning';
+  if (value === 'REJECTED') return 'negative';
+  return 'neutral';
 }
 
-/** Whole months between `since` and today (0 when unknown/invalid). */
+function riskTone(rating?: string): Tone {
+  const value = (rating ?? 'NOT_RATED').toUpperCase();
+  if (value === 'EXCELLENT' || value === 'GOOD') return 'positive';
+  if (value === 'FAIR' || value === 'MEDIUM') return 'warning';
+  if (value === 'HIGH' || value === 'POOR' || value === 'BAD') return 'negative';
+  return 'neutral';
+}
+
 function monthsSince(since?: string): number {
   if (!since) return 0;
   const start = new Date(since);
-  if (isNaN(start.getTime())) return 0;
+  if (Number.isNaN(start.getTime())) return 0;
   const now = new Date();
   const months =
     (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
@@ -65,131 +150,148 @@ function monthsSince(since?: string): number {
 
 function tenureLabel(months: number): string {
   if (months <= 0) return '—';
-  const y = Math.floor(months / 12);
-  const m = months % 12;
-  return y > 0 ? `${y}y ${m}m` : `${m}m`;
-}
-
-function segmentOf(c: Customer): string {
-  return c.customerSegment || customerService.formatCustomerType(c.customerType);
-}
-
-function compactCurrency(n: number): string {
-  const sym = getCurrencySymbol();
-  const abs = Math.abs(n);
-  if (abs >= 1e9) return `${sym}${(n / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sym}${(n / 1e6).toFixed(1)}M`;
-  if (abs >= 1e3) return `${sym}${(n / 1e3).toFixed(1)}K`;
-  return formatCurrency(n);
+  const years = Math.floor(months / 12);
+  const remainder = months % 12;
+  return years > 0 ? `${years}y ${remainder}m` : `${remainder}m`;
 }
 
 function formatDate(value?: string): string {
   if (!value) return '—';
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/* ------------------------------------------------------------------ */
-/* Theme-aware tones — colour is always paired with a text label        */
-/* ------------------------------------------------------------------ */
+function formatMonthYear(value?: string): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+}
 
-type Tone = 'neutral' | 'positive' | 'warning' | 'negative' | 'accent';
-
-const TONE_BG: Record<Tone, string> = {
-  neutral: 'rgba(127,127,127,0.12)',
-  positive: 'rgba(16,185,129,0.14)',
-  warning: 'rgba(245,158,11,0.16)',
-  negative: 'rgba(239,68,68,0.14)',
-  accent: 'var(--rm-accent-muted)',
-};
-
-const TONE_DOT: Record<Tone, string> = {
-  neutral: 'var(--rm-text-muted)',
-  positive: '#10b981',
-  warning: '#f59e0b',
-  negative: '#ef4444',
-  accent: 'var(--rm-accent)',
-};
+function initialsOf(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (!words.length) return '?';
+  if (words.length === 1) return words[0].charAt(0).toUpperCase();
+  return `${words[0].charAt(0)}${words[words.length - 1].charAt(0)}`.toUpperCase();
+}
 
 function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  const color = TONE_COLOR[tone];
   return (
     <span
-      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium whitespace-nowrap"
-      style={{ backgroundColor: TONE_BG[tone], color: 'var(--rm-text)' }}
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium"
+      style={{ backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`, color }}
     >
-      <span
-        className="h-1.5 w-1.5 rounded-full shrink-0"
-        style={{ backgroundColor: TONE_DOT[tone] }}
-        aria-hidden="true"
-      />
+      <span className="h-1 w-1 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
       {children}
     </span>
   );
 }
 
-function Initials({ name }: { name: string }) {
+function Bar({ pct, color = 'var(--rm-brand)' }: { pct: number; color?: string }) {
   return (
-    <span
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
-      style={{ backgroundColor: 'var(--rm-accent-muted)', color: 'var(--rm-accent)' }}
+    <div
+      className="h-1.5 w-full overflow-hidden rounded-full"
+      style={{ backgroundColor: 'var(--rm-hairline-strong)' }}
       aria-hidden="true"
     >
-      {(name.trim().charAt(0) || '?').toUpperCase()}
-    </span>
+      <div
+        className="h-full rounded-full"
+        style={{ width: `${Math.max(0, Math.min(100, pct))}%`, backgroundColor: color }}
+      />
+    </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Row view-model (adds the derived fields the sorter can address)      */
-/* ------------------------------------------------------------------ */
+function Panel({
+  title,
+  note,
+  children,
+  foot,
+  className = '',
+}: {
+  title: string;
+  note?: React.ReactNode;
+  children: React.ReactNode;
+  foot?: React.ReactNode;
+  className?: string;
+}) {
+  const id = `customers-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  return (
+    <section className={`rm-panel flex flex-col ${className}`} aria-labelledby={id}>
+      <div className="rm-panel-head">
+        <div className="min-w-0">
+          <h2 id={id} className="rm-title">
+            {title}
+          </h2>
+          {note && <p className="rm-sub">{note}</p>}
+        </div>
+      </div>
+      <div className="rm-body flex-1">{children}</div>
+      {foot && <div className="rm-foot">{foot}</div>}
+    </section>
+  );
+}
 
 type CustomerRow = Customer & {
   rowName: string;
-  rowUsername: string;
+  rowType: string;
   rowSegment: string;
   rowIndustry: string;
+  rowIndustryCode: string;
   rowSector: string;
   rowBusinessType: string;
   rowIncome: number;
   rowTenureMonths: number;
   rowKyc: string;
+  rowAml: string;
   rowRisk: string;
 };
 
-const SORT_CLASS = '!px-5 !text-sm !normal-case !tracking-normal !font-medium';
-
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
+function pageWindow(page: number, count: number): (number | '…')[] {
+  if (count <= 7) return Array.from({ length: count }, (_, i) => i);
+  const pages = new Set<number>([0, count - 1, page, page - 1, page + 1]);
+  const ordered = [...pages].filter(p => p >= 0 && p < count).sort((a, b) => a - b);
+  const out: (number | '…')[] = [];
+  ordered.forEach((p, i) => {
+    if (i > 0 && p - ordered[i - 1] > 1) out.push('…');
+    out.push(p);
+  });
+  return out;
+}
 
 export default function CustomersPage() {
   const router = useRouter();
+
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [segmentFilter, setSegmentFilter] = useState('');
-  const [industryFilter, setIndustryFilter] = useState('');
-  const [riskOnly, setRiskOnly] = useState(false);
-  const [kycOnly, setKycOnly] = useState(false);
-  const [tab, setTab] = useState<'list' | 'segments'>('list');
   const [industries, setIndustries] = useState<TaxonomyNode[]>([]);
   const [classifications, setClassifications] = useState<CustomerClassification[]>([]);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({
-    field: 'rowName',
-    direction: 'asc',
-  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const [view, setView] = useState<View>('register');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [segmentFilter, setSegmentFilter] = useState('');
+  const [kycFilter, setKycFilter] = useState('');
+  const [amlFilter, setAmlFilter] = useState('');
+  const [riskFilter, setRiskFilter] = useState('');
+  const [industryFilter, setIndustryFilter] = useState('');
+  const [page, setPage] = useState(0);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'rowName', direction: 'asc' });
 
   const loadCustomers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await customerService.searchCustomers({ searchTerm: '' });
+      const data = await customerService.getAllCustomers();
       setCustomers(Array.isArray(data) ? data : []);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to load customers:', err);
-      setError('We could not load your customers. Please try again.');
+      setError('The customer register could not be loaded. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -200,8 +302,6 @@ export default function CustomersPage() {
   }, [loadCustomers]);
 
   useEffect(() => {
-    // Reference data only: a failure here must not break the list, it just leaves the
-    // Industry filter on legacy labels.
     referenceDataService
       .getIndustries()
       .then(setIndustries)
@@ -209,988 +309,1229 @@ export default function CustomersPage() {
   }, []);
 
   useEffect(() => {
-    if (customers.length === 0) return;
-    // Reference data only: a failure here leaves Sector and Business type blank for every row
-    // rather than breaking the list. The whole portfolio is fetched in one call, not per row.
+    if (!customers.length) return;
     referenceDataService
       .getPrimaryActivities(customers.map(c => c.customerId))
       .then(setClassifications)
       .catch(err => console.error('Failed to load customer classifications:', err));
   }, [customers]);
 
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, typeFilter, segmentFilter, kycFilter, amlFilter, riskFilter, industryFilter, sortConfig]);
+
   const classificationOf = useMemo(() => {
-    const byCustomer = new Map<string, CustomerClassification>();
-    classifications.forEach(c => {
-      if (c.customerId) byCustomer.set(c.customerId, c);
+    const map = new Map<string, CustomerClassification>();
+    classifications.forEach(classification => {
+      if (classification.customerId) map.set(classification.customerId, classification);
     });
-    return byCustomer;
+    return map;
   }, [classifications]);
 
-  const handleSort = (field: string) => setSortConfig(handleSortToggle(field, sortConfig));
-
-  /* Distinct filter values from real data */
-  const segmentOptions = useMemo(
-    () => Array.from(new Set(customers.map(segmentOf))).filter(Boolean).sort(),
-    [customers]
+  const industryNameOf = useCallback(
+    (code?: string) => {
+      if (!code) return '';
+      return industries.find(industry => industry.code === code)?.name || code;
+    },
+    [industries]
   );
-
-  /* Governed industries, so the filter offers classification values rather than whatever
-     free-text happened to be typed into a record. Unclassified customers stay reachable by
-     clearing the filter. */
-  const industryOptions = useMemo(() => {
-    const used = new Set(
-      customers.map(c => c.industryCode).filter(Boolean) as string[]
-    );
-    return industries
-      .filter(i => used.has(i.code))
-      .map(i => ({ code: i.code, name: i.name }));
-  }, [customers, industries]);
-
-  /* Summary figures — all derived from the loaded records */
-  const metrics = useMemo(() => {
-    return {
-      total: customers.length,
-      active: customers.filter(isActive).length,
-      atRisk: customers.filter(isAtRisk).length,
-      kycReview: customers.filter(needsKycReview).length,
-    };
-  }, [customers]);
 
   const rows = useMemo<CustomerRow[]>(
     () =>
-      customers.map(c => {
-        const months = monthsSince(c.customerSince);
-        const industryName = c.industryCode
-          ? industries.find(i => i.code === c.industryCode)?.name || c.industryCode
-          : c.industrySector;
-        const classification = classificationOf.get(c.customerId);
+      customers.map(customer => {
+        const classification = classificationOf.get(customer.customerId);
+        const industryCode =
+          customer.industryCode || classification?.industryCode || '';
+        const industryName =
+          industryNameOf(industryCode) || classification?.industryName || customer.industrySector || '—';
         return {
-          ...c,
-          rowName: customerService.getCustomerName(c),
-          rowUsername: c.portalUsername || '—',
-          rowSegment: segmentOf(c),
-          rowIndustry: industryName || '—',
+          ...customer,
+          rowName: customerService.getCustomerName(customer),
+          rowType: typeLabel(customer.customerType),
+          rowSegment: segmentOf(customer),
+          rowIndustry: industryName,
+          rowIndustryCode: industryCode,
           rowSector: classification?.sectorName || classification?.sectorCode || '—',
           rowBusinessType:
             classification?.businessTypeName || classification?.businessTypeCode || '—',
-          rowIncome: declaredIncomeOf(c),
-          rowTenureMonths: months,
-          rowKyc: c.kycStatus || '',
-          rowRisk: c.riskRating || '',
+          rowIncome: declaredIncomeOf(customer),
+          rowTenureMonths: monthsSince(customer.customerSince),
+          rowKyc: (customer.kycStatus || '').toUpperCase(),
+          rowAml: (customer.amlCheckStatus || '').toUpperCase(),
+          rowRisk: (customer.riskRating || 'NOT_RATED').toUpperCase(),
         };
       }),
-    [customers, industries, classificationOf]
+    [customers, classificationOf, industryNameOf]
   );
+
+  const typeOptions = useMemo(() => {
+    const types = Array.from(new Set(rows.map(row => row.customerType))).filter(Boolean);
+    return types.sort((a, b) => typeLabel(a).localeCompare(typeLabel(b)));
+  }, [rows]);
+
+  const segmentOptions = useMemo(
+    () => Array.from(new Set(rows.map(row => row.rowSegment))).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
+
+  const kycOptions = useMemo(
+    () => Array.from(new Set(rows.map(row => row.rowKyc).filter(Boolean))).sort(),
+    [rows]
+  );
+
+  const amlOptions = useMemo(
+    () => Array.from(new Set(rows.map(row => row.rowAml).filter(Boolean))).sort(),
+    [rows]
+  );
+
+  const riskOptions = useMemo(
+    () =>
+      Array.from(new Set(rows.map(row => row.rowRisk).filter(Boolean))).sort(
+        (a, b) => (RISK_RANK[a] ?? 99) - (RISK_RANK[b] ?? 99)
+      ),
+    [rows]
+  );
+
+  const industryOptions = useMemo(() => {
+    const codes = Array.from(
+      new Set(rows.map(row => row.rowIndustryCode).filter(Boolean))
+    ) as string[];
+    return codes
+      .map(code => ({ code, name: industryNameOf(code) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows, industryNameOf]);
 
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    const list = rows.filter(c => {
+    const list = rows.filter(row => {
       if (term) {
         const haystack = [
-          c.rowName,
-          c.portalUsername || '',
-          c.primaryEmail || '',
-          c.primaryPhone || '',
-          c.customerNumber || '',
+          row.rowName,
+          row.customerNumber,
+          row.portalUsername,
+          row.primaryEmail,
+          row.primaryPhone,
+          row.businessName,
+          row.businessLegalName,
+          row.rowIndustry,
+          row.rowSector,
+          row.rowSegment,
         ]
+          .filter(Boolean)
           .join(' ')
           .toLowerCase();
         if (!haystack.includes(term)) return false;
       }
-      if (segmentFilter && c.rowSegment !== segmentFilter) return false;
-      if (industryFilter && c.industryCode !== industryFilter) return false;
-      if (riskOnly && !isAtRisk(c)) return false;
-      if (kycOnly && !needsKycReview(c)) return false;
+      if (typeFilter && row.customerType !== typeFilter) return false;
+      if (segmentFilter && row.rowSegment !== segmentFilter) return false;
+      if (kycFilter && row.rowKyc !== kycFilter) return false;
+      if (amlFilter && row.rowAml !== amlFilter) return false;
+      if (riskFilter && row.rowRisk !== riskFilter) return false;
+      if (industryFilter && row.rowIndustryCode !== industryFilter) return false;
       return true;
     });
     return sortData(list, sortConfig);
-  }, [rows, searchTerm, segmentFilter, industryFilter, riskOnly, kycOnly, sortConfig]);
+  }, [
+    rows,
+    searchTerm,
+    typeFilter,
+    segmentFilter,
+    kycFilter,
+    amlFilter,
+    riskFilter,
+    industryFilter,
+    sortConfig,
+  ]);
 
-  /* Segment breakdown for the segments tab */
-  const segmentBreakdown = useMemo(() => {
-    const map = new Map<string, { count: number; income: number }>();
-    customers.forEach(c => {
-      const key = segmentOf(c);
-      const cur = map.get(key) || { count: 0, income: 0 };
-      cur.count += 1;
-      cur.income += declaredIncomeOf(c);
-      map.set(key, cur);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  const metrics = useMemo(() => {
+    const total = customers.length;
+    const individual = rows.filter(row => row.customerType === 'INDIVIDUAL').length;
+    const business = rows.filter(row => row.customerType !== 'INDIVIDUAL').length;
+    const kycPending = rows.filter(row => row.rowKyc === 'PENDING').length;
+    const amlPending = rows.filter(row => row.rowAml === 'PENDING').length;
+    const notRated = rows.filter(row => row.rowRisk === 'NOT_RATED').length;
+    const unsegmented = rows.filter(row => row.rowSegment === 'Unsegmented').length;
+    const declared = rows.filter(row => row.rowIncome > 0).length;
+    return {
+      total,
+      individual,
+      business,
+      kycPending,
+      amlPending,
+      notRated,
+      unsegmented,
+      declared,
+      kycShare: total ? (kycPending / total) * 100 : 0,
+      amlShare: total ? (amlPending / total) * 100 : 0,
+      ratedShare: total ? (notRated / total) * 100 : 0,
+      segmentShare: total ? (unsegmented / total) * 100 : 0,
+    };
+  }, [customers.length, rows]);
+
+  const segmentMix = useMemo(() => {
+    const map = new Map<string, { count: number; declared: number; declaredCount: number }>();
+    rows.forEach(row => {
+      const current = map.get(row.rowSegment) ?? { count: 0, declared: 0, declaredCount: 0 };
+      current.count += 1;
+      if (row.rowIncome > 0) {
+        current.declared += row.rowIncome;
+        current.declaredCount += 1;
+      }
+      map.set(row.rowSegment, current);
     });
     return Array.from(map.entries())
-      .map(([name, v]) => ({ name, ...v }))
+      .map(([name, value]) => ({
+        name,
+        ...value,
+        share: metrics.total ? (value.count / metrics.total) * 100 : 0,
+      }))
       .sort((a, b) => b.count - a.count);
-  }, [customers]);
+  }, [rows, metrics.total]);
+
+  const typeMix = useMemo(() => {
+    const map = new Map<string, number>();
+    rows.forEach(row => map.set(row.rowType, (map.get(row.rowType) ?? 0) + 1));
+    return Array.from(map.entries())
+      .map(([name, count]) => ({
+        name,
+        count,
+        share: metrics.total ? (count / metrics.total) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [rows, metrics.total]);
+
+  const industryMix = useMemo(() => {
+    const map = new Map<string, { name: string; count: number }>();
+    let unclassified = 0;
+    rows
+      .filter(row => row.customerType !== 'INDIVIDUAL')
+      .forEach(row => {
+        if (!row.rowIndustryCode) {
+          unclassified += 1;
+          return;
+        }
+        const current = map.get(row.rowIndustryCode) ?? {
+          name: row.rowIndustry,
+          count: 0,
+        };
+        current.count += 1;
+        map.set(row.rowIndustryCode, current);
+      });
+    const entries = Array.from(map.entries())
+      .map(([code, value]) => ({ code, ...value }))
+      .sort((a, b) => b.count - a.count);
+    return { entries, unclassified };
+  }, [rows]);
 
   const recentlyAdded = useMemo(
     () =>
-      [...customers]
-        .filter(c => c.customerSince)
+      [...rows]
+        .filter(row => row.customerSince)
         .sort(
           (a, b) =>
             new Date(b.customerSince || 0).getTime() - new Date(a.customerSince || 0).getTime()
         )
         .slice(0, 4),
-    [customers]
+    [rows]
   );
 
-  const hasFilters = !!(searchTerm || segmentFilter || industryFilter || riskOnly || kycOnly);
+  const hasFilters = !!(
+    searchTerm ||
+    typeFilter ||
+    segmentFilter ||
+    kycFilter ||
+    amlFilter ||
+    riskFilter ||
+    industryFilter
+  );
+
   const clearFilters = () => {
     setSearchTerm('');
+    setTypeFilter('');
     setSegmentFilter('');
+    setKycFilter('');
+    setAmlFilter('');
+    setRiskFilter('');
     setIndustryFilter('');
-    setRiskOnly(false);
-    setKycOnly(false);
   };
 
-  const fieldStyle: React.CSSProperties = {
-    backgroundColor: 'var(--rm-input)',
-    color: 'var(--rm-text)',
-    border: '1px solid var(--rm-border)',
+  const scrollToRegister = () => {
+    window.setTimeout(() => {
+      document.getElementById('customer-register')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
   };
 
-  const cardStyle: React.CSSProperties = { backgroundColor: 'var(--rm-card)' };
+  const quickFilter = (kind: 'kyc' | 'aml' | 'risk' | 'segment') => {
+    setView('register');
+    if (kind === 'kyc') setKycFilter(current => (current === 'PENDING' ? '' : 'PENDING'));
+    if (kind === 'aml') setAmlFilter(current => (current === 'PENDING' ? '' : 'PENDING'));
+    if (kind === 'risk') setRiskFilter(current => (current === 'NOT_RATED' ? '' : 'NOT_RATED'));
+    if (kind === 'segment') {
+      setSegmentFilter(current => (current === 'Unsegmented' ? '' : 'Unsegmented'));
+    }
+    scrollToRegister();
+  };
+
+  const drillSegment = (name: string) => {
+    setSegmentFilter(name);
+    setView('register');
+    scrollToRegister();
+  };
+
+  const drillType = (type: string) => {
+    const raw = rows.find(row => row.rowType === type)?.customerType;
+    if (raw) setTypeFilter(raw);
+    setView('register');
+    scrollToRegister();
+  };
+
+  const drillIndustry = (code: string) => {
+    setIndustryFilter(code);
+    setView('register');
+    scrollToRegister();
+  };
+
+  const handleSort = (field: string) => setSortConfig(current => handleSortToggle(field, current));
+
+  const readings = useMemo(
+    () => [
+      {
+        key: 'kyc' as const,
+        title:
+          metrics.kycShare >= 50
+            ? 'Most customers await KYC.'
+            : metrics.kycPending > 0
+              ? 'A share of customers await KYC.'
+              : 'KYC is clear across the register.',
+      },
+      {
+        key: 'aml' as const,
+        title:
+          metrics.amlShare >= 50
+            ? 'AML screening is outstanding for most.'
+            : metrics.amlPending > 0
+              ? 'A share of customers await AML screening.'
+              : 'AML screening is clear across the register.',
+      },
+      {
+        key: 'risk' as const,
+        title:
+          metrics.ratedShare >= 50
+            ? 'Most records have no risk rating.'
+            : metrics.notRated > 0
+              ? 'A share of records have no risk rating.'
+              : 'Every customer carries a risk rating.',
+      },
+      {
+        key: 'segment' as const,
+        title:
+          metrics.segmentShare >= 50
+            ? 'Over half have no segment.'
+            : metrics.unsegmented > 0
+              ? 'A share of customers have no segment.'
+              : 'Every customer carries a segment.',
+      },
+    ],
+    [metrics]
+  );
 
   return (
-    <div className="space-y-6">
-      {/* ══ Header ══ */}
-      <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-0">
-          <h1
-            className="text-2xl font-semibold tracking-tight"
-            style={{ color: 'var(--rm-text)' }}
-          >
-            Customers
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
-            {loading
-              ? 'Loading your customer portfolio…'
-              : error
-                ? 'Customer portfolio unavailable'
-                : `${metrics.total} customer${metrics.total === 1 ? '' : 's'} in your portfolio`}
-          </p>
-        </div>
-        <Link
-          href="/dashboard/customers/new"
-          className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          style={{ backgroundColor: 'var(--rm-accent)' }}
+    <div className="space-y-9 stagger-children" style={{ color: 'var(--rm-text)' }}>
+      {/* ══ Toolbar ══ */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+          Customer register
+        </p>
+        <button
+          type="button"
+          onClick={loadCustomers}
+          disabled={loading}
+          className="rounded-full p-2.5 transition-opacity hover:opacity-80 disabled:opacity-50"
+          style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text-muted)' }}
+          title="Refresh the register"
+          aria-label="Refresh the customer register"
         >
-          Add customer
-        </Link>
-      </header>
+          <Glyph path={GLYPH.refresh} className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
 
-      {/* ══ Error ══ */}
-      {error && (
-        <section
-          role="alert"
-          className="rounded-3xl p-6 flex items-start gap-4 flex-wrap"
-          style={{ backgroundColor: 'rgba(239,68,68,0.10)' }}
-        >
-          <svg
-            className="w-5 h-5 mt-0.5 shrink-0 text-red-600 dark:text-red-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            strokeWidth={1.8}
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-            />
-          </svg>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
-              {error}
+      {/* ══ Cover ══ */}
+      <section
+        className="rm-panel relative overflow-hidden"
+        style={{
+          backgroundImage:
+            'linear-gradient(135deg, color-mix(in srgb, var(--rm-brand) 12%, transparent), transparent 58%)',
+        }}
+        aria-label="Customer register position"
+      >
+        <div className="grid gap-10 p-7 sm:p-9 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+          <div className="min-w-0">
+            <h1
+              className="serif text-3xl font-medium leading-tight tracking-tight sm:text-4xl"
+              style={{ color: 'var(--rm-text)' }}
+            >
+              Customers
+            </h1>
+            <p className="num mt-6 text-5xl font-semibold leading-none tracking-tight sm:text-6xl">
+              {loading && !customers.length ? (
+                <span
+                  className="block h-14 w-40 max-w-full rounded-2xl animate-pulse"
+                  style={{ backgroundColor: 'var(--rm-input)' }}
+                  aria-hidden="true"
+                />
+              ) : (
+                metrics.total.toLocaleString()
+              )}
             </p>
-            <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
-              Nothing was lost — you can retry the request.
+            <p className="mt-3 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              customers on the bank&rsquo;s register
+              {customers.length > 0 && (
+                <>
+                  {' '}
+                  · <span className="num">{metrics.individual.toLocaleString()}</span> individual ·{' '}
+                  <span className="num">{metrics.business.toLocaleString()}</span> business
+                </>
+              )}
+            </p>
+
+            <div className="mt-6 flex flex-wrap items-center gap-2.5">
+              <Link href="/dashboard/customers/new" className="rm-btn rm-btn-solid">
+                <Glyph path={GLYPH.plus} className="h-4 w-4" />
+                Add customer
+              </Link>
+              <span
+                className="rounded-full px-3.5 py-1.5 text-sm"
+                style={{ backgroundColor: 'var(--rm-glass)', color: 'var(--rm-text-muted)' }}
+              >
+                <span className="num">{metrics.declared.toLocaleString()}</span> records with a declared
+                annual figure
+              </span>
+            </div>
+          </div>
+
+          <div className="min-w-0 xl:border-l xl:pl-8" style={{ borderColor: 'var(--rm-hairline)' }}>
+            <p className="serif text-lg font-medium" style={{ color: 'var(--rm-text)' }}>
+              The reading
+            </p>
+            {metrics.total > 0 ? (
+              <div className="mt-2">
+                {readings.map((reading, index) => (
+                  <button
+                    key={reading.key}
+                    type="button"
+                    onClick={() =>
+                      quickFilter(
+                        reading.key === 'risk'
+                          ? 'risk'
+                          : reading.key === 'segment'
+                            ? 'segment'
+                            : reading.key
+                      )
+                    }
+                    className="group flex w-full items-start gap-3 border-t py-3 text-left"
+                    style={{ borderColor: 'var(--rm-hairline)' }}
+                    aria-label={`Show the customers behind: ${reading.title}`}
+                  >
+                    <span className="num pt-0.5 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <span
+                      className="flex-1 text-sm font-medium leading-snug"
+                      style={{ color: 'var(--rm-text)' }}
+                    >
+                      {reading.title}
+                    </span>
+                    <Glyph
+                      path={GLYPH.chevron}
+                      className="mt-0.5 h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-70"
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                {loading ? 'Reading the register…' : 'No customer facts available.'}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ Compliance strip ══ */}
+      <section className="rm-panel" aria-label="Customer compliance and segmentation">
+        <div className="rm-strip">
+          <button
+            type="button"
+            onClick={() => quickFilter('kyc')}
+            aria-pressed={kycFilter === 'PENDING'}
+            className="rm-strip-cell w-full cursor-pointer text-left transition-opacity hover:opacity-80"
+            style={{
+              border: 0,
+              backgroundColor:
+                kycFilter === 'PENDING'
+                  ? 'color-mix(in srgb, var(--rm-warn) 10%, transparent)'
+                  : 'transparent',
+            }}
+          >
+            <div className="min-w-0">
+              <p className="rm-strip-label">Awaiting KYC</p>
+              <p className="rm-strip-note">Of {metrics.total.toLocaleString()} on file</p>
+            </div>
+            <p className="rm-strip-value num" style={{ color: 'var(--rm-warn)' }}>
+              {metrics.kycPending.toLocaleString()}
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => quickFilter('aml')}
+            aria-pressed={amlFilter === 'PENDING'}
+            className="rm-strip-cell w-full cursor-pointer text-left transition-opacity hover:opacity-80"
+            style={{
+              border: 0,
+              backgroundColor:
+                amlFilter === 'PENDING'
+                  ? 'color-mix(in srgb, var(--rm-warn) 10%, transparent)'
+                  : 'transparent',
+            }}
+          >
+            <div className="min-w-0">
+              <p className="rm-strip-label">Awaiting AML</p>
+              <p className="rm-strip-note">Screening not yet clear</p>
+            </div>
+            <p className="rm-strip-value num" style={{ color: 'var(--rm-warn)' }}>
+              {metrics.amlPending.toLocaleString()}
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => quickFilter('risk')}
+            aria-pressed={riskFilter === 'NOT_RATED'}
+            className="rm-strip-cell w-full cursor-pointer text-left transition-opacity hover:opacity-80"
+            style={{
+              border: 0,
+              backgroundColor:
+                riskFilter === 'NOT_RATED'
+                  ? 'color-mix(in srgb, var(--rm-warn) 10%, transparent)'
+                  : 'transparent',
+            }}
+          >
+            <div className="min-w-0">
+              <p className="rm-strip-label">Not risk-rated</p>
+              <p className="rm-strip-note">No rating recorded</p>
+            </div>
+            <p className="rm-strip-value num" style={{ color: 'var(--rm-warn)' }}>
+              {metrics.notRated.toLocaleString()}
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => quickFilter('segment')}
+            aria-pressed={segmentFilter === 'Unsegmented'}
+            className="rm-strip-cell w-full cursor-pointer text-left transition-opacity hover:opacity-80"
+            style={{
+              border: 0,
+              backgroundColor:
+                segmentFilter === 'Unsegmented'
+                  ? 'color-mix(in srgb, var(--rm-brand) 10%, transparent)'
+                  : 'transparent',
+            }}
+          >
+            <div className="min-w-0">
+              <p className="rm-strip-label">Unsegmented</p>
+              <p className="rm-strip-note">No segment assigned</p>
+            </div>
+            <p className="rm-strip-value num" style={{ color: 'var(--rm-brand)' }}>
+              {metrics.unsegmented.toLocaleString()}
+            </p>
+          </button>
+        </div>
+      </section>
+
+      {/* ══ Register / segments ══ */}
+      <section id="customer-register" className="scroll-mt-6" aria-label="Customer register">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <p className="num text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+              01
+            </p>
+            <h2 className="serif mt-0.5 text-2xl font-medium" style={{ color: 'var(--rm-text)' }}>
+              The register
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+              Search the book, or read it by segment, type and industry.
             </p>
           </div>
-          <button
-            onClick={loadCustomers}
-            className="rounded-full px-4 py-2 text-sm font-semibold"
-            style={{ backgroundColor: 'var(--rm-card)', color: 'var(--rm-text)' }}
+          <div
+            className="flex rounded-full p-1"
+            style={{ backgroundColor: 'var(--rm-glass)', border: '1px solid var(--rm-glass-border)' }}
+            role="group"
+            aria-label="Customer view"
           >
-            Retry
-          </button>
-        </section>
-      )}
+            {(
+              [
+                { key: 'register' as const, label: 'Register' },
+                { key: 'segments' as const, label: 'Segments' },
+              ]
+            ).map(item => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setView(item.key)}
+                aria-pressed={view === item.key}
+                className="rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
+                style={
+                  view === item.key
+                    ? { backgroundColor: 'var(--rm-brand)', color: '#fff' }
+                    : { color: 'var(--rm-text-secondary)' }
+                }
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {/* ══ Portfolio summary ══ */}
-      {!error && (
-        <section
-          aria-label="Portfolio summary"
-          className="rounded-3xl p-6"
-          style={cardStyle}
-        >
-          {loading ? (
-            <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="space-y-2">
+        {view === 'register' ? (
+          <Panel
+            title="All customers"
+            note={
+              <>
+                <span className="num">{filtered.length.toLocaleString()}</span> match the current view ·{' '}
+                <span className="num">{customers.length.toLocaleString()}</span> on file
+              </>
+            }
+            foot={
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  Showing{' '}
+                  <span className="num">
+                    {filtered.length === 0 ? 0 : safePage * PAGE_SIZE + 1}–
+                    {Math.min(filtered.length, (safePage + 1) * PAGE_SIZE)}
+                  </span>{' '}
+                  of <span className="num">{filtered.length.toLocaleString()}</span>
+                  {filtered.length !== customers.length ? ' filtered' : ''}
+                </span>
+                {pageCount > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5" aria-label="Pagination">
+                    <button
+                      type="button"
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={safePage === 0}
+                      className="rm-btn rm-btn-quiet !px-3 !py-1.5"
+                    >
+                      Previous
+                    </button>
+                    {pageWindow(safePage, pageCount).map((item, index) =>
+                      item === '…' ? (
+                        <span key={`gap-${index}`} className="px-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                          …
+                        </span>
+                      ) : (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setPage(item)}
+                          aria-current={item === safePage ? 'page' : undefined}
+                          className="num h-8 min-w-8 rounded-full px-2 text-sm font-medium transition-colors"
+                          style={
+                            item === safePage
+                              ? { backgroundColor: 'var(--rm-brand)', color: '#fff' }
+                              : { color: 'var(--rm-text-secondary)' }
+                          }
+                        >
+                          {item + 1}
+                        </button>
+                      )
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+                      disabled={safePage >= pageCount - 1}
+                      className="rm-btn rm-btn-quiet !px-3 !py-1.5"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            }
+          >
+            {loading && !customers.length ? (
+              <div className="space-y-3" aria-hidden="true">
+                {Array.from({ length: 8 }).map((_, index) => (
                   <div
-                    className="h-3.5 w-24 rounded-full animate-pulse"
+                    key={index}
+                    className="h-14 animate-pulse rounded-2xl"
                     style={{ backgroundColor: 'var(--rm-input)' }}
                   />
-                  <div
-                    className="h-7 w-16 rounded-full animate-pulse"
-                    style={{ backgroundColor: 'var(--rm-input)' }}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-              <div>
-                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                  Customers
-                </dt>
-                <dd
-                  className="mt-1 text-xl font-semibold tabular-nums"
-                  style={{ color: 'var(--rm-text)' }}
-                >
-                  {metrics.total.toLocaleString()}
-                </dd>
+                ))}
               </div>
-              <div>
-                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                  Active relationships
-                </dt>
-                <dd
-                  className="mt-1 text-xl font-semibold tabular-nums"
-                  style={{ color: 'var(--rm-text)' }}
-                >
-                  {metrics.active.toLocaleString()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                  High risk rating
-                </dt>
-                <dd
-                  className="mt-1 text-xl font-semibold tabular-nums"
-                  style={{ color: 'var(--rm-text)' }}
-                >
-                  {metrics.atRisk.toLocaleString()}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                  KYC review needed
-                </dt>
-                <dd
-                  className="mt-1 text-xl font-semibold tabular-nums"
-                  style={{ color: 'var(--rm-text)' }}
-                >
-                  {metrics.kycReview.toLocaleString()}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </section>
-      )}
-
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
-        {/* ══ Left column ══ */}
-        <div className="space-y-6 min-w-0">
-          {/* Filters */}
-          <section aria-label="Customer filters" className="rounded-3xl p-6" style={cardStyle}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label
-                  htmlFor="customer-search"
-                  className="block text-sm mb-1.5"
-                  style={{ color: 'var(--rm-text-secondary)' }}
-                >
-                  Search
-                </label>
-                <input
-                  id="customer-search"
-                  type="search"
-                  placeholder="Name, login id, email, phone or customer number"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm"
-                  style={fieldStyle}
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="customer-segment"
-                  className="block text-sm mb-1.5"
-                  style={{ color: 'var(--rm-text-secondary)' }}
-                >
-                  Segment
-                </label>
-                <select
-                  id="customer-segment"
-                  value={segmentFilter}
-                  onChange={e => setSegmentFilter(e.target.value)}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm"
-                  style={fieldStyle}
-                >
-                  <option value="">All segments</option>
-                  {segmentOptions.map(s => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {industryOptions.length > 0 && (
+            ) : error ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 py-6">
                 <div>
-                  <label
-                    htmlFor="customer-industry"
-                    className="block text-sm mb-1.5"
-                    style={{ color: 'var(--rm-text-secondary)' }}
-                  >
-                    Industry
+                  <p className="text-sm font-medium" style={{ color: 'var(--rm-text)' }}>
+                    {error}
+                  </p>
+                  <p className="mt-1 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                    The reference data already loaded is kept; retry the register read.
+                  </p>
+                </div>
+                <button type="button" onClick={loadCustomers} className="rm-btn rm-btn-solid">
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <label className="block min-w-0 sm:col-span-2 xl:col-span-1">
+                    <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                      Search
+                    </span>
+                    <div className="relative mt-1.5">
+                      <span
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                        style={{ color: 'var(--rm-text-muted)' }}
+                        aria-hidden="true"
+                      >
+                        <Glyph path={GLYPH.search} className="h-4 w-4" />
+                      </span>
+                      <input
+                        type="search"
+                        value={searchTerm}
+                        onChange={event => setSearchTerm(event.target.value)}
+                        placeholder="Name, login, email, number"
+                        aria-label="Search customers"
+                        className="w-full rounded-xl py-2.5 pl-9 pr-3 text-sm"
+                        style={{
+                          backgroundColor: 'var(--rm-input)',
+                          color: 'var(--rm-text)',
+                          border: '1px solid var(--rm-hairline-strong)',
+                        }}
+                      />
+                    </div>
                   </label>
-                  <select
-                    id="customer-industry"
-                    value={industryFilter}
-                    onChange={e => setIndustryFilter(e.target.value)}
-                    className="w-full rounded-xl px-4 py-2.5 text-sm"
-                    style={fieldStyle}
-                  >
-                    <option value="">All industries</option>
-                    {industryOptions.map(i => (
-                      <option key={i.code} value={i.code}>
-                        {i.name}
+
+                  <FilterSelect label="Customer type" value={typeFilter} onChange={setTypeFilter}>
+                    <option value="">All types</option>
+                    {typeOptions.map(type => (
+                      <option key={type} value={type}>
+                        {typeLabel(type)}
                       </option>
                     ))}
-                  </select>
+                  </FilterSelect>
+
+                  <FilterSelect label="Segment" value={segmentFilter} onChange={setSegmentFilter}>
+                    <option value="">All segments</option>
+                    {segmentOptions.map(segment => (
+                      <option key={segment} value={segment}>
+                        {segment}
+                      </option>
+                    ))}
+                  </FilterSelect>
+
+                  <FilterSelect label="KYC" value={kycFilter} onChange={setKycFilter}>
+                    <option value="">All KYC states</option>
+                    {kycOptions.map(status => (
+                      <option key={status} value={status}>
+                        {labelStatus(status)}
+                      </option>
+                    ))}
+                  </FilterSelect>
+
+                  <FilterSelect label="AML" value={amlFilter} onChange={setAmlFilter}>
+                    <option value="">All AML states</option>
+                    {amlOptions.map(status => (
+                      <option key={status} value={status}>
+                        {labelStatus(status)}
+                      </option>
+                    ))}
+                  </FilterSelect>
+
+                  <FilterSelect label="Risk rating" value={riskFilter} onChange={setRiskFilter}>
+                    <option value="">All risk states</option>
+                    {riskOptions.map(rating => (
+                      <option key={rating} value={rating}>
+                        {labelStatus(rating)}
+                      </option>
+                    ))}
+                  </FilterSelect>
+
+                  {industryOptions.length > 0 && (
+                    <FilterSelect label="Industry" value={industryFilter} onChange={setIndustryFilter}>
+                      <option value="">All industries</option>
+                      {industryOptions.map(industry => (
+                        <option key={industry.code} value={industry.code}>
+                          {industry.name}
+                        </option>
+                      ))}
+                    </FilterSelect>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="mt-5 flex items-center gap-2.5 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setRiskOnly(v => !v)}
-                aria-pressed={riskOnly}
-                className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
-                style={{
-                  backgroundColor: riskOnly ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
-                  color: riskOnly ? 'var(--rm-accent)' : 'var(--rm-text-secondary)',
-                }}
-              >
-                High risk rating
-                <span className="ml-1.5 tabular-nums">{metrics.atRisk}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setKycOnly(v => !v)}
-                aria-pressed={kycOnly}
-                className="rounded-full px-4 py-2 text-sm font-medium transition-opacity hover:opacity-90"
-                style={{
-                  backgroundColor: kycOnly ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
-                  color: kycOnly ? 'var(--rm-accent)' : 'var(--rm-text-secondary)',
-                }}
-              >
-                KYC review needed
-                <span className="ml-1.5 tabular-nums">{metrics.kycReview}</span>
-              </button>
-              {hasFilters && (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="ml-auto rounded-full px-4 py-2 text-sm font-medium hover:underline"
-                  style={{ color: 'var(--rm-accent)' }}
-                >
-                  Clear filters
-                </button>
-              )}
-            </div>
-          </section>
-
-          {/* Tabs */}
-          <div>
-            <div
-              role="tablist"
-              aria-label="Customer views"
-              className="flex gap-1 rounded-full p-1 w-fit"
-              style={{ backgroundColor: 'rgba(127,127,127,0.10)' }}
-            >
-              {(
-                [
-                  { key: 'list' as const, label: 'Customer list', id: 'customers-tab-list' },
-                  { key: 'segments' as const, label: 'Segments', id: 'customers-tab-segments' },
-                ]
-              ).map(t => (
-                <button
-                  key={t.key}
-                  id={t.id}
-                  role="tab"
-                  type="button"
-                  aria-selected={tab === t.key}
-                  aria-controls={`panel-${t.key}`}
-                  tabIndex={tab === t.key ? 0 : -1}
-                  onClick={() => setTab(t.key)}
-                  className="rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap transition-opacity hover:opacity-90"
-                  style={{
-                    backgroundColor: tab === t.key ? 'var(--rm-card)' : 'transparent',
-                    color: tab === t.key ? 'var(--rm-text)' : 'var(--rm-text-muted)',
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Customer list panel ── */}
-            <div
-              role="tabpanel"
-              id="panel-list"
-              aria-labelledby="customers-tab-list"
-              tabIndex={0}
-              hidden={tab !== 'list'}
-              className="mt-6"
-            >
-              {loading ? (
-                <ListSkeleton />
-              ) : error ? null : customers.length === 0 ? (
-                <EmptyCard
-                  title="No customers yet"
-                  body="Add your first customer to start building the portfolio."
-                  action={
-                    <Link
-                      href="/dashboard/customers/new"
-                      className="rounded-full px-4 py-2 text-sm font-medium hover:underline"
-                      style={{ color: 'var(--rm-accent)' }}
-                    >
-                      Add customer
-                    </Link>
-                  }
-                />
-              ) : filtered.length === 0 ? (
-                <EmptyCard
-                  title="No customers match these filters"
-                  body="Try widening the search or clearing the filters."
-                  action={
+                {hasFilters && (
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       type="button"
                       onClick={clearFilters}
-                      className="rounded-full px-4 py-2 text-sm font-medium hover:underline"
+                      className="text-sm font-medium hover:underline"
                       style={{ color: 'var(--rm-accent)' }}
                     >
                       Clear filters
                     </button>
-                  }
-                />
-              ) : (
-                <section className="rounded-3xl overflow-hidden" style={cardStyle}>
-                  <div
-                    className="flex items-center justify-between gap-3 flex-wrap px-5 py-4"
-                    style={{ borderBottom: '1px solid var(--rm-border)' }}
-                  >
-                    <h2
-                      className="text-xl font-semibold tracking-tight"
-                      style={{ color: 'var(--rm-text)' }}
-                    >
-                      Customer list
-                    </h2>
-                    <p className="text-sm tabular-nums" style={{ color: 'var(--rm-text-muted)' }}>
-                      Showing {filtered.length} of {customers.length} · select a column to sort
-                    </p>
+                    <span className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                      <span className="num">{filtered.length.toLocaleString()}</span> of{' '}
+                      <span className="num">{customers.length.toLocaleString()}</span> customers shown
+                    </span>
                   </div>
+                )}
 
-                  <div
-                    role="region"
-                    aria-label="Customer list, horizontally scrollable"
-                    tabIndex={0}
-                    className="overflow-x-auto"
-                  >
-                    <table className="w-full" aria-label="Customers">
+                {filtered.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <p className="text-sm font-medium" style={{ color: 'var(--rm-text)' }}>
+                      {customers.length === 0 ? 'No customers yet.' : 'No customers match these filters.'}
+                    </p>
+                    {customers.length === 0 ? (
+                      <Link
+                        href="/dashboard/customers/new"
+                        className="mt-3 inline-flex text-sm font-medium hover:underline"
+                        style={{ color: 'var(--rm-accent)' }}
+                      >
+                        Add the first customer
+                      </Link>
+                    ) : hasFilters ? (
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="mt-2 text-sm font-medium hover:underline"
+                        style={{ color: 'var(--rm-accent)' }}
+                      >
+                        Clear filters
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <p className="mb-2 text-[13px] sm:hidden" style={{ color: 'var(--rm-text-muted)' }}>
+                      Swipe the table for KYC, AML, risk and tenure.
+                    </p>
+                    <table className="rm-table w-full min-w-[900px] table-fixed border-collapse text-left">
+                      <colgroup>
+                        <col style={{ width: '26%' }} />
+                        <col style={{ width: '9%' }} />
+                        <col style={{ width: '20%' }} />
+                        <col style={{ width: '11%' }} />
+                        <col style={{ width: '11%' }} />
+                        <col style={{ width: '10%' }} />
+                        <col style={{ width: '10%' }} />
+                        <col style={{ width: '3%' }} />
+                      </colgroup>
                       <thead>
-                        <tr style={{ borderBottom: '1px solid var(--rm-border)' }}>
+                        <tr>
                           <SortableHeader
                             label="Customer"
                             field="rowName"
                             currentSort={sortConfig}
                             onSort={handleSort}
-                            className={SORT_CLASS}
                           />
                           <SortableHeader
-                            label="Login id"
-                            field="rowUsername"
+                            label="Type"
+                            field="rowType"
                             currentSort={sortConfig}
                             onSort={handleSort}
-                            className={SORT_CLASS}
                           />
                           <SortableHeader
                             label="Segment"
                             field="rowSegment"
                             currentSort={sortConfig}
                             onSort={handleSort}
-                            className={SORT_CLASS}
-                          />
-                          <SortableHeader
-                            label="Industry"
-                            field="rowIndustry"
-                            currentSort={sortConfig}
-                            onSort={handleSort}
-                            className={SORT_CLASS}
-                          />
-                          <SortableHeader
-                            label="Sector"
-                            field="rowSector"
-                            currentSort={sortConfig}
-                            onSort={handleSort}
-                            className={SORT_CLASS}
-                          />
-                          <SortableHeader
-                            label="Business type"
-                            field="rowBusinessType"
-                            currentSort={sortConfig}
-                            onSort={handleSort}
-                            className={SORT_CLASS}
-                          />
-                          <SortableHeader
-                            label="Revenue / income"
-                            field="rowIncome"
-                            currentSort={sortConfig}
-                            onSort={handleSort}
-                            align="right"
-                            className={SORT_CLASS}
-                          />
-                          <SortableHeader
-                            label="Customer since"
-                            field="rowTenureMonths"
-                            currentSort={sortConfig}
-                            onSort={handleSort}
-                            className={SORT_CLASS}
                           />
                           <SortableHeader
                             label="KYC"
                             field="rowKyc"
                             currentSort={sortConfig}
                             onSort={handleSort}
-                            className={SORT_CLASS}
                           />
                           <SortableHeader
-                            label="Risk rating"
+                            label="AML"
+                            field="rowAml"
+                            currentSort={sortConfig}
+                            onSort={handleSort}
+                          />
+                          <SortableHeader
+                            label="Risk"
                             field="rowRisk"
                             currentSort={sortConfig}
                             onSort={handleSort}
-                            className={SORT_CLASS}
                           />
+                          <SortableHeader
+                            label="Since"
+                            field="rowTenureMonths"
+                            currentSort={sortConfig}
+                            onSort={handleSort}
+                          />
+                          <th className="w-10 px-2 py-3" />
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.map(c => (
+                        {pageRows.map(customer => (
                           <tr
-                            key={c.customerId}
-                            className="cursor-pointer transition-colors"
-                            style={{ borderBottom: '1px solid var(--rm-border)' }}
-                            onMouseEnter={e =>
-                              (e.currentTarget.style.backgroundColor = 'rgba(127,127,127,0.06)')
-                            }
-                            onMouseLeave={e =>
-                              (e.currentTarget.style.backgroundColor = 'transparent')
-                            }
-                            onClick={() =>
-                              router.push(`/dashboard/customers/${c.customerId}`)
-                            }
+                            key={customer.customerId}
+                            tabIndex={0}
+                            onClick={() => router.push(`/dashboard/customers/${customer.customerId}`)}
+                            onKeyDown={event => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                router.push(`/dashboard/customers/${customer.customerId}`);
+                              }
+                            }}
+                            className="cursor-pointer"
+                            title="Open the customer record"
                           >
-                            <td className="px-5 py-4">
+                            <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
-                                <Initials name={c.rowName} />
+                                <span
+                                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                                  style={{
+                                    backgroundColor: 'var(--rm-brand-soft)',
+                                    color: 'var(--rm-brand-on-soft)',
+                                  }}
+                                  aria-hidden="true"
+                                >
+                                  {initialsOf(customer.rowName)}
+                                </span>
                                 <div className="min-w-0">
                                   <Link
-                                    href={`/dashboard/customers/${c.customerId}`}
-                                    onClick={e => e.stopPropagation()}
-                                    className="block text-base font-medium truncate hover:underline"
+                                    href={`/dashboard/customers/${customer.customerId}`}
+                                    onClick={event => event.stopPropagation()}
+                                    className="serif block truncate text-sm font-medium hover:underline"
                                     style={{ color: 'var(--rm-text)' }}
                                   >
-                                    {c.rowName}
+                                    {customer.rowName}
                                   </Link>
-                                  <p
-                                    className="text-sm truncate"
-                                    style={{ color: 'var(--rm-text-muted)' }}
-                                  >
-                                    {c.customerNumber || customerService.formatCustomerType(c.customerType)}
+                                  <p className="truncate text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                                    <span className="num">{customer.customerNumber || '—'}</span>
+                                    {customer.portalUsername ? ` · @${customer.portalUsername}` : ''}
                                   </p>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-5 py-4">
-                              <span
-                                className="text-sm font-mono"
-                                style={{ color: 'var(--rm-text-secondary)' }}
-                              >
-                                {c.rowUsername}
+                            <td className="px-4 py-3">
+                              <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                                {customer.rowType}
                               </span>
                             </td>
-                            <td className="px-5 py-4">
-                              <span
-                                className="text-sm"
-                                style={{ color: 'var(--rm-text-secondary)' }}
-                              >
-                                {c.rowSegment}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4">
-                              <span
-                                className="text-sm"
-                                style={{ color: 'var(--rm-text-secondary)' }}
-                              >
-                                {c.rowIndustry}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4">
-                              <span
-                                className="text-sm"
-                                style={{ color: 'var(--rm-text-secondary)' }}
-                              >
-                                {c.rowSector}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4">
-                              <span
-                                className="text-sm"
-                                style={{ color: 'var(--rm-text-secondary)' }}
-                              >
-                                {c.rowBusinessType}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 text-right whitespace-nowrap">
-                              <span
-                                className="text-base font-medium tabular-nums"
-                                style={{ color: 'var(--rm-text)' }}
-                              >
-                                {c.rowIncome > 0 ? compactCurrency(c.rowIncome) : '—'}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 whitespace-nowrap">
+                            <td className="px-4 py-3">
                               <p
-                                className="text-sm tabular-nums"
-                                style={{ color: 'var(--rm-text)' }}
+                                className="truncate text-sm"
+                                style={{
+                                  color:
+                                    customer.rowSegment === 'Unsegmented'
+                                      ? 'var(--rm-warn)'
+                                      : 'var(--rm-text-secondary)',
+                                }}
+                                title={customer.rowSegment}
                               >
-                                {tenureLabel(c.rowTenureMonths)}
+                                {customer.rowSegment}
                               </p>
                               <p
-                                className="text-sm"
+                                className="truncate text-xs"
                                 style={{ color: 'var(--rm-text-muted)' }}
+                                title={`${customer.rowIndustry}${customer.rowSector !== '—' ? ` · ${customer.rowSector}` : ''}${
+                                  customer.rowBusinessType !== '—' ? ` · ${customer.rowBusinessType}` : ''
+                                }`}
                               >
-                                {formatDate(c.customerSince)}
+                                {customer.customerType === 'INDIVIDUAL'
+                                  ? customer.occupation || 'Individual'
+                                  : customer.rowIndustry}
                               </p>
                             </td>
-                            <td className="px-5 py-4">
-                              <Pill tone={kycTone(c)}>
-                                {c.kycStatus ? c.kycStatus.replace(/_/g, ' ') : 'No record'}
-                              </Pill>
+                            <td className="px-4 py-3">
+                              <Pill tone={kycTone(customer.rowKyc)}>{labelStatus(customer.rowKyc)}</Pill>
                             </td>
-                            <td className="px-5 py-4">
-                              <Pill tone={riskTone(c)}>
-                                {c.riskRating ? c.riskRating.replace(/_/g, ' ') : 'Not rated'}
-                              </Pill>
+                            <td className="px-4 py-3">
+                              <Pill tone={amlTone(customer.rowAml)}>{labelStatus(customer.rowAml)}</Pill>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Pill tone={riskTone(customer.rowRisk)}>{labelStatus(customer.rowRisk)}</Pill>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p
+                                className="num text-sm"
+                                style={{ color: 'var(--rm-text-secondary)' }}
+                                title={formatDate(customer.customerSince)}
+                              >
+                                {formatMonthYear(customer.customerSince)}
+                              </p>
+                              <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                                {tenureLabel(customer.rowTenureMonths)}
+                              </p>
+                            </td>
+                            <td className="px-2 py-3 text-right" style={{ color: 'var(--rm-text-muted)' }}>
+                              <Glyph path={GLYPH.chevron} className="ml-auto h-4 w-4" />
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </section>
-              )}
-            </div>
-
-            {/* ── Segments panel ── */}
-            <div
-              role="tabpanel"
-              id="panel-segments"
-              aria-labelledby="customers-tab-segments"
-              tabIndex={0}
-              hidden={tab !== 'segments'}
-              className="mt-6"
+                )}
+              </div>
+            )}
+          </Panel>
+        ) : (
+          <div className="grid items-start gap-5 xl:grid-cols-12">
+            <Panel
+              title="By segment"
+              note="Customer count and declared annual value, where recorded."
+              className="min-w-0 xl:col-span-7"
+              foot={
+                <>
+                  Declared annual revenue or income is shown only where the record carries a figure
+                  (<span className="num">{metrics.declared.toLocaleString()}</span> of{' '}
+                  <span className="num">{customers.length.toLocaleString()}</span> customers).
+                </>
+              }
             >
-              {loading ? (
-                <ListSkeleton />
-              ) : error ? null : segmentBreakdown.length === 0 ? (
-                <EmptyCard
-                  title="No segments to show"
-                  body="Segments appear once customers have been added."
-                />
-              ) : (
-                <section aria-label="Customer segments" className="space-y-4">
-                  <h2
-                    className="text-xl font-semibold tracking-tight"
-                    style={{ color: 'var(--rm-text)' }}
+              <div>
+                {segmentMix.map(segment => (
+                  <button
+                    key={segment.name}
+                    type="button"
+                    onClick={() => drillSegment(segment.name)}
+                    className="flex w-full items-center gap-3 border-b py-2.5 text-left last:border-0"
+                    style={{ borderColor: 'var(--rm-hairline)' }}
                   >
-                    Segments
-                  </h2>
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {segmentBreakdown.map(seg => {
-                      const pct = metrics.total
-                        ? Math.round((seg.count / metrics.total) * 100)
-                        : 0;
-                      return (
-                        <li key={seg.name} className="rounded-3xl p-6" style={cardStyle}>
-                          <div className="flex items-start justify-between gap-3">
-                            <p
-                              className="text-base font-medium"
-                              style={{ color: 'var(--rm-text)' }}
-                            >
-                              {seg.name}
-                            </p>
-                            <span
-                              className="text-sm tabular-nums shrink-0"
-                              style={{ color: 'var(--rm-text-muted)' }}
-                            >
-                              {seg.count} customer{seg.count === 1 ? '' : 's'}
-                            </span>
-                          </div>
-                          <p
-                            className="mt-3 text-base font-medium tabular-nums"
-                            style={{ color: 'var(--rm-text)' }}
-                          >
-                            {seg.income > 0 ? compactCurrency(seg.income) : '—'}
-                          </p>
-                          <p className="text-sm" style={{ color: 'var(--rm-text-muted)' }}>
-                            Declared revenue or income · {pct}% of customers
-                          </p>
-                          <div
-                            className="mt-3 h-1.5 rounded-full overflow-hidden"
-                            style={{ backgroundColor: 'var(--rm-input)' }}
-                            aria-hidden="true"
-                          >
-                            <div
-                              className="h-full rounded-full"
-                              style={{ width: `${pct}%`, backgroundColor: 'var(--rm-accent)' }}
-                            />
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ══ Sidebar ══ */}
-        <aside className="space-y-6" aria-label="Portfolio insights">
-          <section className="rounded-3xl p-6" style={cardStyle}>
-            <h2
-              className="text-xl font-semibold tracking-tight"
-              style={{ color: 'var(--rm-text)' }}
-            >
-              Needs attention
-            </h2>
-            <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
-              Select a filter to narrow the customer list.
-            </p>
-            <div className="mt-4 space-y-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setRiskOnly(v => !v);
-                  setTab('list');
-                }}
-                aria-pressed={riskOnly}
-                className="w-full text-left rounded-2xl px-5 py-4 transition-opacity hover:opacity-90"
-                style={{
-                  backgroundColor: riskOnly ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
-                }}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
-                    High risk rating
-                  </span>
-                  <span
-                    className="text-base font-semibold tabular-nums"
-                    style={{ color: 'var(--rm-text)' }}
-                  >
-                    {loading ? '—' : metrics.atRisk}
-                  </span>
-                </span>
-                <span
-                  className="block text-sm mt-1"
-                  style={{ color: 'var(--rm-text-muted)' }}
-                >
-                  {riskOnly ? 'Filter applied' : 'Not filtered'}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setKycOnly(v => !v);
-                  setTab('list');
-                }}
-                aria-pressed={kycOnly}
-                className="w-full text-left rounded-2xl px-5 py-4 transition-opacity hover:opacity-90"
-                style={{
-                  backgroundColor: kycOnly ? 'var(--rm-accent-muted)' : 'var(--rm-input)',
-                }}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="text-base font-medium" style={{ color: 'var(--rm-text)' }}>
-                    KYC review needed
-                  </span>
-                  <span
-                    className="text-base font-semibold tabular-nums"
-                    style={{ color: 'var(--rm-text)' }}
-                  >
-                    {loading ? '—' : metrics.kycReview}
-                  </span>
-                </span>
-                <span
-                  className="block text-sm mt-1"
-                  style={{ color: 'var(--rm-text-muted)' }}
-                >
-                  {kycOnly ? 'Filter applied' : 'Not filtered'}
-                </span>
-              </button>
-            </div>
-          </section>
-
-          <section className="rounded-3xl p-6" style={cardStyle}>
-            <h2
-              className="text-xl font-semibold tracking-tight"
-              style={{ color: 'var(--rm-text)' }}
-            >
-              Recently onboarded
-            </h2>
-            {loading ? (
-              <div className="mt-4 space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-10 rounded-full animate-pulse"
-                    style={{ backgroundColor: 'var(--rm-input)' }}
-                  />
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="truncate text-sm font-medium"
+                        style={{
+                          color:
+                            segment.name === 'Unsegmented'
+                              ? 'var(--rm-warn)'
+                              : 'var(--rm-text)',
+                        }}
+                      >
+                        {segment.name}
+                      </p>
+                      <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                        <span className="num">{segment.count.toLocaleString()}</span> customers
+                        {segment.declaredCount > 0
+                          ? ` · ${segment.declaredCount} declared`
+                          : ' · no declared value'}
+                      </p>
+                    </div>
+                    <div className="w-20 shrink-0">
+                      <Bar pct={segment.share} />
+                    </div>
+                    <p className="num w-8 shrink-0 text-right text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                      {segment.count.toLocaleString()}
+                    </p>
+                    <p className="num w-20 shrink-0 text-right text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                      {segment.declared > 0 ? compactCurrency(segment.declared) : '—'}
+                    </p>
+                    <Glyph path={GLYPH.chevron} className="h-4 w-4 shrink-0" />
+                  </button>
                 ))}
               </div>
-            ) : recentlyAdded.length === 0 ? (
-              <p className="text-sm mt-3" style={{ color: 'var(--rm-text-muted)' }}>
-                No onboarding dates recorded yet.
+            </Panel>
+
+            <div className="min-w-0 space-y-5 xl:col-span-5">
+            <Panel
+              title="By customer type"
+              note="The register splits into individual and business relationships."
+            >
+              <div>
+                {typeMix.map(type => (
+                  <button
+                    key={type.name}
+                    type="button"
+                    onClick={() => drillType(type.name)}
+                    className="flex w-full items-center gap-3 border-b py-3 text-left last:border-0"
+                    style={{ borderColor: 'var(--rm-hairline)' }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium" style={{ color: 'var(--rm-text)' }}>
+                        {type.name}
+                      </p>
+                      <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                        <span className="num">{type.count.toLocaleString()}</span> customers
+                      </p>
+                    </div>
+                    <div className="w-24 shrink-0">
+                      <Bar pct={type.share} />
+                    </div>
+                    <p className="num w-10 shrink-0 text-right text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                      {type.count.toLocaleString()}
+                    </p>
+                    <Glyph path={GLYPH.chevron} className="h-4 w-4 shrink-0" />
+                  </button>
+                ))}
+              </div>
+              <p className="mt-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                Customers with no segment are shown as Unsegmented in the register, not folded into
+                their legal type.
               </p>
-            ) : (
-              <ul className="mt-4 divide-y" style={{ borderColor: 'var(--rm-border)' }}>
-                {recentlyAdded.map(c => {
-                  const name = customerService.getCustomerName(c);
-                  return (
-                    <li key={c.customerId}>
-                      <Link
-                        href={`/dashboard/customers/${c.customerId}`}
-                        className="flex items-center gap-3 px-0 py-4 hover:underline"
+            </Panel>
+
+            <Panel
+              title="Recently onboarded"
+              note="Newest relationships by customer-since date."
+            >
+              {recentlyAdded.length === 0 ? (
+                <p className="py-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  No customer-since dates are recorded.
+                </p>
+              ) : (
+                <div>
+                  {recentlyAdded.map(customer => (
+                    <Link
+                      key={customer.customerId}
+                      href={`/dashboard/customers/${customer.customerId}`}
+                      className="flex items-center gap-3 border-b py-3 last:border-0"
+                      style={{ borderColor: 'var(--rm-hairline)' }}
+                    >
+                      <span
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                        style={{
+                          backgroundColor: 'var(--rm-brand-soft)',
+                          color: 'var(--rm-brand-on-soft)',
+                        }}
+                        aria-hidden="true"
                       >
-                        <Initials name={name} />
-                        <span className="min-w-0 flex-1">
-                          <span
-                            className="block text-base font-medium truncate"
-                            style={{ color: 'var(--rm-text)' }}
-                          >
-                            {name}
-                          </span>
-                          <span
-                            className="block text-sm"
-                            style={{ color: 'var(--rm-text-muted)' }}
-                          >
-                            Onboarded {formatDate(c.customerSince)}
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        </aside>
-      </div>
+                        {initialsOf(customer.rowName)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="serif truncate text-sm font-medium" style={{ color: 'var(--rm-text)' }}>
+                          {customer.rowName}
+                        </p>
+                        <p className="truncate text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                          <span className="num">{customer.customerNumber || '—'}</span> · {customer.rowType}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                          Onboarded
+                        </p>
+                        <p className="num text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                          {formatDate(customer.customerSince)}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Panel>
+            </div>
 
-      {loading && (
-        <p role="status" className="sr-only">
-          Loading customers
-        </p>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* States                                                              */
-/* ------------------------------------------------------------------ */
-
-function ListSkeleton() {
-  return (
-    <div className="rounded-3xl overflow-hidden" style={{ backgroundColor: 'var(--rm-card)' }}>
-      <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--rm-border)' }}>
-        <div
-          className="h-5 w-40 rounded-full animate-pulse"
-          style={{ backgroundColor: 'var(--rm-input)' }}
-        />
-      </div>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-3 px-5 py-4"
-          style={{ borderBottom: '1px solid var(--rm-border)' }}
-        >
-          <div
-            className="h-10 w-10 rounded-full animate-pulse shrink-0"
-            style={{ backgroundColor: 'var(--rm-input)' }}
-          />
-          <div className="flex-1 space-y-2">
-            <div
-              className="h-4 w-1/3 rounded-full animate-pulse"
-              style={{ backgroundColor: 'var(--rm-input)' }}
-            />
-            <div
-              className="h-3 w-1/5 rounded-full animate-pulse"
-              style={{ backgroundColor: 'var(--rm-input)' }}
-            />
+            <Panel
+              title="Business by industry"
+              note="Primary industry for business customers, where classified."
+              className="min-w-0 xl:col-span-12"
+              foot={
+                industryMix.unclassified > 0 ? (
+                  <>
+                    <span className="num">{industryMix.unclassified.toLocaleString()}</span> business
+                    customer{industryMix.unclassified === 1 ? ' has' : 's have'} no industry
+                    classification.
+                  </>
+                ) : null
+              }
+            >
+              {industryMix.entries.length === 0 ? (
+                <p className="py-4 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+                  No business customer carries an industry classification yet.
+                </p>
+              ) : (
+                <div>
+                  {industryMix.entries.slice(0, 6).map(industry => {
+                    const businessTotal = Math.max(1, metrics.business - industryMix.unclassified);
+                    return (
+                      <button
+                        key={industry.code}
+                        type="button"
+                        onClick={() => drillIndustry(industry.code)}
+                        className="flex w-full items-center gap-3 border-b py-2.5 text-left last:border-0"
+                        style={{ borderColor: 'var(--rm-hairline)' }}
+                      >
+                        <p className="min-w-0 flex-1 text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                          {industry.name}
+                        </p>
+                        <div className="w-24 shrink-0">
+                          <Bar pct={(industry.count / businessTotal) * 100} color="var(--rm-brand-strong)" />
+                        </div>
+                        <p className="num w-8 shrink-0 text-right text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+                          {industry.count.toLocaleString()}
+                        </p>
+                        <Glyph path={GLYPH.chevron} className="h-4 w-4 shrink-0" />
+                      </button>
+                    );
+                  })}
+                  {industryMix.entries.length > 6 && (
+                    <p className="mt-2 text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                      and {industryMix.entries.length - 6} smaller industries.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Panel>
           </div>
-          <div
-            className="h-6 w-20 rounded-full animate-pulse shrink-0"
-            style={{ backgroundColor: 'var(--rm-input)' }}
-          />
-        </div>
-      ))}
+        )}
+      </section>
+
+      <p className="pb-2 text-sm" style={{ color: 'var(--rm-text-muted)' }}>
+        The customer service returns the register without a bank identifier, so this list is not
+        filtered by bank. It is returned row by row: the same name can appear under different
+        customer numbers. Reference data (industry, sector and business type) is read separately and
+        may be incomplete.
+        {lastUpdated && (
+          <>
+            {' '}
+            · Last refreshed at{' '}
+            <span className="num">
+              {lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </>
+        )}
+      </p>
     </div>
   );
 }
 
-function EmptyCard({
-  title,
-  body,
-  action,
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  children,
 }: {
-  title: string;
-  body: string;
-  action?: React.ReactNode;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl py-16 px-6 text-center" style={{ backgroundColor: 'var(--rm-card)' }}>
-      <div
-        className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full"
-        style={{ backgroundColor: 'var(--rm-input)' }}
+    <label className="block min-w-0">
+      <span className="text-sm" style={{ color: 'var(--rm-text-secondary)' }}>
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm"
+        style={{
+          backgroundColor: 'var(--rm-input)',
+          color: 'var(--rm-text)',
+          border: '1px solid var(--rm-hairline-strong)',
+        }}
       >
-        <svg
-          className="w-7 h-7"
-          style={{ color: 'var(--rm-text-muted)' }}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          strokeWidth={1.6}
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
-          />
-        </svg>
-      </div>
-      <p className="text-base font-semibold" style={{ color: 'var(--rm-text)' }}>
-        {title}
-      </p>
-      <p className="text-sm mt-1" style={{ color: 'var(--rm-text-muted)' }}>
-        {body}
-      </p>
-      {action && <div className="mt-4">{action}</div>}
-    </div>
+        {children}
+      </select>
+    </label>
   );
 }

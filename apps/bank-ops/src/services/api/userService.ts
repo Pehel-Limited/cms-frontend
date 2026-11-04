@@ -29,6 +29,28 @@ export interface UsersResponse {
   number: number;
 }
 
+/** A role the administrator can grant, with the permissions it carries. */
+export interface RoleOption {
+  roleId: string;
+  roleType: string;
+  roleName: string;
+  description: string;
+  permissions: string[];
+}
+
+export interface CreateBankUserPayload {
+  username: string;
+  email: string;
+  temporaryPassword: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  roleNames: string[];
+  forcePasswordChangeOnFirstLogin?: boolean;
+}
+
+export type BankUserStatusAction = 'activate' | 'suspend' | 'deactivate';
+
 class UserService {
   private baseUrl = '/api/v1/users';
 
@@ -64,6 +86,22 @@ class UserService {
       `/api/v1/users/underwriters${search ? `?search=${encodeURIComponent(search)}` : ''}`
     );
     return response.content;
+  }
+
+  getRoleCatalog(): Promise<RoleOption[]> {
+    return apiClient.get<RoleOption[]>('/api/v1/users/roles');
+  }
+
+  createBankUser(payload: CreateBankUserPayload): Promise<User> {
+    return apiClient.post<User>('/api/v1/users', payload);
+  }
+
+  setUserStatus(userId: string, action: BankUserStatusAction): Promise<void> {
+    return apiClient.put<void>(`/api/v1/users/${userId}/${action}`, {});
+  }
+
+  replaceUserRoles(userId: string, roleNames: string[]): Promise<User> {
+    return apiClient.put<User>(`/api/v1/users/${userId}/roles`, { roleNames });
   }
 }
 

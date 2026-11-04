@@ -7,6 +7,7 @@ import { formatCurrency } from '@/lib/format';
 import {
   applicationService,
   LoanApplication,
+  ApplicationContext,
   CustomerStatusInfo,
   CustomerStage,
   CUSTOMER_STAGES,
@@ -68,6 +69,7 @@ import {
   isBookingPhaseStatus,
 } from '@/services/api/booking-service';
 import { ApplicationCompanion } from '@/components/applications/ApplicationCompanion';
+import { partyService } from '@/services/api/party-service';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-IE', {
@@ -115,6 +117,113 @@ const MILESTONE_STATUS_TEXT: Record<MilestoneStatus, string> = {
   PENDING: 'Not started',
 };
 
+/* Values stored as codes in the application are shown as the same words the
+   wizard used, so the snapshot reads back exactly what the customer chose. */
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  APARTMENT: 'Apartment / flat',
+  HOUSE: 'House',
+  VILLA: 'Villa',
+  PLOT: 'Plot / land',
+  COMMERCIAL: 'Commercial property',
+  OTHER: 'Other',
+};
+
+const VEHICLE_CONDITION_LABELS: Record<string, string> = {
+  NEW: 'New',
+  USED: 'Used / pre-owned',
+  CERTIFIED_PRE_OWNED: 'Certified pre-owned',
+};
+
+const EMPLOYMENT_STATUS_LABELS: Record<string, string> = {
+  EMPLOYED: 'Employed',
+  SELF_EMPLOYED: 'Self-employed',
+  BUSINESS_OWNER: 'Business owner',
+  RETIRED: 'Retired',
+  STUDENT: 'Student',
+  HOMEMAKER: 'Homemaker',
+  UNEMPLOYED: 'Unemployed',
+};
+
+const friendlyCode = (value: string | null | undefined, labels: Record<string, string>) => {
+  if (!value) return '';
+  const key = value.toUpperCase();
+  return labels[key] || value.replace(/_/g, ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
+};
+
+interface SnapshotItem {
+  label: string;
+  value: string;
+}
+
+interface SnapshotGroupData {
+  title: string;
+  items: SnapshotItem[];
+}
+
+const snapshotItems = (items: Array<SnapshotItem | null>): SnapshotItem[] =>
+  items.filter((item): item is SnapshotItem => item !== null);
+
+function SnapshotPanel({ groups }: { groups: SnapshotGroupData[] }) {
+  if (groups.length === 0) return null;
+
+  return (
+    <section className="panel" aria-labelledby="snapshot-title">
+      <div className="panel-header">
+        <div>
+          <h2 id="snapshot-title" className="panel-title">
+            Application snapshot
+          </h2>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Everything you told us about this application.
+          </p>
+        </div>
+        <span className="chip !py-1 !text-xs">Your answers</span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2">
+        {groups.map((group, index) => {
+          const isFirstRow = index < 2;
+          return (
+            <section
+              key={group.title}
+              aria-label={group.title}
+              className={[
+                'p-5 sm:p-6',
+                index > 0 ? 'border-t' : '',
+                isFirstRow ? 'sm:border-t-0' : 'sm:border-t',
+                index % 2 === 1 ? 'sm:border-l' : '',
+              ].join(' ')}
+              style={{ borderColor: 'var(--hairline)' }}
+            >
+              <h3
+                className="serif text-base font-medium"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {group.title}
+              </h3>
+              <dl className="mt-3 space-y-2.5">
+                {group.items.map(item => (
+                  <div key={item.label} className="flex items-baseline justify-between gap-4">
+                    <dt className="shrink-0 text-sm" style={{ color: 'var(--text-muted)' }}>
+                      {item.label}
+                    </dt>
+                    <dd
+                      className="max-w-[62%] break-words text-right text-sm font-semibold tabular-nums"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      {item.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function ApplicationDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -123,6 +232,7 @@ export default function ApplicationDetailPage() {
 
   const [app, setApp] = useState<LoanApplication | null>(null);
   const [statusInfo, setStatusInfo] = useState<CustomerStatusInfo | null>(null);
+  const [appContext, setAppContext] = useState<ApplicationContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(justSubmitted);
@@ -132,6 +242,9 @@ export default function ApplicationDetailPage() {
   /* Kept separate from the page-level `error`: a failed withdrawal must not
      replace the whole application view (and the customer's typed reason). */
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  /* The names chosen in the wizard are part of what the customer supplied, so
+     the snapshot reads them back. A personal application simply has none. */
+  const [signatoryNames, setSignatoryNames] = useState<string[]>([]);
 
   useEffect(() => {
     loadApplication();
@@ -144,17 +257,39 @@ export default function ApplicationDetailPage() {
     }
   }, [showSuccess]);
 
+  useEffect(() => {
+    const applicationId = params.id as string;
+    let active = true;
+    setSignatoryNames([]);
+    Promise.all([
+      partyService.getSignatories(applicationId).catch(() => []),
+      partyService.listParties().catch(() => []),
+    ]).then(([customerIds, members]) => {
+      if (!active) return;
+      const people = members ?? [];
+      const names = (customerIds ?? [])
+        .map(customerId => people.find(member => member.customerId === customerId)?.customerName)
+        .filter((name): name is string => Boolean(name));
+      setSignatoryNames(names);
+    });
+    return () => {
+      active = false;
+    };
+  }, [params.id]);
+
   async function loadApplication() {
     try {
       setLoading(true);
       setError(null);
       const id = params.id as string;
-      const [data, status] = await Promise.all([
+      const [data, status, context] = await Promise.all([
         applicationService.getById(id),
         applicationService.getStatus(id).catch(() => null),
+        applicationService.getContext().catch(() => null),
       ]);
       setApp(data);
       setStatusInfo(status);
+      setAppContext(context);
     } catch (err: any) {
       setError(err.message || 'Failed to load application');
     } finally {
@@ -217,11 +352,153 @@ export default function ApplicationDetailPage() {
   const isReturned = app.status === 'RETURNED' || app.lomsStatus === 'RETURNED';
   const isTerminal = TERMINAL_STATUSES.includes(app.status);
   const canWithdraw = !isDraft && !isTerminal && !isReturned;
-  const stage = statusInfo?.stage as CustomerStage | undefined;
   const isDeclined = statusInfo?.declined ?? false;
+  const purposeLabel =
+    LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose;
+
+  const snapshotRow = (
+    label: string,
+    value: string | number | null | undefined
+  ): SnapshotItem | null => {
+    if (value == null) return null;
+    const text = String(value).trim();
+    return text ? { label, value: text } : null;
+  };
+  const snapshotMoney = (value?: number | null) =>
+    value == null ? null : formatCurrency(value);
+
+  /* Which groups are applicable. The wizard already hides business/personal
+     steps by segment; the snapshot must not resurrect the ones it skipped. */
+  const isBusinessApplication =
+    appContext?.isBusiness ??
+    (signatoryNames.length > 0 ||
+      app.businessAnnualRevenue != null ||
+      app.businessMonthlyIncome != null ||
+      app.businessMonthlyExpenses != null ||
+      app.businessVintageYears != null);
+  const showsPersonalFinancials =
+    !isBusinessApplication ||
+    appContext?.customerSubtype?.toUpperCase() === 'SOLE_TRADER';
+
+  const loanDescription = app.loanPurposeDescription?.trim();
+  const facilityPurpose = app.facilityPurposeDescription?.trim();
+
+  const loanItems = snapshotItems([
+    snapshotRow('Product', app.product?.productName),
+    snapshotRow('Requested', formatCurrency(app.requestedAmount)),
+    snapshotRow('Term', `${app.requestedTermMonths} months`),
+    snapshotRow(
+      'Rate',
+      app.requestedInterestRate != null ? `${app.requestedInterestRate}% p.a.` : null
+    ),
+    snapshotRow('Purpose', purposeLabel),
+  ]);
+
+  const purposeItems = snapshotItems([
+    snapshotRow('Description', loanDescription),
+    // The business-specific answer adds something only when it differs from the
+    // general description the customer already gave.
+    snapshotRow(
+      'Use in the business',
+      facilityPurpose && facilityPurpose !== loanDescription ? facilityPurpose : null
+    ),
+  ]);
+
+  const propertyItems = snapshotItems([
+    snapshotRow('Address', app.propertyAddress),
+    snapshotRow('City', app.propertyCity),
+    snapshotRow('County / state', app.propertyState),
+    snapshotRow('Postal code', app.propertyPostalCode),
+    snapshotRow(
+      'Type',
+      app.propertyType ? friendlyCode(app.propertyType, PROPERTY_TYPE_LABELS) : null
+    ),
+    snapshotRow('Estimated value', snapshotMoney(app.propertyValue)),
+    snapshotRow('Deposit', snapshotMoney(app.downPaymentAmount)),
+  ]);
+
+  const vehicleItems = snapshotItems([
+    snapshotRow('Make', app.vehicleMake),
+    snapshotRow('Model', app.vehicleModel),
+    snapshotRow('Year', app.vehicleYear),
+    snapshotRow(
+      'Condition',
+      app.vehicleCondition
+        ? friendlyCode(app.vehicleCondition, VEHICLE_CONDITION_LABELS)
+        : null
+    ),
+    snapshotRow('Estimated value', snapshotMoney(app.vehicleValue)),
+  ]);
+
+  const businessItems = isBusinessApplication
+    ? snapshotItems([
+        snapshotRow('Annual revenue', snapshotMoney(app.businessAnnualRevenue)),
+        snapshotRow('Monthly money in', snapshotMoney(app.businessMonthlyIncome)),
+        snapshotRow('Monthly money out', snapshotMoney(app.businessMonthlyExpenses)),
+        snapshotRow(
+          'Business vintage',
+          app.businessVintageYears != null ? `${app.businessVintageYears} years` : null
+        ),
+      ])
+    : [];
+
+  const personalItems = showsPersonalFinancials
+    ? snapshotItems([
+        snapshotRow('Annual income', snapshotMoney(app.statedAnnualIncome)),
+        snapshotRow('Monthly income', snapshotMoney(app.statedMonthlyIncome)),
+        snapshotRow('Monthly expenses', snapshotMoney(app.statedMonthlyExpenses)),
+      ])
+    : [];
+
+  const employmentItems = !isBusinessApplication
+    ? snapshotItems([
+        snapshotRow(
+          'Status',
+          app.employmentStatus
+            ? friendlyCode(app.employmentStatus, EMPLOYMENT_STATUS_LABELS)
+            : null
+        ),
+        snapshotRow('Employer', app.employerName),
+        snapshotRow('Job title', app.jobTitle),
+        snapshotRow(
+          'Years with employer',
+          app.yearsWithEmployer != null ? `${app.yearsWithEmployer} years` : null
+        ),
+      ])
+    : [];
+
+  const signatoryItems = isBusinessApplication
+    ? signatoryNames.map((name, index) => ({
+        label: `Signatory ${index + 1}`,
+        value: name,
+      }))
+    : [];
+
+  const snapshotGroups: SnapshotGroupData[] = [
+    { title: 'Loan', items: loanItems },
+    { title: 'Purpose details', items: purposeItems },
+    ...(propertyItems.length ? [{ title: 'Property', items: propertyItems }] : []),
+    ...(vehicleItems.length ? [{ title: 'Vehicle', items: vehicleItems }] : []),
+    ...(businessItems.length
+      ? [{ title: 'Business financials', items: businessItems }]
+      : []),
+    ...(personalItems.length
+      ? [{ title: 'Personal financials', items: personalItems }]
+      : []),
+    ...(employmentItems.length
+      ? [{ title: 'Employment', items: employmentItems }]
+      : []),
+    ...(signatoryItems.length
+      ? [{ title: 'Signing for the company', items: signatoryItems }]
+      : []),
+  ].filter(group => group.items.length > 0);
+
+  const scrollToMessage = () => {
+    document.getElementById('message-rm')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       {/* Withdraw Confirmation Dialog */}
       {showWithdrawConfirm && (
         <div
@@ -318,12 +595,51 @@ export default function ApplicationDetailPage() {
         </div>
       )}
 
+      {/* Back + actions */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <button
+          onClick={() => router.push('/portal/applications')}
+          className="btn btn-ghost btn-sm"
+          type="button"
+        >
+          <Glyph name="chevron" className="h-4 w-4 rotate-90" strokeWidth={2} />
+          Applications
+        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {isDraft && (
+            <button
+              onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
+              className="btn btn-primary btn-sm"
+              type="button"
+            >
+              Continue editing <span aria-hidden="true">→</span>
+            </button>
+          )}
+          {isReturned && (
+            <button
+              onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
+              className="btn btn-primary btn-sm"
+              type="button"
+            >
+              Review and resubmit <span aria-hidden="true">→</span>
+            </button>
+          )}
+          {canWithdraw && (
+            <button
+              onClick={() => setShowWithdrawConfirm(true)}
+              className="btn btn-ghost btn-sm"
+              type="button"
+            >
+              Withdraw
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Return for corrections banner */}
       {isReturned && (
-        <div className="alert alert-warning mb-6" role="alert">
-          <span className="text-lg leading-none" aria-hidden="true">
-            ⚠
-          </span>
+        <div className="alert alert-warning mb-4" role="alert">
+          <Glyph name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <h2 className="text-base font-semibold">Corrections requested</h2>
             <p className="mt-1 text-sm">
@@ -336,406 +652,448 @@ export default function ApplicationDetailPage() {
 
       {/* Success banner */}
       {showSuccess && (
-        <div className="alert alert-success mb-6 items-center" role="status">
-          <svg aria-hidden="true" className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+        <div className="alert alert-success mb-4 items-center" role="status">
+          <Glyph name="check" className="h-5 w-5 shrink-0" strokeWidth={2.4} />
           <p className="text-sm font-medium">
             Application submitted. Your relationship manager will review it.
           </p>
         </div>
       )}
 
-      {/* Back + Header */}
-      <button
-        onClick={() => router.push('/portal/applications')}
-        className="btn btn-ghost btn-sm mb-3"
-        type="button"
-      >
-        <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-        </svg>
-        Applications
-      </button>
-
-      <section className="mesh-hero aurora relative mb-6 overflow-hidden rounded-3xl p-6 text-white shadow-float md:p-8">
-        <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-fuchsia-300/20 blur-3xl" />
-
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      {/* Application command centre */}
+      <section className="glass-panel-solid relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full"
+          style={{
+            background: 'radial-gradient(circle, var(--brand-soft-strong), transparent 68%)',
+          }}
+        />
+        <div className="relative grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_250px]">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-white/20 px-3 py-1 text-sm font-semibold backdrop-blur">
-                {STATUS_LABELS[app.status] || app.status}
-              </span>
+              <StatusBadge status={app.status} />
               {app.channel && (
-                <span className="text-sm text-white/75">
-                  Channel: {app.channel.replace(/_/g, ' ').toLowerCase()}
+                <span className="chip !py-1 !text-xs">
+                  {app.channel.replace(/_/g, ' ').toLowerCase()}
                 </span>
               )}
+              {isDraft && <span className="chip !py-1 !text-xs">Not submitted</span>}
             </div>
+
             {/* The reference code is mostly digits, so it stays in Inter tabular
                 rather than the display serif used for word headings. */}
-            <h1 className="mt-3 truncate text-[26px] font-bold tracking-tight text-white tabular-nums md:text-[30px]">
-              {app.applicationNumber || 'Draft application'}
+            <p
+              className="mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] tabular-nums"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              Application {app.applicationNumber || 'reference not assigned'}
+            </p>
+            <h1
+              className="serif mt-1 text-[30px] font-medium leading-tight tracking-tight sm:text-[34px]"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {app.product?.productName || purposeLabel || 'Credit application'}
             </h1>
-            <p className="mt-1.5 text-sm text-white/70">
-              {app.product?.productName
-                ? `${app.product.productName} · ${LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose}`
-                : LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] || app.loanPurpose}
+            <p className="mt-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+              {app.product?.productName ? `${purposeLabel} · ` : ''}
+              {app.submittedAt
+                ? `Submitted ${formatDate(app.submittedAt)}`
+                : `Created ${formatDate(app.createdAt)}`}
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3">
+            <div className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
               <div>
-                <p className="text-sm text-white/70">Requested</p>
-                <p className="mt-0.5 text-2xl font-extrabold tracking-tight tabular-nums">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
+                  Requested
+                </p>
+                <p className="mt-1 text-[26px] font-bold leading-none tracking-tight tabular-nums" style={{ color: 'var(--text-primary)' }}>
                   {formatCurrency(app.requestedAmount)}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-white/70">Term</p>
-                <p className="mt-0.5 text-2xl font-extrabold tracking-tight tabular-nums">
-                  {app.requestedTermMonths} months
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
+                  Term
+                </p>
+                <p className="mt-1 text-[26px] font-bold leading-none tracking-tight tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                  {app.requestedTermMonths} <span className="text-sm font-medium">months</span>
                 </p>
               </div>
               {app.requestedInterestRate != null && (
                 <div>
-                  <p className="text-sm text-white/70">Rate</p>
-                  <p className="mt-0.5 text-2xl font-extrabold tracking-tight tabular-nums">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
+                    Rate
+                  </p>
+                  <p className="mt-1 text-[26px] font-bold leading-none tracking-tight tabular-nums" style={{ color: 'var(--text-primary)' }}>
                     {app.requestedInterestRate}%
                   </p>
                 </div>
               )}
+              {app.approvedMonthlyPayment != null && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
+                    Monthly payment
+                  </p>
+                  <p className="mt-1 text-[26px] font-bold leading-none tracking-tight tabular-nums" style={{ color: 'var(--up)' }}>
+                    {formatCurrency(app.approvedMonthlyPayment)}
+                  </p>
+                </div>
+              )}
             </div>
+
+            {statusInfo && (
+              <div
+                className="mt-6 rounded-2xl border p-4"
+                style={
+                  isDeclined
+                    ? {
+                        borderColor: 'rgba(207,67,105,.3)',
+                        backgroundColor: 'rgba(207,67,105,.07)',
+                      }
+                    : statusInfo.terminal
+                      ? {
+                          borderColor: 'var(--hairline)',
+                          backgroundColor: 'var(--surface-input)',
+                        }
+                      : {
+                          borderColor: 'var(--hairline)',
+                          backgroundColor: 'var(--brand-soft)',
+                        }
+                }
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                    style={{
+                      border: '1px solid currentColor',
+                      color: isDeclined
+                        ? 'var(--down)'
+                        : statusInfo.terminal
+                          ? 'var(--text-secondary)'
+                          : 'var(--brand-on-soft)',
+                    }}
+                    aria-hidden="true"
+                  >
+                    <Glyph
+                      name={isDeclined ? 'alert' : statusInfo.terminal ? 'check' : 'clock'}
+                      className="h-4 w-4"
+                      strokeWidth={2.2}
+                    />
+                  </span>
+                  <div className="min-w-0">
+                    <p
+                      className="text-sm font-semibold"
+                      style={{ color: isDeclined ? 'var(--down)' : 'var(--text-primary)' }}
+                    >
+                      {statusInfo.headline}
+                    </p>
+                    {statusInfo.detail && (
+                      <p className="mt-1 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                        {statusInfo.detail}
+                      </p>
+                    )}
+                    {statusInfo.lastUpdated && (
+                      <p className="mt-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                        Last updated {formatDateTime(statusInfo.lastUpdated)}
+                      </p>
+                    )}
+                    {!statusInfo.terminal && (
+                      <button
+                        onClick={() =>
+                          document
+                            .getElementById('what-happens-next')
+                            ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        }
+                        className="btn btn-primary btn-sm mt-3"
+                        type="button"
+                      >
+                        See what to do next <span aria-hidden="true">→</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="flex flex-shrink-0 gap-2">
-            {isDraft && (
+          <div
+            className="w-full self-start rounded-2xl border p-4"
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--surface-input)' }}
+          >
+            <p
+              className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              Your relationship manager
+            </p>
+            <p className="mt-1.5 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+              Questions about this application?
+            </p>
+            {!isDraft ? (
               <button
-                onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
-                className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#7f2b7b] shadow-sm transition-transform hover:scale-[1.02]"
+                onClick={scrollToMessage}
+                className="link-arrow mt-2 !text-xs"
+                type="button"
               >
-                Continue editing
+                Message the bank <span data-arrow aria-hidden="true">→</span>
               </button>
-            )}
-            {isReturned && (
+            ) : (
               <button
-                onClick={() => router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)}
-                className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-orange-600 shadow-sm transition-transform hover:scale-[1.02]"
+                onClick={() =>
+                  router.push(`/portal/applications/new?product=&resume=${app.applicationId}`)
+                }
+                className="link-arrow mt-2 !text-xs"
+                type="button"
               >
-                Review and resubmit
-              </button>
-            )}
-            {canWithdraw && (
-              <button
-                onClick={() => setShowWithdrawConfirm(true)}
-                className="rounded-xl border border-white/40 bg-white/10 px-4 py-2.5 text-sm font-medium text-white backdrop-blur transition-colors hover:bg-white/20"
-              >
-                Withdraw
+                Continue your draft <span data-arrow aria-hidden="true">→</span>
               </button>
             )}
           </div>
         </div>
       </section>
 
-      {/* Customer Status Headline */}
-      {statusInfo && (
-        <div
-          className={`rounded-3xl border p-6 mb-6 shadow-sm ${
-            statusInfo.terminal
-              ? isDeclined
-                ? 'border-red-200 bg-red-50 dark:border-red-500/25 dark:bg-red-500/10'
-                : ''
-              : 'mesh-soft border-fuchsia-100/60'
-          }`}
-          style={
-            statusInfo.terminal && !isDeclined
-              ? {
-                  backgroundColor: 'var(--surface-input)',
-                  borderColor: 'var(--surface-border)',
-                }
-              : undefined
-          }
-        >
-          <h2
-            className={`text-lg font-semibold ${
-              isDeclined ? 'text-red-800 dark:text-red-200' : ''
-            }`}
-            style={
-              isDeclined
-                ? undefined
-                : statusInfo.terminal
-                  ? { color: 'var(--text-primary)' }
-                  : { color: 'var(--brand-strong)' }
-            }
-          >
-            {statusInfo.headline}
-          </h2>
-          {statusInfo.detail && (
-            <p
-              className={`mt-1.5 text-sm ${isDeclined ? 'text-red-600 dark:text-red-300' : ''}`}
-              style={
-                isDeclined
-                  ? undefined
-                  : statusInfo.terminal
-                    ? { color: 'var(--text-secondary)' }
-                    : { color: 'var(--brand)' }
-              }
-            >
-              {statusInfo.detail}
-            </p>
-          )}
-          {statusInfo.lastUpdated && (
-            <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-              Last updated: {formatDateTime(statusInfo.lastUpdated)}
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Where the application actually sits — quiet and factual, no scoring */}
       {statusInfo && !statusInfo.terminal && (
         <StageProgress progress={statusInfo.progress} stage={statusInfo.stage as CustomerStage} />
       )}
 
-      {/* One checklist for the whole application: what is complete, what is
-          missing, why it matters, and whose turn it is. */}
-      <ApplicationCompanion application={app} statusInfo={statusInfo} />
-
-      {/* Terminal status message (for old status path, in case statusInfo is missing) */}
-      {isTerminal && !statusInfo && (
-        <div
-          className={`rounded-xl border p-5 mb-6 ${
-            app.status === 'DECLINED' ||
-            app.status === 'CANCELLED' ||
-            app.status === 'KYC_REJECTED' ||
-            app.status === 'CREDIT_DECLINED' ||
-            app.status === 'UNDERWRITING_DECLINED'
-              ? 'border-red-200 bg-red-50 dark:border-red-500/25 dark:bg-red-500/10'
-              : ''
-          }`}
-          style={
-            app.status === 'DECLINED' ||
-            app.status === 'CANCELLED' ||
-            app.status === 'KYC_REJECTED' ||
-            app.status === 'CREDIT_DECLINED' ||
-            app.status === 'UNDERWRITING_DECLINED'
-              ? undefined
-              : { backgroundColor: 'var(--surface-input)', borderColor: 'var(--surface-border)' }
-          }
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={app.status} />
-            {app.rejectionReason && (
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                {app.rejectionReason}
-              </p>
-            )}
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_310px]">
+        <div className="min-w-0 space-y-6">
+          {/* One checklist for the whole application: what is complete, what is
+              missing, why it matters, and whose turn it is. */}
+          <div id="what-happens-next" className="scroll-mt-24">
+            <ApplicationCompanion application={app} statusInfo={statusInfo} />
           </div>
-        </div>
-      )}
 
-      {/* Approved terms */}
-      {app.approvedAmount != null && (
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 mb-6 shadow-sm dark:border-emerald-500/25 dark:bg-emerald-500/10">
-          <h2 className="text-base font-semibold text-emerald-800 dark:text-emerald-200 mb-4">
-            Approved terms
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-emerald-700 dark:text-emerald-300">Amount</p>
-              <p className="mt-0.5 text-lg font-bold tabular-nums text-emerald-800 dark:text-emerald-200">
-                {formatCurrency(app.approvedAmount)}
-              </p>
-            </div>
-            {app.approvedTermMonths != null && (
-              <div>
-                <p className="text-sm text-emerald-700 dark:text-emerald-300">Term</p>
-                <p className="mt-0.5 text-lg font-bold tabular-nums text-emerald-800 dark:text-emerald-200">
-                  {app.approvedTermMonths} months
-                </p>
+          {/* Terminal status message (for old status path, in case statusInfo is missing) */}
+          {isTerminal && !statusInfo && (
+            <div
+              className={`rounded-2xl border p-5 ${
+                app.status === 'DECLINED' ||
+                app.status === 'CANCELLED' ||
+                app.status === 'KYC_REJECTED' ||
+                app.status === 'CREDIT_DECLINED' ||
+                app.status === 'UNDERWRITING_DECLINED'
+                  ? 'border-red-200 bg-red-50 dark:border-red-500/25 dark:bg-red-500/10'
+                  : ''
+              }`}
+              style={
+                app.status === 'DECLINED' ||
+                app.status === 'CANCELLED' ||
+                app.status === 'KYC_REJECTED' ||
+                app.status === 'CREDIT_DECLINED' ||
+                app.status === 'UNDERWRITING_DECLINED'
+                  ? undefined
+                  : { backgroundColor: 'var(--surface-input)', borderColor: 'var(--surface-border)' }
+              }
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status={app.status} />
+                {app.rejectionReason && (
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    {app.rejectionReason}
+                  </p>
+                )}
               </div>
-            )}
-            {app.approvedInterestRate != null && (
-              <div>
-                <p className="text-sm text-emerald-700 dark:text-emerald-300">Interest rate</p>
-                <p className="mt-0.5 text-lg font-bold tabular-nums text-emerald-800 dark:text-emerald-200">
-                  {app.approvedInterestRate}% p.a.
-                </p>
-              </div>
-            )}
-            {app.approvedMonthlyPayment != null && (
-              <div>
-                <p className="text-sm text-emerald-700 dark:text-emerald-300">Monthly payment</p>
-                <p className="mt-0.5 text-lg font-bold tabular-nums text-emerald-800 dark:text-emerald-200">
-                  {formatCurrency(app.approvedMonthlyPayment)}
-                </p>
-              </div>
-            )}
-          </div>
-          {app.conditionalApprovalConditions && (
-            <div className="mt-4 text-sm text-emerald-700 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-500/15 rounded-lg p-3">
-              <span className="font-semibold">Conditions:</span> {app.conditionalApprovalConditions}
             </div>
           )}
-        </div>
-      )}
 
-      {/* Offer */}
-      {app.offerValidUntil && !app.offerAccepted && (
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 mb-6 shadow-sm dark:border-amber-500/25 dark:bg-amber-500/10">
-          <h2 className="text-base font-semibold text-amber-800 dark:text-amber-200 mb-1">
-            Offer available
-          </h2>
-          <p className="text-sm text-amber-700 dark:text-amber-200">
-            Valid until <span className="font-semibold">{formatDate(app.offerValidUntil)}</span>.
-            Please accept or contact your relationship manager.
-          </p>
-        </div>
-      )}
+          {/* Approved terms */}
+          {app.approvedAmount != null && (
+            <section className="panel">
+              <div className="panel-header">
+                <h2 className="panel-title">Approved terms</h2>
+                <span className="badge badge-success">Approved</span>
+              </div>
+              <div className="panel-body">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    ['Amount', formatCurrency(app.approvedAmount)],
+                    ...(app.approvedTermMonths != null
+                      ? [['Term', `${app.approvedTermMonths} months`]]
+                      : []),
+                    ...(app.approvedInterestRate != null
+                      ? [['Interest rate', `${app.approvedInterestRate}% p.a.`]]
+                      : []),
+                    ...(app.approvedMonthlyPayment != null
+                      ? [['Monthly payment', formatCurrency(app.approvedMonthlyPayment)]]
+                      : []),
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-2xl px-4 py-3"
+                      style={{ backgroundColor: 'var(--surface-input)' }}
+                    >
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {label}
+                      </p>
+                      <p
+                        className="mt-1 text-lg font-bold tabular-nums"
+                        style={{ color: 'var(--up)' }}
+                      >
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {app.conditionalApprovalConditions && (
+                  <p
+                    className="mt-4 rounded-2xl px-4 py-3 text-sm"
+                    style={{
+                      backgroundColor: 'rgba(14,155,108,.08)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    <span className="font-semibold" style={{ color: 'var(--up)' }}>
+                      Conditions:
+                    </span>{' '}
+                    {app.conditionalApprovalConditions}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
 
-      {/* Detail Sections */}
-      <div className="space-y-6">
-        {/* Loan purpose — the requested amount, term and rate already appear in the
-            header above, so they are deliberately not restated here. */}
-        {app.loanPurposeDescription && (
-          <DetailSection title="Loan purpose">
-            <DetailRow label="Description" value={app.loanPurposeDescription} />
-          </DetailSection>
-        )}
-
-        {/* Financial */}
-        {(app.statedAnnualIncome != null ||
-          app.statedMonthlyIncome != null ||
-          app.statedMonthlyExpenses != null ||
-          app.debtToIncomeRatio != null) && (
-          <DetailSection title="Financial information">
-            {app.statedAnnualIncome != null && (
-              <DetailRow label="Annual income" value={formatCurrency(app.statedAnnualIncome)} />
-            )}
-            {app.statedMonthlyIncome != null && (
-              <DetailRow label="Monthly income" value={formatCurrency(app.statedMonthlyIncome)} />
-            )}
-            {app.statedMonthlyExpenses != null && (
-              <DetailRow
-                label="Monthly expenses"
-                value={formatCurrency(app.statedMonthlyExpenses)}
-              />
-            )}
-            {app.debtToIncomeRatio != null && (
-              <DetailRow label="Debt-to-income" value={`${app.debtToIncomeRatio}%`} />
-            )}
-          </DetailSection>
-        )}
-
-        {/* Employment */}
-        {(app.employmentStatus || app.employerName) && (
-          <DetailSection title="Employment">
-            {app.employmentStatus && (
-              <DetailRow label="Status" value={app.employmentStatus.replace(/_/g, ' ')} />
-            )}
-            {app.employerName && <DetailRow label="Employer" value={app.employerName} />}
-            {app.jobTitle && <DetailRow label="Title" value={app.jobTitle} />}
-            {app.yearsWithEmployer != null && (
-              <DetailRow label="Years" value={`${app.yearsWithEmployer}`} />
-            )}
-          </DetailSection>
-        )}
-
-        {/* Documents – interactive */}
-        <DocumentsSection applicationId={app.applicationId} />
-
-        {/* Compliance */}
-        {(app.kycCompleted != null || app.amlCheckCompleted != null) && (
-          <DetailSection title="Compliance">
-            {app.kycCompleted != null && (
-              <DetailRow label="KYC" value={app.kycCompleted ? 'Completed' : 'Pending'} />
-            )}
-            {app.amlCheckCompleted != null && (
-              <DetailRow
-                label="AML check"
-                value={app.amlCheckCompleted ? 'Completed' : 'Pending'}
-              />
-            )}
-          </DetailSection>
-        )}
-
-        {/* Loan Offer Actions */}
-        {!isDraft && (
-          <OfferSection
-            applicationId={app.applicationId}
-            productName={app.product?.productName}
-            onAction={() => loadApplication()}
-          />
-        )}
-
-        {/* E-Signature */}
-        {!isDraft && (
-          <ESignSection
-            applicationId={app.applicationId}
-            applicationType={app.loanPurpose}
-            applicationStatus={app.lomsStatus || app.status}
-            onComplete={() => loadApplication()}
-          />
-        )}
-
-        {/* Booking + Disbursement Progress */}
-        {!isDraft && (
-          <BookingSection applicationId={app.applicationId} applicationStatus={app.status} />
-        )}
-
-        {/* Message RM + Help Request */}
-        {!isDraft && <MessageRmSection applicationId={app.applicationId} />}
-
-        {/* Timeline Events */}
-        {statusInfo && statusInfo.timeline.length > 0 && (
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Activity timeline</h2>
+          {/* Offer */}
+          {app.offerValidUntil && !app.offerAccepted && (
+            <div className="alert alert-warning items-start">
+              <Glyph name="sign" className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <h2 className="text-base font-semibold">Offer available</h2>
+                <p className="mt-1 text-sm">
+                  Valid until{' '}
+                  <span className="font-semibold">{formatDate(app.offerValidUntil)}</span>. Please
+                  accept or contact your relationship manager.
+                </p>
+              </div>
             </div>
-            <div className="panel-body">
-              <EventTimeline events={statusInfo.timeline} />
+          )}
+
+          {/* The single record of what the customer supplied. The old separate
+              purpose, financial and employment panels are deliberately gone:
+              each answer appears once, grouped only where it applies. */}
+          <div className="space-y-6">
+            <SnapshotPanel groups={snapshotGroups} />
+
+            {/* Documents – interactive */}
+            <DocumentsSection applicationId={app.applicationId} />
+
+            {/* Loan Offer Actions */}
+            {!isDraft && (
+              <OfferSection
+                applicationId={app.applicationId}
+                productName={app.product?.productName}
+                onAction={() => loadApplication()}
+              />
+            )}
+
+            {/* E-Signature */}
+            {!isDraft && (
+              <ESignSection
+                applicationId={app.applicationId}
+                applicationType={app.loanPurpose}
+                applicationStatus={app.lomsStatus || app.status}
+                onComplete={() => loadApplication()}
+              />
+            )}
+
+            {/* Booking + Disbursement Progress */}
+            {!isDraft && (
+              <BookingSection applicationId={app.applicationId} applicationStatus={app.status} />
+            )}
+
+            {/* Message RM + Help Request */}
+            {!isDraft && (
+              <div id="message-rm" className="scroll-mt-24">
+                <MessageRmSection applicationId={app.applicationId} />
+              </div>
+            )}
+
+            {/* Timeline Events */}
+            {statusInfo && statusInfo.timeline.length > 0 && (
+              <div className="panel">
+                <div className="panel-header">
+                  <h2 className="panel-title">Activity timeline</h2>
+                  <span className="chip !py-1 !text-xs">
+                    {statusInfo.timeline.length}{' '}
+                    {statusInfo.timeline.length === 1 ? 'update' : 'updates'}
+                  </span>
+                </div>
+                <div className="panel-body">
+                  <EventTimeline events={statusInfo.timeline} />
+                </div>
+              </div>
+            )}
+
+            {/* Static timestamps fallback (when no timeline events) */}
+            {(!statusInfo || statusInfo.timeline.length === 0) && (
+              <DetailSection title="Timeline">
+                <DetailRow label="Created" value={formatDateTime(app.createdAt)} />
+                {app.submittedAt && (
+                  <DetailRow label="Submitted" value={formatDateTime(app.submittedAt)} />
+                )}
+                {app.reviewStartedAt && (
+                  <DetailRow label="Review started" value={formatDateTime(app.reviewStartedAt)} />
+                )}
+                {app.decisionDueDate && (
+                  <DetailRow label="Decision due" value={formatDate(app.decisionDueDate)} />
+                )}
+                {app.decisionMadeAt && (
+                  <DetailRow label="Decision made" value={formatDateTime(app.decisionMadeAt)} />
+                )}
+                <DetailRow label="Last updated" value={formatDateTime(app.updatedAt)} />
+                {app.daysInCurrentStatus != null && (
+                  <DetailRow
+                    label="Days in current status"
+                    value={`${app.daysInCurrentStatus}`}
+                  />
+                )}
+                {app.slaBreached && (
+                  <DetailRow
+                    label="Review time"
+                    value="Longer than our target"
+                    className="font-medium text-red-600 dark:text-red-300"
+                  />
+                )}
+              </DetailSection>
+            )}
+          </div>
+        </div>
+
+        {/* The help card stays with the application while the page scrolls. The
+            full answer record now lives in the main column so it can use the width
+            and is not squeezed into a narrow rail. */}
+        <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+          <div
+            className="overflow-hidden rounded-[28px] p-5 text-white"
+            style={{ background: 'var(--tile-active)', boxShadow: 'var(--tile-active-shadow)' }}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
+              Need a hand?
+            </p>
+            <p className="mt-2 text-sm leading-6 text-white/75">
+              Ask Rayva about this application, or speak directly to your relationship manager.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              {!isDraft && (
+                <button
+                  onClick={scrollToMessage}
+                  className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-[#5e1f5b] transition-transform hover:scale-[1.01]"
+                  type="button"
+                >
+                  Message the bank
+                </button>
+              )}
+              <button
+                onClick={() => router.push('/portal/ai-assistant')}
+                className="rounded-full border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/15"
+                type="button"
+              >
+                Ask Rayva AI
+              </button>
             </div>
           </div>
-        )}
-
-        {/* Static timestamps fallback (when no timeline events) */}
-        {(!statusInfo || statusInfo.timeline.length === 0) && (
-          <DetailSection title="Timeline">
-            <DetailRow label="Created" value={formatDateTime(app.createdAt)} />
-            {app.submittedAt && (
-              <DetailRow label="Submitted" value={formatDateTime(app.submittedAt)} />
-            )}
-            {app.reviewStartedAt && (
-              <DetailRow label="Review started" value={formatDateTime(app.reviewStartedAt)} />
-            )}
-            {app.decisionDueDate && (
-              <DetailRow label="Decision due" value={formatDate(app.decisionDueDate)} />
-            )}
-            {app.decisionMadeAt && (
-              <DetailRow label="Decision made" value={formatDateTime(app.decisionMadeAt)} />
-            )}
-            <DetailRow label="Last updated" value={formatDateTime(app.updatedAt)} />
-            {app.daysInCurrentStatus != null && (
-              <DetailRow
-                label="Days in current status"
-                value={`${app.daysInCurrentStatus}`}
-              />
-            )}
-            {app.slaBreached && (
-              <DetailRow
-                label="Review time"
-                value="Longer than our target"
-                className="font-medium text-red-600 dark:text-red-300"
-              />
-            )}
-          </DetailSection>
-        )}
+        </aside>
       </div>
     </div>
   );
@@ -817,8 +1175,19 @@ function DocumentsSection({ applicationId }: { applicationId: string }) {
     r => r.status === 'PENDING' || r.status === 'PARTIALLY_FULFILLED'
   );
 
+  /* An application with no evidence and no request is not a documents screen.
+     Hide it rather than showing a large empty panel; a failed read still shows
+     the retry state, because "none" and "could not read" are not the same. */
+  if (loading) return null;
+  const hasDocumentActivity =
+    documents.length > 0 ||
+    requests.length > 0 ||
+    (summary?.totalDocuments ?? 0) > 0 ||
+    (summary?.totalRequiredRequests ?? 0) > 0;
+  if (!error && !hasDocumentActivity) return null;
+
   return (
-    <div className="panel">
+    <div id="documents" className="panel scroll-mt-24">
       <div className="panel-header">
         <h2 className="panel-title">Documents</h2>
         <button
@@ -838,30 +1207,44 @@ function DocumentsSection({ applicationId }: { applicationId: string }) {
       <div className="panel-body space-y-5">
         {/* Summary counters — all three figures come from the documents service */}
         {summary && (
-          <div className="grid grid-cols-3 gap-3">
-            <div
-              className="rounded-xl p-4 text-center"
-              style={{ backgroundColor: 'var(--surface-input)' }}
-            >
-              <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                {summary.totalDocuments}
-              </p>
-              <p className="mt-0.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-                Uploaded
-              </p>
-            </div>
-            <div className="rounded-xl bg-amber-50 p-4 text-center dark:bg-amber-500/15">
-              <p className="text-lg font-bold tabular-nums text-amber-700 dark:text-amber-300">
-                {summary.pendingRequiredRequests}
-              </p>
-              <p className="mt-0.5 text-sm text-amber-700 dark:text-amber-300">Still needed</p>
-            </div>
-            <div className="rounded-xl bg-emerald-50 p-4 text-center dark:bg-emerald-500/15">
-              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
-                {summary.allRequiredFulfilled ? 'Yes' : 'No'}
-              </p>
-              <p className="mt-0.5 text-sm text-emerald-700 dark:text-emerald-300">All received</p>
-            </div>
+          <div
+            className="grid grid-cols-3 overflow-hidden rounded-2xl border"
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--surface-input)' }}
+          >
+            {[
+              {
+                label: 'Uploaded',
+                value: String(summary.totalDocuments),
+                tone: 'var(--text-primary)',
+              },
+              {
+                label: 'Still needed',
+                value: String(summary.pendingRequiredRequests),
+                tone:
+                  summary.pendingRequiredRequests > 0 ? 'var(--down)' : 'var(--text-primary)',
+              },
+              {
+                label: 'All received',
+                value: summary.allRequiredFulfilled ? 'Yes' : 'No',
+                tone: summary.allRequiredFulfilled ? 'var(--up)' : 'var(--text-primary)',
+              },
+            ].map((cell, i) => (
+              <div
+                key={cell.label}
+                className="px-3 py-3.5 text-center"
+                style={{ borderLeft: i > 0 ? '1px solid var(--hairline)' : undefined }}
+              >
+                <p className="text-xl font-bold tabular-nums" style={{ color: cell.tone }}>
+                  {cell.value}
+                </p>
+                <p
+                  className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {cell.label}
+                </p>
+              </div>
+            ))}
           </div>
         )}
 
@@ -961,24 +1344,7 @@ function DocumentsSection({ applicationId }: { applicationId: string }) {
         )}
 
         {/* Document list */}
-        {loading ? (
-          <div className="space-y-2" aria-busy="true">
-            <p className="sr-only" role="status">Loading documents…</p>
-            {[1, 2].map(i => (
-              <div
-                key={i}
-                className="flex items-start gap-3 rounded-xl border px-5 py-4"
-                style={{ borderColor: 'var(--surface-border)' }}
-              >
-                <div className="skeleton h-6 w-6 rounded-lg" />
-                <div className="flex-1 space-y-2">
-                  <div className="skeleton h-4 w-40" />
-                  <div className="skeleton h-3.5 w-64" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : documents.length === 0 && pendingRequests.length === 0 && !error ? (
+        {documents.length === 0 && pendingRequests.length === 0 && !error ? (
           <div className="py-6 text-center">
             <p className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>
               No documents yet
@@ -1274,7 +1640,7 @@ function OfferSection({
   );
 
   return (
-    <div className="panel">
+    <div id="offer" className="panel scroll-mt-24">
       {/* Header */}
       <div className="panel-header flex-wrap">
         <h2 className="panel-title flex items-center gap-2">
@@ -1664,7 +2030,6 @@ function ESignSection({
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<EsignStatus | null>(null);
-  const [offer, setOffer] = useState<OfferWithConditions | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [signingUrl, setSigning] = useState<string | null>(null);
@@ -1676,12 +2041,7 @@ function ESignSection({
 
   async function loadStatus() {
     try {
-      const [esign, latestOffer] = await Promise.all([
-        esignService.getStatus(applicationId),
-        offerService.getLatestOffer(applicationId).catch(() => null),
-      ]);
-      setStatus(esign);
-      setOffer(latestOffer);
+      setStatus(await esignService.getStatus(applicationId));
     } catch {
       // no e-sign yet
     } finally {
@@ -1691,16 +2051,15 @@ function ESignSection({
 
   if (loading) return null;
 
-  // Signing only becomes the customer's next step once the bank has issued an offer and
-  // the customer has accepted it (which moves the application into the signature stage).
-  // Before that there is no agreed document to sign, so the section stays hidden.
+  // The section only exists once the bank has sent the application for signature —
+  // either a signing envelope exists, or the application has reached the e-sign stage.
+  // An offer the customer accepted on its own is not a bank request to sign.
   const overallStatus = status?.overallStatus ?? 'NOT_STARTED';
   const signingUnderway = overallStatus !== 'NOT_STARTED';
   const inEsignStage = ['PENDING_ESIGN', 'ESIGN_IN_PROGRESS', 'ESIGN_COMPLETED'].includes(
     applicationStatus
   );
-  const offerAccepted = offer?.offer?.status === 'ACCEPTED';
-  if (!signingUnderway && !inEsignStage && !offerAccepted) return null;
+  if (!signingUnderway && !inEsignStage) return null;
 
   const signers = status?.signers ?? [];
   const completedCount = status?.completedCount ?? 0;
@@ -1751,7 +2110,7 @@ function ESignSection({
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <div className="panel">
+    <div id="esign" className="panel scroll-mt-24">
       {/* Header */}
       <div className="panel-header flex-wrap">
         <h2 className="panel-title flex items-center gap-2">
@@ -2683,105 +3042,111 @@ function StageProgress({ progress, stage }: { progress: number; stage: CustomerS
   const clampedProgress = Math.max(0, Math.min(100, Math.round(progress)));
 
   return (
-    <div className="panel mb-6">
-      <div className="panel-header flex-wrap">
-        <h2 className="panel-title">Application progress</h2>
-        {knownStage && (
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Step {activeIndex + 1} of {CUSTOMER_STAGES.length} ·{' '}
-            {toSentenceCase(CUSTOMER_STAGES[activeIndex].label)}
-          </p>
-        )}
-      </div>
-      <div className="panel-body">
-        <div
-          className="h-1 w-full overflow-hidden rounded-full"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={clampedProgress}
-          aria-label={`Application progress: ${clampedProgress}%${
-            knownStage
-              ? `, step ${activeIndex + 1} of ${CUSTOMER_STAGES.length} — ${toSentenceCase(
-                  CUSTOMER_STAGES[activeIndex].label
-                )}`
-              : ''
-          }`}
-          style={{ backgroundColor: 'var(--surface-input)' }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${clampedProgress}%`, backgroundColor: 'var(--brand)' }}
-          />
+    <section className="glass-panel mt-6 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+        <div>
+          <h2 className="serif text-lg font-medium" style={{ color: 'var(--text-primary)' }}>
+            Your journey
+          </h2>
+          {knownStage && (
+            <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+              Step {activeIndex + 1} of {CUSTOMER_STAGES.length} ·{' '}
+              {toSentenceCase(CUSTOMER_STAGES[activeIndex].label)}
+            </p>
+          )}
         </div>
+        <span className="chip !py-1 !text-xs" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={clampedProgress}>
+          {clampedProgress}% complete
+        </span>
+      </div>
 
-        <div
-          className="no-scrollbar mt-4 overflow-x-auto"
-          role="region"
-          aria-label="Application stages — scroll horizontally to see all"
-          tabIndex={0}
-        >
-          <ol className="flex min-w-max items-center gap-2">
-            {CUSTOMER_STAGES.map((s, i) => {
-              const isCurrent = knownStage && i === activeIndex;
-              const isPast = knownStage && i < activeIndex;
-              return (
-                <li
-                  key={s.key}
-                  aria-current={isCurrent ? 'step' : undefined}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm"
-                  style={{
-                    backgroundColor: isCurrent ? 'var(--brand-soft)' : 'transparent',
-                    color: isCurrent
-                      ? 'var(--brand-on-soft)'
-                      : isPast
-                        ? 'var(--text-secondary)'
-                        : 'var(--text-muted)',
-                    fontWeight: isCurrent ? 600 : 400,
-                  }}
-                >
-                  {isPast && (
-                    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                  {toSentenceCase(s.label)}
+      <div
+        className="no-scrollbar overflow-x-auto px-6 pb-5"
+        role="region"
+        aria-label="Application stages — scroll horizontally to see all"
+        tabIndex={0}
+      >
+        <ol className="flex min-w-[560px] items-start">
+          {CUSTOMER_STAGES.map((s, i) => {
+            const isCurrent = knownStage && i === activeIndex;
+            const isPast = knownStage && i < activeIndex;
+            return (
+              <li key={s.key} className="flex flex-1 items-start" aria-current={isCurrent ? 'step' : undefined}>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <span
+                    className="flex h-6 w-6 items-center justify-center rounded-full border transition-colors"
+                    style={
+                      isCurrent
+                        ? {
+                            borderColor: 'var(--brand)',
+                            backgroundColor: 'var(--brand)',
+                            color: '#fff',
+                            boxShadow: '0 0 0 4px var(--brand-soft)',
+                          }
+                        : isPast
+                          ? {
+                              borderColor: 'var(--brand)',
+                              backgroundColor: 'var(--brand-soft)',
+                              color: 'var(--brand-on-soft)',
+                            }
+                          : {
+                              borderColor: 'var(--hairline-strong)',
+                              backgroundColor: 'var(--surface-card)',
+                              color: 'var(--text-muted)',
+                            }
+                    }
+                    aria-hidden="true"
+                  >
+                    {isPast ? (
+                      <Glyph name="check" className="h-3 w-3" strokeWidth={2.8} />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'currentColor' }} />
+                    )}
+                  </span>
+                  <span
+                    className="max-w-[82px] text-[10px] leading-4 sm:text-xs"
+                    style={{
+                      color: isCurrent
+                        ? 'var(--text-primary)'
+                        : isPast
+                          ? 'var(--text-secondary)'
+                          : 'var(--text-muted)',
+                      fontWeight: isCurrent ? 600 : 400,
+                    }}
+                  >
+                    {toSentenceCase(s.label)}
+                  </span>
                   {isCurrent && <span className="sr-only">(current stage)</span>}
                   {isPast && <span className="sr-only">(completed)</span>}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+                </div>
+                {i < CUSTOMER_STAGES.length - 1 && (
+                  <span
+                    aria-hidden="true"
+                    className="mx-2 mt-[11px] h-0.5 flex-1 rounded-full"
+                    style={{
+                      backgroundColor: isPast ? 'var(--brand)' : 'var(--hairline-strong)',
+                    }}
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ol>
       </div>
-    </div>
+    </section>
   );
 }
 
 // ─── Event Timeline ────────────────────────────────────────────
 
-const TIMELINE_ICON_STYLES: Record<string, { bg: string; text: string; symbol: string }> = {
-  info: { bg: 'bg-sky-100 dark:bg-sky-500/15', text: 'text-sky-600 dark:text-sky-300', symbol: 'ℹ' },
-  success: {
-    bg: 'bg-emerald-100 dark:bg-emerald-500/15',
-    text: 'text-emerald-600 dark:text-emerald-300',
-    symbol: '✓',
-  },
-  warning: {
-    bg: 'bg-red-100 dark:bg-red-500/15',
-    text: 'text-red-600 dark:text-red-300',
-    symbol: '!',
-  },
-  action: {
-    bg: 'bg-amber-100 dark:bg-amber-500/15',
-    text: 'text-amber-600 dark:text-amber-300',
-    symbol: '→',
-  },
-  milestone: {
-    bg: 'bg-fuchsia-100 dark:bg-fuchsia-500/15',
-    text: 'text-fuchsia-600 dark:text-fuchsia-300',
-    symbol: '★',
-  },
+/* One neutral marker for every event. The kind is always spelled out beside the
+   timestamp, so the timeline never leans on colour or shape to carry meaning. */
+const TIMELINE_GLYPHS: Record<string, string> = {
+  info: 'clock',
+  success: 'check',
+  warning: 'alert',
+  action: 'swap',
+  milestone: 'sign',
 };
 
 /* The marker symbol is decorative — the event kind is always spelled out too,
@@ -2806,17 +3171,22 @@ function EventTimeline({ events }: { events: TimelineEvent[] }) {
 
       <ol className="space-y-4">
         {events.map((evt, i) => {
-          const iconStyle = TIMELINE_ICON_STYLES[evt.icon] || TIMELINE_ICON_STYLES.info;
+          const glyph = TIMELINE_GLYPHS[evt.icon] || TIMELINE_GLYPHS.info;
           const iconText = TIMELINE_ICON_TEXT[evt.icon] || TIMELINE_ICON_TEXT.info;
 
           return (
             <li key={i} className="relative flex gap-3">
               {/* Icon */}
               <div
-                className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${iconStyle.bg} ${iconStyle.text}`}
+                className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                style={{
+                  backgroundColor: 'var(--surface-input)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--hairline)',
+                }}
                 aria-hidden="true"
               >
-                {iconStyle.symbol}
+                <Glyph name={glyph} className="h-3.5 w-3.5" strokeWidth={2} />
               </div>
 
               {/* Content */}
@@ -2845,12 +3215,12 @@ function EventTimeline({ events }: { events: TimelineEvent[] }) {
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="card">
-      <h2 className="text-base font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-        {title}
-      </h2>
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">{children}</dl>
-    </div>
+    <section className="panel">
+      <div className="panel-header">
+        <h2 className="panel-title">{title}</h2>
+      </div>
+      <dl className="divide-token">{children}</dl>
+    </section>
   );
 }
 
@@ -2864,15 +3234,12 @@ function DetailRow({
   className?: string;
 }) {
   return (
-    <div
-      className="flex items-center justify-between gap-4 rounded-2xl px-5 py-4 sm:flex-col sm:items-start sm:gap-1"
-      style={{ backgroundColor: 'var(--surface-input)' }}
-    >
-      <dt className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
+    <div className="flex items-start justify-between gap-6 px-6 py-3.5">
+      <dt className="shrink-0 text-sm" style={{ color: 'var(--text-muted)' }}>
         {label}
       </dt>
       <dd
-        className={`text-base font-semibold tabular-nums ${className || ''}`}
+        className={`max-w-[62%] break-words text-right text-sm font-semibold tabular-nums ${className || ''}`}
         style={className ? undefined : { color: 'var(--text-primary)' }}
       >
         {value}

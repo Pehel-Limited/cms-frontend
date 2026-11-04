@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { RepeatPayment } from '@/components/intelligence/RepeatPayment';
 import { DotMatrix } from '@/components/banking/BankCard';
 import { PageHero } from '@/components/ui/PageHero';
-import Glyph, { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
+import Glyph, { ACCOUNT_GLYPH, CurrencyGlyph, glyphFor, GlyphTile } from '@/components/ui/Glyph';
+import { RequestMoneyDialog, type CreatedRequest } from '@/components/payments/RequestMoneyDialog';
 import {
   ACCOUNTS,
   BENEFICIARIES,
@@ -46,19 +47,19 @@ function initials(name: string): string {
 }
 
 /* ──────────────────────────────────────────────────────────────────
- * What the customer is doing — the four tiles across the top of the
- * screen. Each is a different source of recipient, not a different
- * form, so switching tile only swaps the "To" control.
+ * What the customer is doing. Each tile is a different source of
+ * recipient, not a different form, so switching tile only swaps the
+ * "To" control. A saved payee is chosen from the people grid instead
+ * of a tile, so 'saved' stays in the type without appearing here.
  * ────────────────────────────────────────────────────────────────── */
 
 const ACTIONS = [
   { id: 'transfer', label: 'Transfer', caption: 'Between my accounts', icon: 'swap' },
-  { id: 'saved', label: 'Pay someone', caption: 'A payee you have saved', icon: 'user' },
   { id: 'bill', label: 'Pay a bill', caption: 'A supplier you pay regularly', icon: 'Bills' },
   { id: 'new', label: 'New payee', caption: 'Set up someone else', icon: 'plus' },
 ] as const;
 
-type ActionId = (typeof ACTIONS)[number]['id'];
+type ActionId = (typeof ACTIONS)[number]['id'] | 'saved';
 
 /* ──────────────────────────────────────────────────────────────────
  * Activity — posted transactions plus the upcoming schedule. Nothing is
@@ -326,6 +327,8 @@ export default function PaymentsPage() {
   const [expanded, setExpanded] = useState(false);
   const [sent, setSent] = useState<ActivityRow[]>([]);
   const [confirmation, setConfirmation] = useState('');
+  const [requestOpen, setRequestOpen] = useState(false);
+  const composerRef = useRef<HTMLFormElement>(null);
 
   const { data, state, retry } = useActivity();
 
@@ -416,6 +419,39 @@ export default function PaymentsPage() {
     setReference('');
   }, [canSend, source, recipient, payDate, reference, numericAmount]);
 
+  /* Choosing a recipient above leaves the amount as the next thing to do, so
+     carry the customer to the composer instead of leaving them to find it. */
+  const focusComposer = useCallback((targetId = 'pay-amount') => {
+    window.setTimeout(() => {
+      composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const target = document.getElementById(targetId);
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    }, 60);
+  }, []);
+
+  const handleCreateRequest = useCallback((request: CreatedRequest) => {
+    const now = Date.now();
+    const landing = ACCOUNTS.find(a => a.type === 'CURRENT')?.name ?? 'Current account';
+    const row: ActivityRow = {
+      id: `request-${now}`,
+      when: now,
+      dateISO: new Date(now).toISOString(),
+      title: request.name,
+      caption: request.note ? `Request · ${request.note}` : `Request ${request.reference}`,
+      account: landing,
+      amount: request.amount,
+      currency: 'EUR',
+      direction: 'IN',
+      state: 'Pending',
+      icon: 'Income',
+      who: /[a-zA-Z]/.test(request.name) ? initials(request.name) : undefined,
+    };
+    setSent(prev => [row, ...prev]);
+    setConfirmation(
+      `Request ${request.reference} for ${fmt(request.amount)} created. Share it with ${request.name} — no money has moved.`
+    );
+  }, []);
+
   const chooseAction = useCallback((next: ActionId) => {
     setAction(next);
     setPayeeId('');
@@ -429,31 +465,43 @@ export default function PaymentsPage() {
     setToAccount(fromAccount);
   }, [fromAccount, toAccount]);
 
-  const pickPayee = useCallback((b: Beneficiary) => {
-    setAction('saved');
-    setPayeeId(b.id);
-    setConfirmation(`${b.name} selected as the payee. Add an amount to continue.`);
-  }, []);
-
-  const pickBiller = useCallback((name: string, typical: number) => {
-    setAction('bill');
-    setBillerName(name);
-    setAmount(String(typical));
-  }, []);
-
-  const prepareRepeat = useCallback((t: Transaction) => {
-    const beneficiary = BENEFICIARIES.find(b => b.name === t.merchant);
-    if (beneficiary) {
+  const pickPayee = useCallback(
+    (b: Beneficiary) => {
       setAction('saved');
-      setPayeeId(beneficiary.id);
-    } else {
-      setAction('new');
-      setPayeeText(t.merchant);
-    }
-    setAmount(String(t.amount));
-    setReference(t.note || '');
-    setFromAccount(t.accountId);
-  }, []);
+      setPayeeId(b.id);
+      setConfirmation(`${b.name} selected as the payee. Add an amount to continue.`);
+      focusComposer();
+    },
+    [focusComposer]
+  );
+
+  const pickBiller = useCallback(
+    (name: string, typical: number) => {
+      setAction('bill');
+      setBillerName(name);
+      setAmount(String(typical));
+      focusComposer();
+    },
+    [focusComposer]
+  );
+
+  const prepareRepeat = useCallback(
+    (t: Transaction) => {
+      const beneficiary = BENEFICIARIES.find(b => b.name === t.merchant);
+      if (beneficiary) {
+        setAction('saved');
+        setPayeeId(beneficiary.id);
+      } else {
+        setAction('new');
+        setPayeeText(t.merchant);
+      }
+      setAmount(String(t.amount));
+      setReference(t.note || '');
+      setFromAccount(t.accountId);
+      focusComposer();
+    },
+    [focusComposer]
+  );
 
   const scheduledCount = SCHEDULED_PAYMENTS.length;
   const scheduledTotal = SCHEDULED_PAYMENTS.reduce((sum, s) => sum + s.amount, 0);
@@ -462,7 +510,7 @@ export default function PaymentsPage() {
     <div className="space-y-5">
       <PageHero
         title="Payments & transfers"
-        subtitle="Choose what you are paying for, then fill in the amount. Every payment on this screen is simulated."
+        subtitle="Pay someone, settle a bill or ask to be paid. Every payment on this screen is simulated."
         meta={
           <>
             <span className="chip">Sample data</span>
@@ -471,15 +519,130 @@ export default function PaymentsPage() {
           </>
         }
         actions={
-          <Link href="/portal/transactions" className="pill-btn">
+          <Link href="/portal/transactions" className="pill-btn !hidden sm:!inline-flex">
             All activity
             <Glyph name="Transfers" className="h-4 w-4" />
           </Link>
         }
       />
 
+      {/* ══ People first — paying a person is the most common trip ══ */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <section className="glass-panel xl:col-span-8" aria-label="People you pay">
+          <div className="glass-head">
+            <div>
+              <h2 className="glass-title">People you pay</h2>
+              <p className="glass-sub">
+                Tap someone and their details fill the form below.
+              </p>
+            </div>
+            <span className="chip num shrink-0">{BENEFICIARIES.length} saved</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 px-4 pb-5 sm:grid-cols-4 sm:gap-3 sm:px-6 lg:grid-cols-7">
+            {BENEFICIARIES.map(b => {
+              const active = action === 'saved' && payeeId === b.id;
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => pickPayee(b)}
+                  aria-pressed={active}
+                  className="flex min-w-0 flex-col items-center gap-2 rounded-2xl px-2 py-3.5 text-center transition-colors"
+                  style={{
+                    backgroundColor: active ? 'var(--brand-soft)' : 'var(--tile-bg)',
+                    border: `1px solid ${active ? 'var(--brand-soft-strong)' : 'var(--hairline)'}`,
+                    color: active ? 'var(--brand-on-soft)' : 'var(--text-primary)',
+                  }}
+                >
+                  <span className="avatar-dot h-11 w-11 text-sm">{initials(b.name)}</span>
+                  <span className="min-w-0 w-full">
+                    <span className="block truncate text-sm font-semibold">
+                      {b.name.split(' ')[0]}
+                    </span>
+                    <span
+                      className="block truncate text-[11px]"
+                      style={{
+                        color: active ? 'inherit' : 'var(--text-muted)',
+                        opacity: active ? 0.75 : 1,
+                      }}
+                    >
+                      {b.handle}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => {
+                chooseAction('new');
+                setConfirmation('Add a name to set up a new payee, then enter the amount.');
+                focusComposer('pay-new-payee');
+              }}
+              className="col-span-3 flex min-w-0 items-center justify-center gap-3 rounded-2xl px-4 py-3.5 text-center transition-colors sm:col-span-1 sm:flex-col sm:gap-2 sm:px-2"
+              style={{
+                border: '1px dashed var(--hairline-strong)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <span
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                style={{
+                  backgroundColor: 'var(--tile-bg)',
+                  border: '1px dashed var(--hairline-strong)',
+                }}
+              >
+                <Glyph name="plus" className="h-4 w-4" strokeWidth={2} />
+              </span>
+              <span className="min-w-0 text-left sm:w-full sm:text-center">
+                <span className="block truncate text-sm font-semibold">Add</span>
+                <span className="block truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  New payee
+                </span>
+              </span>
+            </button>
+          </div>
+
+          <p className="glass-foot">
+            Payees and handles are sample data. Nothing is sent until you confirm in the form.
+          </p>
+        </section>
+
+        {/* The counterpart to paying: ask to be paid, from any phone. */}
+        <section
+          className="mesh-hero relative flex flex-col overflow-hidden rounded-[28px] p-6 text-white shadow-premium xl:col-span-4"
+          aria-label="Request money"
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.16), transparent 68%)' }}
+          />
+          <h2 className="serif text-[26px] font-medium leading-tight">Request money</h2>
+          <p className="mt-2 text-sm leading-relaxed text-white/70">Ask anyone to pay you.</p>
+          <button
+            type="button"
+            onClick={() => setRequestOpen(true)}
+            className="mt-5 inline-flex items-center gap-2 self-start rounded-full px-5 py-2.5 text-sm font-semibold transition-transform hover:-translate-y-0.5"
+            style={{ backgroundColor: '#ffffff', color: '#3f1440' }}
+          >
+            <CurrencyGlyph currency={source?.currency ?? 'EUR'} className="h-4 w-4" strokeWidth={2} />
+            Create a request
+          </button>
+          <div className="mt-auto flex items-center gap-3 pt-6 text-[11px] font-medium text-white/60">
+            <span>Create</span>
+            <span aria-hidden="true" className="h-px flex-1 bg-white/20" />
+            <span>Share</span>
+            <span aria-hidden="true" className="h-px flex-1 bg-white/20" />
+            <span>Get paid</span>
+          </div>
+        </section>
+      </div>
+
       {/* ══ What are you paying ══ */}
-      <div role="group" aria-label="Payment type" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div role="group" aria-label="Payment type" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {ACTIONS.map(a => (
           <button
             key={a.id}
@@ -514,7 +677,8 @@ export default function PaymentsPage() {
         {/* ══ Composer + activity ══ */}
         <div className="flex flex-col gap-5 xl:col-span-7">
           <form
-            className="glass-panel"
+            ref={composerRef}
+            className="glass-panel scroll-mt-24 scroll-mb-6"
             onSubmit={e => {
               e.preventDefault();
               handleSubmit();
@@ -982,48 +1146,6 @@ export default function PaymentsPage() {
             )}
           </section>
 
-          <section className="glass-panel" aria-label="People you pay">
-            <div className="glass-head">
-              <div>
-                <h2 className="glass-title">People you pay</h2>
-                <p className="glass-sub">Saved payees, ready to select.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  chooseAction('new');
-                  setConfirmation('Add a name in the New payee field to set someone up.');
-                }}
-                className="ring-btn shrink-0 !h-9 !w-9"
-                aria-label="Set up a new payee"
-              >
-                <Glyph name="plus" className="h-4 w-4" strokeWidth={2} />
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2 px-6 pb-5">
-              {BENEFICIARIES.map(b => (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => pickPayee(b)}
-                  aria-pressed={action === 'saved' && payeeId === b.id}
-                  className="flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-sm font-medium transition-colors"
-                  style={{
-                    background: action === 'saved' && payeeId === b.id ? 'var(--brand-soft)' : 'var(--tile-bg)',
-                    border: '1px solid var(--hairline)',
-                    color:
-                      action === 'saved' && payeeId === b.id
-                        ? 'var(--brand-on-soft)'
-                        : 'var(--text-secondary)',
-                  }}
-                >
-                  <span className="avatar-dot !border-0 h-7 w-7 text-[10px]">{initials(b.name)}</span>
-                  {b.name.split(' ')[0]}
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section className="glass-panel" aria-label="Suppliers you pay regularly">
             <div className="glass-head">
               <div>
@@ -1087,6 +1209,12 @@ export default function PaymentsPage() {
           </section>
         </div>
       </div>
+
+      <RequestMoneyDialog
+        open={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        onCreate={handleCreateRequest}
+      />
     </div>
   );
 }

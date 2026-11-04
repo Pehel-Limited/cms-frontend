@@ -5,10 +5,8 @@ import Link from 'next/link';
 import {
   spendByCategory,
   bucketSpendByDay,
-  bucketDaily,
   savingsGoal,
   TRANSACTIONS,
-  SCHEDULED_PAYMENTS,
   type SpendCategory,
 } from '@/lib/banking-data';
 import Glyph, { glyphFor, GlyphTile } from '@/components/ui/Glyph';
@@ -141,65 +139,13 @@ function DotRun({ opacity, filled }: { opacity: number; filled: number }) {
 }
 
 /** What each confidence level actually claims — no stronger than the arithmetic. */
-const CONFIDENCE_LABEL: Record<RecurringConfidence, { label: string; note: string }> = {
-  CONFIRMED: {
-    label: 'Regular',
-    note: 'Three or more settled payments, each roughly the same gap apart.',
-  },
-  PROBABLE: {
-    label: 'Likely regular',
-    note: 'Three or more settled payments, but the gap between them varies.',
-  },
-  INSUFFICIENT_HISTORY: {
-    label: 'Not enough history',
-    note: 'Seen twice. Two payments always look regular, so this is not treated as a pattern yet.',
-  },
+const CONFIDENCE_LABEL: Record<RecurringConfidence, { label: string }> = {
+  CONFIRMED: { label: 'Regular' },
+  PROBABLE: { label: 'Likely regular' },
+  INSUFFICIENT_HISTORY: { label: 'Not enough history' },
 };
 
 /* ────────────────────────────────────────────────────────────────── */
-
-function KpiCell({
-  icon,
-  label,
-  value,
-  note,
-  series,
-  children,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  note: React.ReactNode;
-  series?: number[];
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="kpi-cell block">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="action-tile-icon h-7 w-7 shrink-0 rounded-lg">
-              <Glyph name={icon} className="h-3.5 w-3.5" />
-            </span>
-            <p className="kpi-label !text-[13px]">{label}</p>
-          </div>
-          <p className="num mt-2.5 text-[26px] font-bold leading-none tracking-tight" style={{ color: 'var(--text-primary)' }}>
-            {value}
-          </p>
-          <p className="mt-2 text-xs leading-snug" style={{ color: 'var(--text-muted)' }}>
-            {note}
-          </p>
-          {children}
-        </div>
-        {series && series.length > 1 && (
-          <span aria-hidden="true" className="hidden shrink-0 sm:block">
-            <DotMatrix data={series} box={{ width: 72, height: 34 }} label={`${label} trend`} />
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /* ────────────────────────────────────────────────────────────────── */
 
@@ -236,7 +182,6 @@ export default function InsightsPage() {
   );
 
   const spend = useMemo(() => spendByCategory(overrides, true), [overrides]);
-  const ringTotal = useMemo(() => spend.reduce((sum, s) => sum + s.total, 0), [spend]);
   const dailySpend = useMemo(() => bucketSpendByDay(spendRows, WINDOW_DAYS), [spendRows]);
   const recurring = useMemo(() => detectRecurring(spendRows, overrides), [spendRows, overrides]);
   const goal = useMemo(() => savingsGoal(), []);
@@ -286,9 +231,6 @@ export default function InsightsPage() {
     return rows.slice(0, 6).map(m => ({ ...m, dots: Math.max(1, Math.round((m.total / max) * 10)) }));
   }, [spendRows, overrides]);
 
-  const scheduled = useMemo(() => SCHEDULED_PAYMENTS, []);
-  const scheduledTotal = useMemo(() => scheduled.reduce((sum, p) => sum + p.amount, 0), [scheduled]);
-
   /* Honest date window: the oldest and newest transaction actually on record. */
   const span = useMemo(() => {
     const dates = TRANSACTIONS.map(t => new Date(t.date).getTime()).sort((a, b) => a - b);
@@ -297,14 +239,6 @@ export default function InsightsPage() {
   }, []);
 
   const spentTotal = useMemo(() => spendRows.reduce((sum, t) => sum + t.amount, 0), [spendRows]);
-
-  /* The KPI thumbnail is 30 days of daily figures, which is far too many dots to
-     read at 72px. Collapsed into three-day sums — still the same money, just
-     coarser, so the shape of the window survives at thumbnail size. */
-  const threeDayBuckets = useMemo(
-    () => bucketDaily(dailySpend, 3).map(d => d.total),
-    [dailySpend]
-  );
 
   const peak = useMemo(() => {
     const idx = dailySpend.reduce((best, d, i) => (d.total > dailySpend[best].total ? i : best), 0);
@@ -319,50 +253,17 @@ export default function InsightsPage() {
     return `${dayShort(dailySpend[0].date)} – ${dayShort(dailySpend[dailySpend.length - 1].date)}`;
   }, [dailySpend]);
 
-  const goalPct = Math.min(100, Math.round((goal.saved / goal.target) * 100));
   const topCategory = spend[0];
   const largestCategoryShare = topCategory ? Math.round(topCategory.pct) : 0;
-
-  /* Three lines, each traceable to a figure already computed above. Nothing here
-     is generated: they are the arithmetic, phrased. */
-  const readouts = useMemo(() => {
-    const items: { icon: string; title: string; body: string }[] = [];
-    if (topCategory) {
-      items.push({
-        icon: glyphFor(topCategory.category),
-        title: `${topCategory.category} is your largest category`,
-        body: `${fmtEUR(topCategory.total)} of settled spending, ${Math.round(topCategory.pct)}% of the total across the ${projection.windowDays}-day window.`,
-      });
-    }
-    if (highlights.largestOut) {
-      items.push({
-        icon: 'chart',
-        title: `${fmtEUR(highlights.avgPerDay)} a day, settled`,
-        body: `Across ${highlights.activeDaysCount} of ${projection.windowDays} days. Your largest single payment was ${fmtEUR(highlights.largestOut.amount)} to ${highlights.largestOut.merchant}.`,
-      });
-    }
-    const regular = visibleRecurring.filter(r => r.confidence === 'CONFIRMED');
-    if (regular.length) {
-      items.push({
-        icon: 'subscription',
-        title: `${regular.length} regular commitment${regular.length === 1 ? '' : 's'} at ${fmtEUR(
-          regular.reduce((s, r) => s + r.typicalAmount, 0)
-        )} a cycle`,
-        body: `Weekdays take ${split.weekdayPct}% of your outgoing money (${fmtEUR(split.weekdayTotal)}) against ${split.weekendPct}% at weekends.`,
-      });
-    }
-    return items;
-  }, [topCategory, highlights, visibleRecurring, split, projection.windowDays]);
 
   return (
     <div className="space-y-5">
       <PageHero
-        title="Insights"
-        subtitle="Where your money went, worked out from the transactions on your accounts."
+        title="Where it went"
+        subtitle="Settled outgoing spending, worked out on this device from your transactions."
         meta={
           <>
             <span className="chip">{span ? `${span.from} – ${span.to}` : 'This period'}</span>
-            <span className="chip">{TRANSACTIONS.length} transactions</span>
             <span className="chip">Calculated on device</span>
           </>
         }
@@ -372,7 +273,38 @@ export default function InsightsPage() {
             <Glyph name="Transfers" className="h-4 w-4" />
           </Link>
         }
-      />
+      >
+        <div
+          className="mt-6 grid grid-cols-1 gap-4 border-t pt-5 sm:grid-cols-2"
+          style={{ borderColor: 'var(--hairline)' }}
+        >
+          <div>
+            <p className="kpi-label">Spent, settled</p>
+            <p
+              className="num mt-1 text-[32px] font-bold leading-none tracking-tight"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {fmtEUR(spentTotal)}
+            </p>
+            <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              From {spendRows.length} settled payments · excludes transfers
+            </p>
+          </div>
+          <div>
+            <p className="kpi-label">Average per day</p>
+            <p
+              className="num mt-1 text-[22px] font-semibold"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {fmtEUR(highlights.avgPerDay)}
+            </p>
+            <p className="mt-2 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
+              On {highlights.activeDaysCount} of {projection.windowDays} days with activity ·{' '}
+              {highlights.zeroSpendDays} with none
+            </p>
+          </div>
+        </div>
+      </PageHero>
 
       {ready && (dismissedCount > 0 || correctionCount > 0) && (
         <div
@@ -401,63 +333,14 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {/* ══ KPI strip ══ */}
-      <section className="glass-panel" aria-label="Spending summary">
-        <div className="kpi-strip">
-          <KpiCell
-            icon="chart"
-            label="Spent, settled"
-            value={fmtEUR(spentTotal)}
-            note={`From ${spendRows.length} settled payments · ${span ? `${span.from} – ${span.to}` : 'this period'}`}
-            series={threeDayBuckets}
-          />
-          <KpiCell
-            icon="calendar"
-            label="Average per day"
-            value={fmtEUR(highlights.avgPerDay)}
-            note={`On ${highlights.activeDaysCount} of ${projection.windowDays} days with activity · ${highlights.zeroSpendDays} with none`}
-          />
-          <KpiCell
-            icon="savings"
-            label={`${goal.label} forecast`}
-            value={
-              projection.targetDate
-                ? new Date(projection.targetDate).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-                : 'Paused'
-            }
-            note={
-              projection.targetDate
-                ? `At ${signedEUR(projection.monthlyNet)} net a month · ${fmtEUR(projection.remaining)} to go`
-                : `Net cash flow is not positive, so no date can be projected`
-            }
-          >
-            <div className="mt-3">
-              <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--tile-bg)' }}>
-                <div className="h-full rounded-full" style={{ width: `${goalPct}%`, backgroundColor: 'var(--brand)' }} />
-              </div>
-              <p className="mt-1.5 text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
-                {fmtEUR(goal.saved)} of {fmtEUR(goal.target)} · {goalPct}%
-              </p>
-            </div>
-          </KpiCell>
-          <KpiCell
-            icon="subscription"
-            label="Recurring payments"
-            value={`${visibleRecurring.length} detected`}
-            note={`Typically ${fmtEUR(recurringMonthly)} a cycle between them`}
-          />
-        </div>
-      </section>
-
       {/* ══ Money story | category ring ══ */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <section className="glass-panel xl:col-span-7" aria-label="Your money story">
           <div className="glass-head">
             <div>
-              <h2 className="glass-title">Your money story</h2>
+              <h2 className="glass-title">Money story</h2>
               <p className="glass-sub">Settled outgoing payments, day by day</p>
             </div>
-            <span className="chip shrink-0">{chartRange ?? `${dailySpend.length} days`}</span>
           </div>
 
           <div className="glass-body">
@@ -517,7 +400,7 @@ export default function InsightsPage() {
               </>
             )}
 
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="stat-row !items-start">
                 <span className="action-tile-icon h-9 w-9 shrink-0 rounded-xl">
                   <Glyph name="calendar" className="h-4 w-4" />
@@ -552,31 +435,12 @@ export default function InsightsPage() {
                 </span>
               </div>
 
-              <div className="stat-row !items-start">
-                <span className="action-tile-icon h-9 w-9 shrink-0 rounded-xl">
-                  <Glyph name="Income" className="h-4 w-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
-                    Net cash flow
-                  </span>
-                  <span
-                    className="num block text-base font-semibold"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    {signedEUR(projection.monthlyNet)}
-                  </span>
-                  <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>
-                    a month, over {projection.windowDays} observed days
-                  </span>
-                </span>
-              </div>
             </div>
           </div>
 
           <p className="glass-foot">
-            Column height is settled outgoing money that day, excluding transfers between your own accounts. Pending
-            and incoming transactions are left out, so the bars sum to {fmtEUR(spentTotal)}.
+            Column height is settled outgoing money that day, excluding transfers between your own
+            accounts. Pending and incoming transactions are left out.
           </p>
         </section>
 
@@ -586,7 +450,6 @@ export default function InsightsPage() {
               <h2 className="glass-title">Spending by category</h2>
               <p className="glass-sub">{spend.length} categories with settled spend</p>
             </div>
-            <span className="chip shrink-0">{largestCategoryShare}% top</span>
           </div>
 
           {spend.length === 0 ? (
@@ -602,11 +465,17 @@ export default function InsightsPage() {
             <>
               <div className="flex justify-center pb-2">
                 <DottedRing segments={spend.map((s, i) => ({ value: s.total, opacity: tone(i, spend.length) }))}>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    Spent
+                  <span
+                    className="text-[10px] font-semibold uppercase tracking-[0.12em]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    Top category
+                  </span>
+                  <span className="mt-1 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {topCategory?.category ?? '—'}
                   </span>
                   <span className="num text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-                    {fmtEUR(ringTotal)}
+                    {largestCategoryShare}%
                   </span>
                 </DottedRing>
               </div>
@@ -650,12 +519,12 @@ export default function InsightsPage() {
         </section>
       </div>
 
-      {/* ══ Recurring | merchants + readouts ══ */}
+      {/* ══ Recurring | merchants ══ */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <section className="glass-panel flex flex-col xl:col-span-7" aria-label="Recurring payments and subscriptions">
           <div className="glass-head flex-col !items-start gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="glass-title">Recurring payments &amp; subscriptions</h2>
+              <h2 className="glass-title">Recurring payments</h2>
               <p className="glass-sub">
                 Identified from payment cadence and amounts. Each row shows the evidence behind it.
               </p>
@@ -724,9 +593,6 @@ export default function InsightsPage() {
                               ? `roughly every ${item.medianGapDays} days`
                               : 'not enough history to call a cadence'}
                           </p>
-                          <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                            {confidence.note}
-                          </p>
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
@@ -765,8 +631,7 @@ export default function InsightsPage() {
           </div>
         </section>
 
-        <div className="flex flex-col gap-5 xl:col-span-5">
-          <section className="glass-panel" aria-label="Top merchants">
+        <section className="glass-panel flex flex-col xl:col-span-5" aria-label="Top merchants">
             <div className="glass-head">
               <div>
                 <h2 className="glass-title">Top merchants</h2>
@@ -798,7 +663,7 @@ export default function InsightsPage() {
                         {m.category} · {m.count} payment{m.count === 1 ? '' : 's'}
                       </p>
                     </div>
-                    <span aria-hidden="true" className="shrink-0">
+                    <span aria-hidden="true" className="hidden shrink-0 sm:block">
                       <DotRun opacity={tone(idx, topMerchants.length)} filled={m.dots} />
                     </span>
                     <span className="num w-20 shrink-0 text-right text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -810,44 +675,11 @@ export default function InsightsPage() {
             )}
           </section>
 
-          <section className="glass-panel flex-1" aria-label="What the numbers say">
-            <div className="glass-head">
-              <div>
-                <h2 className="glass-title">What the numbers say</h2>
-                <p className="glass-sub">Arithmetic over your transactions, phrased</p>
-              </div>
-              <span className="chip shrink-0">No model involved</span>
-            </div>
-
-            <div className="flex-1">
-              {readouts.map(item => (
-                <div key={item.title} className="glass-row">
-                  <GlyphTile name={item.icon} className="h-9 w-9 rounded-xl" iconClassName="h-4 w-4" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      {item.title}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                      {item.body}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Link href="/portal/ai-assistant" className="glass-foot flex items-center justify-between link-arrow">
-              Ask about any of this
-              <span data-arrow aria-hidden="true">
-                →
-              </span>
-            </Link>
-          </section>
-        </div>
       </div>
 
-      {/* ══ Forecast working | scheduled ══ */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        {!isDismissed(PROJECTION_ID) && (
-          <section className="glass-panel flex flex-col xl:col-span-7" aria-label="Savings forecast">
+      {/* ══ Forecast working ══ */}
+      {!isDismissed(PROJECTION_ID) && (
+        <section className="glass-panel flex flex-col" aria-label="Savings forecast">
             <div className="glass-head">
               <div>
                 <h2 className="glass-title">{goal.label} forecast</h2>
@@ -923,65 +755,6 @@ export default function InsightsPage() {
           </section>
         )}
 
-        <section
-          className={`glass-panel flex flex-col ${isDismissed(PROJECTION_ID) ? 'xl:col-span-12' : 'xl:col-span-5'}`}
-          aria-label="Scheduled payments and direct debits"
-        >
-          <div className="glass-head">
-            <div>
-              <h2 className="glass-title">Scheduled payments</h2>
-              <p className="glass-sub">Committed instructions on your accounts</p>
-            </div>
-            <span className="chip num shrink-0">{fmtEUR(scheduledTotal)} upcoming</span>
-          </div>
-
-          {scheduled.length === 0 ? (
-            <div className="glass-body">
-              <div className="empty-state">
-                <p className="empty-state-title">Nothing scheduled</p>
-                <p className="empty-state-text">
-                  Standing orders and direct debits will be listed here with their next deduction date.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div>
-              {scheduled.map(p => {
-                const next = new Date(p.nextDate);
-                const daysUntil = Math.max(0, Math.ceil((next.getTime() - Date.now()) / 86_400_000));
-                return (
-                  <div key={p.id} className="glass-row">
-                    <span className="dash-date-tile h-11 w-11 shrink-0 rounded-xl">
-                      <span className="text-[9px] font-semibold uppercase leading-none">
-                        {next.toLocaleDateString(undefined, { month: 'short' })}
-                      </span>
-                      <span className="num text-base font-semibold leading-tight">{next.getDate()}</span>
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {p.payee}
-                      </p>
-                      <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {p.frequency} · in {daysUntil} day{daysUntil === 1 ? '' : 's'}
-                      </p>
-                    </div>
-                    <p className="num shrink-0 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      {fmtEUR(p.amount)}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="glass-foot mt-auto flex items-center justify-between">
-            <span>{scheduled.length} active instructions</span>
-            <Link href="/portal/payments" className="link-arrow">
-              Manage <span data-arrow aria-hidden="true">→</span>
-            </Link>
-          </div>
-        </section>
-      </div>
     </div>
   );
 }

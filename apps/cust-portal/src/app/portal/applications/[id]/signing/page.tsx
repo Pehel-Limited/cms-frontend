@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { esignService } from '@/services/api/esign-service';
+import Glyph from '@/components/ui/Glyph';
 
 type SigningStage = 'review' | 'signing' | 'done' | 'error';
 
@@ -56,171 +57,172 @@ export default function SigningPage() {
   }
 
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center p-4"
-      style={{ backgroundColor: 'var(--surface-bg)' }}
-    >
-      <div
-        className="w-full max-w-2xl rounded-2xl border overflow-hidden"
-        style={{
-          backgroundColor: 'var(--surface-card)',
-          borderColor: 'var(--surface-border)',
-          boxShadow: 'var(--shadow-lg)',
-        }}
-      >
-        {/* Header */}
-        <div
-          className="px-6 py-4 flex flex-wrap items-center gap-3"
-          style={{ backgroundColor: 'var(--brand)' }}
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <button
+          onClick={() => router.push(returnUrl || `/portal/applications/${applicationId}`)}
+          className="btn btn-ghost btn-sm"
+          type="button"
         >
-          <svg aria-hidden="true" className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-            />
-          </svg>
-          <h1 className="serif text-xl font-medium text-white">Secure document signing</h1>
-          <span className="ml-auto text-sm text-white/80">Simulation mode</span>
-        </div>
+          <Glyph name="chevron" className="h-4 w-4 rotate-90" strokeWidth={2} />
+          Back to application
+        </button>
+        <span className="chip !py-1 !text-xs">Simulation mode</span>
+      </div>
 
-        <div className="p-6 space-y-6">
-          {/* Step position — quiet, factual, derived from the current stage */}
-          <nav aria-label="Signing progress">
-            <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-              Step {currentStep + 1} of {SIGNING_STEPS.length} · {SIGNING_STEPS[currentStep]}
-            </p>
-            <div
-              className="mt-2 h-1 w-full overflow-hidden rounded-full"
-              role="progressbar"
-              aria-valuemin={1}
-              aria-valuemax={SIGNING_STEPS.length}
-              aria-valuenow={currentStep + 1}
-              aria-valuetext={`Step ${currentStep + 1} of ${SIGNING_STEPS.length}: ${SIGNING_STEPS[currentStep]}`}
-              style={{ backgroundColor: 'var(--surface-input)' }}
-            >
-              <div
-                className="h-full rounded-full transition-all duration-300"
-                style={{
-                  width: `${((currentStep + 1) / SIGNING_STEPS.length) * 100}%`,
-                  backgroundColor: 'var(--brand)',
-                }}
-              />
-            </div>
-            <ol className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-              {SIGNING_STEPS.map((label, i) => (
-                <li
-                  key={label}
-                  aria-current={i === currentStep ? 'step' : undefined}
-                  className="flex items-center gap-2"
-                >
-                  {i > 0 && (
-                    <span aria-hidden="true" style={{ color: 'var(--text-muted)' }}>
-                      ·
-                    </span>
-                  )}
-                  <span
-                    style={{
-                      color: i === currentStep ? 'var(--text-primary)' : 'var(--text-muted)',
-                      fontWeight: i === currentStep ? 600 : 400,
-                    }}
-                  >
-                    {label}
-                    {i < currentStep && <span className="sr-only"> (completed)</span>}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </nav>
-
-          {/* Document preview */}
+      <div className="glass-panel-solid overflow-hidden">
+        {/* Header */}
+        <header className="mesh-hero relative overflow-hidden px-6 py-6 text-white sm:px-8">
           <div
-            className="border rounded-xl p-5 space-y-3"
-            style={{
-              borderColor: 'var(--surface-border)',
-              backgroundColor: 'var(--surface-input)',
-            }}
-          >
-            <div
-              className="flex items-center gap-2 text-base font-medium"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              <svg
-                aria-hidden="true"
-                className="w-5 h-5"
-                style={{ color: 'var(--brand)' }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              Loan agreement
-            </div>
-            <div
-              className="text-sm leading-relaxed space-y-2"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              <p>
-                This document constitutes the binding loan agreement between you and the bank for
-                the loan referenced in your application{' '}
-                <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                  {applicationId.slice(0, 8)}…
-                </span>
-                .
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(255,255,255,.13), transparent 65%)' }}
+          />
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                Secure signing
               </p>
-              <p>
-                By signing, you confirm that you have read and understood the terms and conditions,
-                including the interest rate, repayment schedule, fees, and covenants applicable to
-                this loan.
-              </p>
-              <p>
-                This is a <strong>simulated signing session</strong>. In production, you would be
-                redirected to DocuSign to complete the signing ceremony.
+              <h1 className="serif mt-2 text-[27px] font-medium leading-tight sm:text-[31px]">
+                Sign your loan agreement
+              </h1>
+              <p className="mt-1 text-xs tabular-nums text-white/60">
+                Application {applicationId.slice(0, 8)}…
               </p>
             </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80">
+              <Glyph name="shield" className="h-3.5 w-3.5" strokeWidth={1.8} />
+              Encrypted session
+            </span>
           </div>
 
-          {/* Envelope reference — only shown when the signing session actually has one */}
-          {envelopeId && (
-            <div
-              className="flex flex-wrap items-center gap-2 text-sm"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"
-                />
-              </svg>
-              Envelope reference:{' '}
-              <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>
-                {envelopeId}
-              </span>
+          {/* Step position — quiet, factual, derived from the current stage */}
+          <nav aria-label="Signing progress" className="relative mt-7">
+            <ol className="flex items-center">
+              {SIGNING_STEPS.map((label, i) => {
+                const isPast = i < currentStep;
+                const isCurrent = i === currentStep;
+                return (
+                  <li key={label} className="flex flex-1 items-center" aria-current={isCurrent ? 'step' : undefined}>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold"
+                        style={{
+                          borderColor: isCurrent || isPast ? '#ffffff' : 'rgba(255,255,255,.3)',
+                          backgroundColor: isCurrent ? '#ffffff' : isPast ? 'rgba(255,255,255,.2)' : 'transparent',
+                          color: isCurrent ? '#5e1f5b' : '#ffffff',
+                        }}
+                        aria-hidden="true"
+                      >
+                        {isPast ? <Glyph name="check" className="h-3 w-3" strokeWidth={2.8} /> : i + 1}
+                      </span>
+                      <span
+                        className="whitespace-nowrap text-xs font-medium"
+                        style={{ color: isCurrent ? '#ffffff' : 'rgba(255,255,255,.6)' }}
+                      >
+                        {label}
+                      </span>
+                    </div>
+                    {i < SIGNING_STEPS.length - 1 && (
+                      <span
+                        aria-hidden="true"
+                        className="mx-3 h-px flex-1"
+                        style={{ backgroundColor: isPast ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.2)' }}
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        </header>
+
+        <div className="space-y-6 p-6 sm:p-8">
+          {/* Document preview */}
+          <section aria-labelledby="agreement-title">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 id="agreement-title" className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                <Glyph name="doc" className="h-4 w-4" strokeWidth={1.8} />
+                Loan agreement
+              </h2>
+              <span className="chip !py-1 !text-xs">Preview</span>
             </div>
-          )}
+
+            <div
+              className="rounded-[24px] border p-4 sm:p-5"
+              style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--surface-input)' }}
+            >
+              <div
+                className="rounded-2xl border p-5 sm:p-6"
+                style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--surface-card)' }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-4" style={{ borderColor: 'var(--hairline)' }}>
+                  <p className="serif text-lg font-medium" style={{ color: 'var(--text-primary)' }}>
+                    Loan agreement
+                  </p>
+                  <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
+                    The bank
+                  </p>
+                </div>
+
+                <div className="mt-5 space-y-3 text-sm leading-7" style={{ color: 'var(--text-secondary)' }}>
+                  <p>
+                    This document constitutes the binding loan agreement between you and the bank
+                    for the loan referenced in your application{' '}
+                    <span className="font-semibold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                      {applicationId.slice(0, 8)}…
+                    </span>
+                    .
+                  </p>
+                  <p>
+                    By signing, you confirm that you have read and understood the terms and
+                    conditions, including the interest rate, repayment schedule, fees, and
+                    covenants applicable to this loan.
+                  </p>
+                  <p>
+                    This is a <strong>simulated signing session</strong>. In production, you would
+                    be redirected to DocuSign to complete the signing ceremony.
+                  </p>
+                </div>
+
+                <div className="mt-8 grid grid-cols-2 gap-8 border-t pt-4" style={{ borderColor: 'var(--hairline)' }}>
+                  <div>
+                    <div className="h-8 border-b" style={{ borderColor: 'var(--hairline-strong)' }} />
+                    <p className="mt-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      Your signature
+                    </p>
+                  </div>
+                  <div>
+                    <div className="h-8 border-b" style={{ borderColor: 'var(--hairline-strong)' }} />
+                    <p className="mt-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      Date
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Envelope reference — only shown when the signing session actually has one */}
+              {envelopeId && (
+                <div
+                  className="mt-3 flex flex-wrap items-center gap-2 px-1 text-xs"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <Glyph name="shield" className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  Envelope reference:
+                  <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>
+                    {envelopeId}
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
 
           {/* Actions */}
           <div aria-live="polite">
             {step === 'review' && (
               <div className="space-y-3">
                 <button onClick={handleSign} className="btn btn-primary w-full py-3" type="button">
-                  <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                    />
-                  </svg>
+                  <Glyph name="sign" className="h-5 w-5" strokeWidth={1.8} />
                   Sign document
                 </button>
                 <button onClick={handleDecline} className="btn btn-outline w-full" type="button">
@@ -245,23 +247,13 @@ export default function SigningPage() {
 
             {step === 'done' && (
               <div className="flex flex-col items-center gap-3 py-4" role="status">
-                <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-500/15 rounded-full flex items-center justify-center">
-                  <svg
-                    aria-hidden="true"
-                    className="w-8 h-8 text-emerald-600 dark:text-emerald-300"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
+                <div
+                  className="flex h-14 w-14 items-center justify-center rounded-full"
+                  style={{ backgroundColor: 'rgba(14,155,108,.12)', color: 'var(--up)' }}
+                >
+                  <Glyph name="check" className="h-7 w-7" strokeWidth={2.4} />
                 </div>
-                <p className="text-emerald-700 dark:text-emerald-300 font-semibold text-lg">
+                <p className="text-lg font-semibold" style={{ color: 'var(--up)' }}>
                   Document signed
                 </p>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
@@ -272,26 +264,16 @@ export default function SigningPage() {
 
             {step === 'error' && (
               <div className="flex flex-col items-center gap-3 py-4" role="alert">
-                <div className="w-14 h-14 bg-red-100 dark:bg-red-500/15 rounded-full flex items-center justify-center">
-                  <svg
-                    aria-hidden="true"
-                    className="w-8 h-8 text-red-600 dark:text-red-300"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
+                <div
+                  className="flex h-14 w-14 items-center justify-center rounded-full"
+                  style={{ backgroundColor: 'rgba(207,67,105,.1)', color: 'var(--down)' }}
+                >
+                  <Glyph name="alert" className="h-7 w-7" strokeWidth={2.2} />
                 </div>
-                <p className="text-red-700 dark:text-red-300 font-semibold text-base">
+                <p className="text-base font-semibold" style={{ color: 'var(--down)' }}>
                   Signing failed
                 </p>
-                <p className="text-sm text-center" style={{ color: 'var(--text-muted)' }}>
+                <p className="text-center text-sm" style={{ color: 'var(--text-muted)' }}>
                   {error}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center justify-center gap-3">

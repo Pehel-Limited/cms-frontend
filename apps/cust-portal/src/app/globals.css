@@ -1279,16 +1279,17 @@
   color: rgba(255, 255, 255, 0.88);
 }
 
-/* ─── Account list: a swipe rail on phones, inline from 640px ───────────
-   One list, two layouts. Below 640px the accounts are a snap rail with the next
-   one peeking off the right edge; from 640px they sit in a row and wrap. Either
-   way the card is drawn at the standard size, so a customer with two accounts
-   sees two cards the same size as every other card in the portal rather than
-   two stretched to fill the panel. */
+/* ─── Account list: one scrolling row at every size ─────────────────────
+   The rail never wraps. Cards keep their standard width and the row scrolls
+   sideways, so a fifth account peeks off the right edge instead of pushing the
+   list onto a second line. Phones snap card-by-card; from 640px the row is
+   free-scrolling with the portal's thin scrollbar as the affordance. */
 .acct-list {
   display: flex;
+  flex-wrap: nowrap;
   gap: 12px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -1308,22 +1309,23 @@
 .acct-list > *:active { transform: scale(0.98); }
 @media (min-width: 640px) {
   .acct-list {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+    /* Left-aligned, never stretched: the plastic keeps one fixed size and the row
+       absorbs the slack. Centring a two-card book parked them in the middle of a
+       1400px panel and read as a hero rather than a list. */
+    justify-content: flex-start;
     align-items: flex-start;
     gap: 16px;
-    overflow: visible;
     scroll-snap-type: none;
-    padding: 4px 24px 24px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-border-strong) transparent;
+    padding: 4px 24px 14px;
+  }
+  .acct-list::-webkit-scrollbar {
+    display: block;
+    height: 6px;
   }
   .acct-list > * {
-    /* Grow only up to the standard card size, so the spare panel width lands
-       outside the row instead of inside each card: two accounts sit as a
-       centred pair at full size, four still share one row. */
-    flex: 1 1 240px;
-    width: auto;
-    max-width: var(--card-art-width);
+    max-width: none;
   }
   .acct-list > *:active { transform: none; }
 }

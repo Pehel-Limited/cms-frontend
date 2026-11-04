@@ -18,9 +18,10 @@ import {
   type SampleReason,
 } from '@/services/api/account-service';
 import { transactionService } from '@/services/api/transaction-service';
+import { AccountPlastic } from '@/components/banking/AccountPlastic';
 import { DotMatrix } from '@/components/banking/BankCard';
 import { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
-import { PageHero } from '@/components/ui/PageHero';
+import { EyeToggle } from '@/components/ui/EyeToggle';
 
 function fmt(n: number, cur = 'EUR') {
   return new Intl.NumberFormat('en-IE', {
@@ -142,11 +143,6 @@ function useAccountsData() {
   return { data, state, retry };
 }
 
-const SOURCE_BADGE: Record<AccountSource, { label: string; tone: string }> = {
-  LIVE: { label: 'Live balances', tone: 'var(--success, #10b981)' },
-  SAMPLE: { label: 'Sample data', tone: 'var(--warning, #f59e0b)' },
-};
-
 const SAMPLE_REASON_TEXT: Record<SampleReason, string> = {
   NO_LIVE_ACCOUNTS: 'No accounts are linked to your profile yet, so these figures are illustrative.',
   SERVICE_UNAVAILABLE: 'Your account service could not be reached, so these figures are illustrative.',
@@ -198,6 +194,9 @@ function LoadError({ onRetry, what }: { onRetry: () => void; what: string }) {
 /* ────────────────────────────────────────────────────────────────── */
 
 export default function AccountsPage() {
+  /* Balances are on show by default and hidden with one tap — the same control
+     the account cards sit beside, so the readout and its privacy switch are never
+     more than a thumb apart. */
   const [hideBalances, setHideBalances] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { data, state, retry } = useAccountsData();
@@ -221,57 +220,113 @@ export default function AccountsPage() {
   const goalPct = goal && goal.target > 0 ? Math.round((goal.saved / goal.target) * 100) : 0;
   const mask = (value: string) => (hideBalances ? '••••••' : value);
 
-  /* A single, page-level failure state — one honest message and one retry,
-     rather than the same error repeated inside every panel. */
+  /* One honest sentence about where these numbers came from, next to the cards
+     that show them rather than in a banner of its own. */
+  const sourceLine = data
+    ? data.source === 'LIVE'
+      ? `Live${
+          data.balanceAsOf
+            ? ` · ${new Date(data.balanceAsOf).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'short',
+              })}`
+            : ''
+        }`
+      : 'Sample data'
+    : 'Loading';
+
+  /* ── Page opener: the plastics, and the control that hides their amounts ── */
+  const cardsPanel = (
+    <section className="glass-panel" aria-label="Your accounts">
+      {/* Phones stack the controls under the title; from sm the eye and the button
+          sit on the title's own row. */}
+      <div className="glass-head flex-col gap-3 sm:flex-row">
+        <div className="min-w-0">
+          <h1 className="glass-title">Your accounts</h1>
+          <p className="glass-sub">
+            {state === 'loading'
+              ? sourceLine
+              : `${accounts.length} account${accounts.length === 1 ? '' : 's'} · tap one for its details · ${sourceLine}`}
+          </p>
+          {data?.source === 'SAMPLE' && data.sampleReason && (
+            <p className="glass-sub">{SAMPLE_REASON_TEXT[data.sampleReason]}</p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <EyeToggle hidden={hideBalances} onToggle={() => setHideBalances(v => !v)} />
+          <Link href="/portal/products" className="btn btn-primary btn-sm shrink-0">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span className="hidden sm:inline">Open a new account</span>
+            <span className="sm:hidden">New account</span>
+          </Link>
+        </div>
+      </div>
+
+      {state === 'loading' ? (
+        <div className="acct-list" aria-hidden="true">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="card-art skeleton rounded-2xl" />
+          ))}
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="p-5">
+          <div className="empty-state">
+            <div className="empty-state-icon">
+              <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+              </svg>
+            </div>
+            <p className="empty-state-title">No accounts yet</p>
+            <p className="empty-state-text">Once you open an account it will appear here with its balance and recent activity.</p>
+            <Link href="/portal/products" className="btn btn-primary btn-sm mt-4">Open a new account</Link>
+          </div>
+        </div>
+      ) : (
+        <div className="acct-list">
+          {accounts.map(acc => {
+            const isSelected = selected?.id === acc.id;
+            return (
+              <button
+                key={acc.id}
+                type="button"
+                onClick={() => setSelectedId(acc.id)}
+                aria-pressed={isSelected}
+                aria-label={acc.name}
+                className="rounded-[20px] text-left"
+                style={{ boxShadow: isSelected ? '0 0 0 2px var(--brand)' : undefined }}
+              >
+                <AccountPlastic acc={acc} hidden={hideBalances} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+
   if (state === 'error') {
     return (
       <div className="space-y-6">
-        <PageHero
-          title="My accounts"
-          subtitle="Balances, recent activity and payment details for every account you hold with us."
-        />
-        <div className="panel">
+        <section className="glass-panel">
+          <div className="glass-head">
+            <h1 className="glass-title">Your accounts</h1>
+          </div>
           <LoadError onRetry={retry} what="your accounts" />
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* ── Page header ── */}
-      <PageHero
-        title="My accounts"
-        subtitle={
-          <>
-            Balances, recent activity and payment details for every account you hold with us.
-            {data?.source === 'SAMPLE' && data.sampleReason && (
-              <span className="mt-1 block">{SAMPLE_REASON_TEXT[data.sampleReason]}</span>
-            )}
-          </>
-        }
-        meta={
-          data && (
-            <span
-              className="rounded-full border px-2.5 py-1 text-sm font-medium"
-              style={{
-                color: SOURCE_BADGE[data.source].tone,
-                borderColor: SOURCE_BADGE[data.source].tone,
-              }}
-            >
-              {SOURCE_BADGE[data.source].label}
-            </span>
-          )
-        }
-        actions={
-          <Link href="/portal/products" className="btn btn-primary shrink-0">
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Open a new account
-          </Link>
-        }
-      />
+    <div className="stagger space-y-6">
+      {cardsPanel}
+
+      {/* Screen-reader announcement for the balance visibility toggle */}
+      <p className="sr-only" aria-live="polite">
+        {hideBalances ? 'Balances hidden' : 'Balances shown'}
+      </p>
 
       {/* ── Summary tiles ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -298,7 +353,6 @@ export default function AccountsPage() {
                   Across {data.depositAccounts.length}{' '}
                   {data.accounts.length > data.depositAccounts.length ? 'deposit ' : ''}
                   account{data.depositAccounts.length === 1 ? '' : 's'}
-                  {data.balanceAsOf ? ` · as of ${new Date(data.balanceAsOf).toLocaleString()}` : ''}
                 </p>
               </>
             )}
@@ -313,7 +367,7 @@ export default function AccountsPage() {
                 cell={8}
                 rows={5}
                 label={`Balance held by each of ${data.depositAccounts.length} accounts`}
-                format={(value, i) => `${data.depositAccounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
+                format={(value, i) => `${data.depositAccounts[i].name} · ${mask(fmt(value, data.totalCurrency ?? undefined))}`}
               />
             </div>
           )}
@@ -343,7 +397,7 @@ export default function AccountsPage() {
                 rows={5}
                 color="var(--brand-strong)"
                 label={`Available to spend in each of ${data.depositAccounts.length} accounts`}
-                format={(value, i) => `${data.depositAccounts[i].name} · ${fmt(value, data.totalCurrency ?? undefined)}`}
+                format={(value, i) => `${data.depositAccounts[i].name} · ${mask(fmt(value, data.totalCurrency ?? undefined))}`}
               />
             </div>
           )}
@@ -395,104 +449,10 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* Screen-reader announcement for the balance visibility toggle */}
-      <p className="sr-only" aria-live="polite">
-        {hideBalances ? 'Balances hidden' : 'Balances shown'}
-      </p>
-
-      {/* ── Two-column layout ── */}
+      {/* ── The card you picked, and what has moved through it ── */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
-        {/* Left: account list */}
-        <div className="panel xl:col-span-2">
-          <div className="panel-header">
-            <h2 className="panel-title">Your accounts</h2>
-            <button
-              type="button"
-              onClick={() => setHideBalances(v => !v)}
-              className="icon-btn"
-              aria-pressed={hideBalances}
-              aria-label={hideBalances ? 'Show balances' : 'Hide balances'}
-            >
-              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                {hideBalances ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" />
-                ) : (
-                  <>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </>
-                )}
-              </svg>
-            </button>
-          </div>
-
-          {state === 'loading' ? (
-            <ListSkeleton rows={4} />
-          ) : accounts.length === 0 ? (
-            <div className="p-5">
-              <div className="empty-state">
-                <div className="empty-state-icon">
-                  <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-                  </svg>
-                </div>
-                <p className="empty-state-title">No accounts yet</p>
-                <p className="empty-state-text">Once you open an account it will appear here with its balance and recent activity.</p>
-                <Link href="/portal/products" className="btn btn-primary btn-sm mt-4">Open a new account</Link>
-              </div>
-            </div>
-          ) : (
-            <div className="divide-token">
-              {accounts.map(acc => {
-                const isSelected = selected?.id === acc.id;
-                return (
-                  <button
-                    key={acc.id}
-                    type="button"
-                    onClick={() => setSelectedId(acc.id)}
-                    aria-pressed={isSelected}
-                    className="w-full px-5 py-4 text-left transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-                    style={{
-                      backgroundColor: isSelected ? 'var(--brand-soft)' : undefined,
-                      borderLeft: `3px solid ${isSelected ? 'var(--brand)' : 'transparent'}`,
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <GlyphTile
-                        name={ACCOUNT_GLYPH[acc.type]}
-                        className="h-11 w-11 rounded-xl"
-                        tone={isSelected ? 'brand' : 'neutral'}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="truncate text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                            {acc.name}
-                          </p>
-                          <p className="shrink-0 text-base font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
-                            {mask(fmt(acc.balance, acc.currency))}
-                          </p>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between gap-3">
-                          <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                            {[acc.typeLabel ?? TYPE_LABEL[acc.type], acc.sortCode, acc.accountNumber]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                          <span aria-hidden="true" className="shrink-0">
-                            <DotMatrix data={acc.spark} cell={3} rows={5} label={`${acc.name} balance trend`} />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Right: selected account */}
-        <div className="space-y-6 xl:col-span-3">
+        {/* Selected account */}
+        <div className="xl:col-span-2">
           {state === 'loading' ? (
             <div className="panel">
               <div className="panel-body space-y-4">
@@ -522,7 +482,7 @@ export default function AccountsPage() {
                         {selected.name}
                       </h2>
                       <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {[selected.typeLabel ?? TYPE_LABEL[selected.type], selected.statusDisplay]
+                        {[selected.typeLabel ?? TYPE_LABEL[selected.type], selected.statusDisplay, selected.sortCode]
                           .filter(Boolean)
                           .join(' · ')}
                       </p>
@@ -543,7 +503,7 @@ export default function AccountsPage() {
                     {selected.iban ? 'IBAN' : 'Account number'}
                   </p>
                   <p className="break-all font-mono text-base" style={{ color: 'var(--text-primary)' }}>
-                    {selected.iban || selected.accountNumber}
+                    {hideBalances ? '•••• •••• •••• ••••' : selected.iban || selected.accountNumber}
                   </p>
                 </div>
 
@@ -561,73 +521,76 @@ export default function AccountsPage() {
                   </Link>
                   <Link href="/portal/documents" className="btn btn-ghost btn-sm">
                     Statements
-                  </Link>                </div>
+                  </Link>
+                </div>
               </div>
             </div>
           ) : null}
+        </div>
 
-          {/* Recent activity */}
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Recent activity</h2>
-              <Link href="/portal/transactions" className="link-arrow">
-                View all <span data-arrow aria-hidden="true">→</span>
-              </Link>
-            </div>
-
-            {state === 'loading' ? (
-              <ListSkeleton rows={4} />
-            ) : recentTxns.length === 0 ? (
-              <div className="p-5">
-                <div className="empty-state">
-                  <div className="empty-state-icon">
-                    <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <p className="empty-state-title">
-                    {data?.source === 'LIVE' ? 'No transaction feed yet' : 'No activity on this account'}
-                  </p>
-                  <p className="empty-state-text">
-                    {data?.source === 'LIVE'
-                      ? `Balances for ${selected?.name} are live, but transaction history is not served for this account yet. Nothing is being hidden.`
-                      : `Transactions will appear here as soon as money moves in or out of ${selected?.name}.`}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="divide-token">
-                {recentTxns.map((t: Transaction) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-                  >
-                    <GlyphTile name={glyphFor(t.category)} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {t.merchant}
-                      </p>
-                      <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {t.category} · {shortDate(t.date)}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p
-                        className={`num text-base font-semibold ${t.direction === 'IN' ? 'delta-up' : ''}`}
-                        style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
-                      >
-                        {t.direction === 'IN' ? '+' : '−'}{mask(fmt(t.amount, t.currency))}
-                      </p>
-                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                        {t.direction === 'IN' ? 'Money in' : 'Money out'}
-                        {t.status === 'PENDING' ? ' · Pending' : ''}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Recent activity */}
+        <div className="panel xl:col-span-3">
+          <div className="panel-header">
+            <h2 className="panel-title">
+              Recent activity{selected ? ` · ${selected.name}` : ''}
+            </h2>
+            <Link href="/portal/transactions" className="link-arrow">
+              View all <span data-arrow aria-hidden="true">→</span>
+            </Link>
           </div>
+
+          {state === 'loading' ? (
+            <ListSkeleton rows={4} />
+          ) : recentTxns.length === 0 ? (
+            <div className="p-5">
+              <div className="empty-state">
+                <div className="empty-state-icon">
+                  <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <p className="empty-state-title">
+                  {data?.source === 'LIVE' ? 'No transaction feed yet' : 'No activity on this account'}
+                </p>
+                <p className="empty-state-text">
+                  {data?.source === 'LIVE'
+                    ? `Balances for ${selected?.name} are live, but transaction history is not served for this account yet. Nothing is being hidden.`
+                    : `Transactions will appear here as soon as money moves in or out of ${selected?.name}.`}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-token">
+              {recentTxns.map((t: Transaction) => (
+                <div
+                  key={t.id}
+                  className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                >
+                  <GlyphTile name={glyphFor(t.category)} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {t.merchant}
+                    </p>
+                    <p className="truncate text-sm" style={{ color: 'var(--text-muted)' }}>
+                      {t.category} · {shortDate(t.date)}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p
+                      className={`num text-base font-semibold ${t.direction === 'IN' ? 'delta-up' : ''}`}
+                      style={t.direction !== 'IN' ? { color: 'var(--text-primary)' } : undefined}
+                    >
+                      {t.direction === 'IN' ? '+' : '−'}{mask(fmt(t.amount, t.currency))}
+                    </p>
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                      {t.direction === 'IN' ? 'Money in' : 'Money out'}
+                      {t.status === 'PENDING' ? ' · Pending' : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

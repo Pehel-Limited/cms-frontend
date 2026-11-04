@@ -124,13 +124,13 @@ export const bankAnalyticsService = {
     );
   },
 
-  getMonthlyFlows(bankId: string, months: AnalyticsPeriod = 12): Promise<MonthlyBankFlow[]> {
+  getMonthlyFlows(bankId: string, months: number = 12): Promise<MonthlyBankFlow[]> {
     return apiClient.get<MonthlyBankFlow[]>(
       `/api/accounts/analytics/monthly-flows?bankId=${encodeURIComponent(bankId)}&months=${months}`
     );
   },
 
-  getChannelMix(bankId: string, months: AnalyticsPeriod = 12): Promise<ChannelMix[]> {
+  getChannelMix(bankId: string, months: number = 12): Promise<ChannelMix[]> {
     return apiClient.get<ChannelMix[]>(
       `/api/accounts/analytics/channel-mix?bankId=${encodeURIComponent(bankId)}&months=${months}`
     );

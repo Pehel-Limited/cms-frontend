@@ -1,5 +1,7 @@
 'use client';
 
+import { getCurrencySymbol } from '@/lib/format';
+
 /* Monochrome outline glyphs.
 
    Emojis render differently per platform and OS, cannot be recoloured to sit in
@@ -141,6 +143,47 @@ export default function Glyph({
       aria-hidden="true"
     >
       <path d={PATHS[name] || PATHS.Other} />
+    </svg>
+  );
+}
+
+/* A circled currency mark, so request-money surfaces carry the account's own
+   symbol instead of a hard-coded dollar sign. Drawn as SVG text so it scales
+   with the tile exactly like the stroked glyphs around it. */
+export function CurrencyGlyph({
+  currency = 'EUR',
+  className = 'h-5 w-5',
+  strokeWidth = 1.6,
+}: {
+  currency?: string;
+  className?: string;
+  strokeWidth?: number;
+}) {
+  const symbol = getCurrencySymbol(currency);
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <text
+        x="12"
+        y="12.3"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="currentColor"
+        stroke="none"
+        fontSize={symbol.length > 1 ? 8 : 12}
+        fontWeight="600"
+      >
+        {symbol}
+      </text>
     </svg>
   );
 }

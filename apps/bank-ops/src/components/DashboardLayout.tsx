@@ -7,6 +7,7 @@ import { useAppSelector, useAppDispatch } from '@/store';
 import { logoutUser } from '@/store/slices/authSlice';
 import { useTheme } from '@/app/providers';
 import { useMessagingInbox } from '@/hooks/useMessagingInbox';
+import { isAdminRole } from '@/lib/roles';
 import {
   formatRelativeTime,
   previewLine,
@@ -92,9 +93,20 @@ const NAV_ITEMS = [
   },
 ];
 
-const ADMIN_ITEM = {
+const BANK_USERS_ITEM = {
+  name: 'Bank Users',
+  path: '/dashboard/admin/users',
+  icon: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+        d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+    </svg>
+  ),
+};
+
+const EXECUTIVE_ITEM = {
   name: 'Executive',
-  path: '/dashboard/admin',
+  path: '/dashboard/executive',
   icon: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -157,8 +169,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isActive = (path: string) =>
     path === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(path);
 
+  /* The executive view reads the bank-wide oversight endpoints, so it is only
+     offered to administrators — an RM hitting the URL is redirected by its layout. */
   const navItems = user?.userType === 'BANK_USER'
-    ? [...NAV_ITEMS, AI_APPROVALS_ITEM, AI_KNOWLEDGE_ITEM, ADMIN_ITEM]
+    ? [
+        ...NAV_ITEMS,
+        AI_APPROVALS_ITEM,
+        AI_KNOWLEDGE_ITEM,
+        ...(isAdminRole(user) ? [BANK_USERS_ITEM, EXECUTIVE_ITEM] : []),
+      ]
     : NAV_ITEMS;
 
   const getUserRole = () => {
@@ -485,7 +504,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="py-1">
                   {[
                     { href: '/dashboard/rm', label: 'My Profile' },
-                    { href: '/dashboard/admin', label: 'Executive overview' },
+                    ...(isAdminRole(user)
+                      ? [{ href: '/dashboard/executive', label: 'Executive overview' }]
+                      : []),
                   ].map(item => (
                     <Link key={item.href} href={item.href}
                       className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/5"
@@ -523,10 +544,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Link href="/dashboard/diagnostic" className="hover:text-slate-400 transition-colors">
             System status
           </Link>
-          <span className="text-slate-700">·</span>
-          <Link href="/dashboard/admin" className="hover:text-slate-400 transition-colors">
-            Administration
-          </Link>
+          {isAdminRole(user) && (
+            <>
+              <span className="text-slate-700">·</span>
+              <Link href="/dashboard/executive" className="hover:text-slate-400 transition-colors">
+                Executive overview
+              </Link>
+            </>
+          )}
         </footer>
       </div>
     </div>

@@ -106,7 +106,14 @@ export function ShareBar({ pct, color = 'var(--rm-accent)' }: { pct: number; col
   );
 }
 
-export default function KpiRow({ cards }: { cards: KpiCard[] }) {
+export default function KpiRow({
+  cards,
+  size = 'default',
+}: {
+  cards: KpiCard[];
+  /** The bank-wide executive band reads at a larger size than the RM band. */
+  size?: 'default' | 'large';
+}) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
       {cards.map(c => {
@@ -123,7 +130,9 @@ export default function KpiRow({ cards }: { cards: KpiCard[] }) {
               </span>
               <div className="min-w-0">
                 <p className="rm-strip-label !text-sm leading-tight">{c.label}</p>
-                <p className="rm-strip-value !text-[24px]">{c.value}</p>
+                <p className={`rm-strip-value ${size === 'large' ? '!text-[27px]' : '!text-[24px]'}`}>
+                  {c.value}
+                </p>
               </div>
             </div>
 
@@ -133,14 +142,17 @@ export default function KpiRow({ cards }: { cards: KpiCard[] }) {
                   <Delta pct={c.delta.pct} label={c.delta.label} upIsGood={c.delta.upIsGood ?? true} />
                 )}
                 {c.note && (
-                  <span className="text-xs" style={{ color: 'var(--rm-text-muted)' }}>
+                  <span
+                    className={size === 'large' ? 'text-[13px]' : 'text-xs'}
+                    style={{ color: 'var(--rm-text-muted)' }}
+                  >
                     {c.note}
                   </span>
                 )}
               </div>
             )}
 
-            {c.visual && <div className="mt-3 flex justify-end">{c.visual}</div>}
+            {c.visual && <div className="mt-3 flex justify-start sm:justify-end">{c.visual}</div>}
           </div>
         );
       })}

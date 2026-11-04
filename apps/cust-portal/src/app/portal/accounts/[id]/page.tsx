@@ -6,14 +6,20 @@ import { useParams, notFound } from 'next/navigation';
 import {
   transactionsForAccount,
   groupTransactionsByDay,
-  CARDS,
   type BankAccount,
-  type PaymentCard,
   type Transaction,
 } from '@/lib/banking-data';
 import { accountService, type AccountSource } from '@/services/api/account-service';
 import { transactionService, toTransaction } from '@/services/api/transaction-service';
-import { BankCard, DotMatrix } from '@/components/banking/BankCard';
+import {
+  CARD_STATUS_LABEL,
+  cardService,
+  expiryLabel,
+  isBlocked,
+  type CustomerCard,
+} from '@/services/api/card-service';
+import { AccountCardPlastic, type CardFace } from '@/components/banking/AccountCardPlastic';
+import { DotMatrix } from '@/components/banking/BankCard';
 import Glyph, { ACCOUNT_GLYPH, glyphFor, GlyphTile } from '@/components/ui/Glyph';
 
 function fmt(n: number, currency: string): string {
@@ -75,7 +81,10 @@ interface AccountData {
   account: BankAccount;
   source: AccountSource;
   transactions: Transaction[];
-  linkedCards: PaymentCard[];
+  /** The card issued against this account, if the bank has one. */
+  card: CustomerCard | null;
+  /** True when the card service could not be asked, which is not the same as having no card. */
+  cardUnavailable: boolean;
   inflow: number;
   outflow: number;
   inflowCount: number;
@@ -99,6 +108,18 @@ async function resolveAccount(accountId: string): Promise<AccountData | null> {
         ).content.map(toTransaction)
       : transactionsForAccount(accountId);
 
+  /* The card issued against this account, from the same party-scoped list the cards screen
+     uses. A failure here is recorded rather than swallowed: "no card" and "could not check"
+     are different facts and the panel says which. */
+  let card: CustomerCard | null = null;
+  let cardUnavailable = false;
+  try {
+    const cards = await cardService.getCards();
+    card = cards.find(c => c.accountId === accountId) ?? null;
+  } catch {
+    cardUnavailable = true;
+  }
+
   const ordered = [...transactions].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
@@ -112,7 +133,8 @@ async function resolveAccount(accountId: string): Promise<AccountData | null> {
     account,
     source: snapshot.source,
     transactions: ordered,
-    linkedCards: CARDS.filter(c => c.linkedAccountId === accountId),
+    card,
+    cardUnavailable,
     inflow: inflowTxns.reduce((s, t) => s + t.amount, 0),
     outflow: outflowTxns.reduce((s, t) => s + t.amount, 0),
     inflowCount: inflowTxns.length,
@@ -236,6 +258,22 @@ export default function AccountDetailPage() {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const { data, state, retry } = useAccountData(params.id);
   const account = data?.account;
+  const card = data?.card ?? null;
+  /* The face is the bank's own card record; the gradient comes from the account so the plastic
+     matches the one on the accounts screen. */
+  const cardFace: CardFace | null =
+    card && account
+      ? {
+          label: card.nickname || account.typeLabel || account.name,
+          holder: card.cardHolderName,
+          last4: card.panLast4,
+          scheme: card.scheme,
+          expiry: expiryLabel(card),
+          gradient: account.gradient,
+          frozen: card.status === 'FROZEN',
+          blocked: isBlocked(card.status) || card.status === 'CLOSED',
+        }
+      : null;
 
   const filtered = useMemo(() => {
     const txns = data?.transactions ?? [];
@@ -519,23 +557,36 @@ export default function AccountDetailPage() {
         <div className="space-y-6">
           <div className="panel">
             <div className="panel-header">
-              <h2 className="panel-title">Linked cards</h2>
+              <h2 className="panel-title">Card on this account</h2>
               <Link href="/portal/cards" className="link-arrow">
-                Manage <span data-arrow aria-hidden="true">→</span>
+                All cards <span data-arrow aria-hidden="true">→</span>
               </Link>
             </div>
-            {data.linkedCards.length > 0 ? (
-              <div className="space-y-4 p-5">
-                {data.linkedCards.map(card => (
-                  <Link
-                    key={card.id}
-                    href="/portal/cards"
-                    aria-label={`${card.label}, ${card.type.toLowerCase()} card ending ${card.last4}${card.frozen ? ', currently frozen' : ''}`}
-                    className="block transition-transform hover:-translate-y-0.5"
-                  >
-                    <BankCard card={card} />
-                  </Link>
-                ))}
+            {card && cardFace ? (
+              <div className="p-5">
+                <Link
+                  href="/portal/cards"
+                  aria-label={`${cardFace.label}, ${
+                    card.scheme === 'MASTERCARD' ? 'Mastercard' : 'Visa'
+                  } debit card ending ${card.panLast4}`}
+                  className="block transition-transform hover:-translate-y-0.5"
+                >
+                  <AccountCardPlastic face={cardFace} />
+                </Link>
+                <p className="mt-3 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  {CARD_STATUS_LABEL[card.status]} · expires {expiryLabel(card)} · freeze, controls
+                  and the card number are on the cards page.
+                </p>
+              </div>
+            ) : data?.cardUnavailable ? (
+              <div className="p-5">
+                <div className="empty-state !py-10">
+                  <div className="empty-state-title">Card details unavailable</div>
+                  <p className="empty-state-text">
+                    The card service could not be reached, so this page cannot say whether a card is
+                    issued against this account. Nothing has been changed.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="p-5">
@@ -545,18 +596,14 @@ export default function AccountDetailPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
                     </svg>
                   </div>
-                  <p className="empty-state-title">No cards on this account</p>
-                  {/* A live account has no card instruments recorded against it at all, which is
-                      a different fact from one nobody has ordered a card for — and there is no
-                      ordering journey to send them to. */}
+                  <p className="empty-state-title">No card on this account</p>
+                  {/* A credit account's balance is capital owed, so there is nothing for a card
+                      to spend. A savings account without a card is a product choice, not a gap. */}
                   <p className="empty-state-text">
-                    {data.source === 'LIVE'
-                      ? 'No card is recorded against this account.'
-                      : 'You can order a card for this account from the cards page.'}
+                    {account?.accountCategory === 'CREDIT'
+                      ? 'This is a credit account: its balance is what is owed, so no card spends from it.'
+                      : 'The bank has not issued a card against this account.'}
                   </p>
-                  {data.source !== 'LIVE' && (
-                    <Link href="/portal/cards" className="btn btn-secondary btn-sm mt-4">Go to cards</Link>
-                  )}
                 </div>
               </div>
             )}

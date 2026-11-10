@@ -34,10 +34,12 @@ export function ApplicationRail({
   quoting,
   quoteError,
   onRetryQuote,
+  title = 'New application',
 }: {
   steps: RailStep[];
   activeIndex: number;
   onStepClick: (index: number) => void;
+  title?: string;
   savedReference?: string | null;
   productName?: string | null;
   quote: Quote | null;
@@ -61,8 +63,8 @@ export function ApplicationRail({
               >
                 <span aria-hidden="true">&larr;</span> All applications
               </Link>
-              <h2 className="serif mt-2 text-[22px] font-medium leading-tight">
-                New application
+              <h2 className="mt-2 text-[20px] font-semibold leading-tight tracking-tight">
+                {title}
               </h2>
               <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
                 Step {position} of {steps.length}
@@ -271,7 +273,7 @@ export function ApplicationMobileProgress({
 }) {
   const position = Math.min(Math.max(activeIndex + 1, 1), steps.length);
   return (
-    <div className="glass-panel mb-4 p-4 lg:hidden">
+    <div className="glass-panel mb-3 p-3 sm:mb-4 sm:p-4 lg:hidden">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
           Step {position} of {steps.length}
@@ -280,10 +282,19 @@ export function ApplicationMobileProgress({
           {steps[activeIndex]?.label}
         </p>
       </div>
-      <div className="mt-3 flex gap-1.5" aria-hidden="true">
+      <div
+        className="mt-3 flex gap-1.5"
+        role="progressbar"
+        aria-label="Application progress"
+        aria-valuemin={1}
+        aria-valuemax={steps.length}
+        aria-valuenow={position}
+        aria-valuetext={`Step ${position} of ${steps.length}: ${steps[activeIndex]?.label ?? ''}`}
+      >
         {steps.map((step, i) => (
           <span
             key={step.key}
+            aria-hidden="true"
             className="h-1.5 flex-1 rounded-full transition-colors"
             style={{
               backgroundColor: i <= activeIndex ? 'var(--brand)' : 'var(--hairline-strong)',

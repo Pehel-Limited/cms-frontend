@@ -8,6 +8,7 @@ import {
   PRODUCT_TYPE_LABELS,
 } from '@/services/api/product-service';
 import { formatCurrency } from '@/lib/format';
+import { LoanHero, HERO_SECONDARY_BTN } from '@/components/loan/LoanHero';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<LoanProduct[]>([]);
@@ -77,10 +78,7 @@ export default function ProductsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="mesh-hero rounded-3xl p-6 sm:p-7">
-          <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">Loan products</h1>
-          <div className="mt-3 h-4 w-72 animate-pulse rounded-xl bg-white/10" />
-        </div>
+        <LoanHero titleId="products-title" eyebrow="Borrowing" title="Loan products" sub="Loading what’s open to you…" />
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map(i => (
             <div key={i} className="card space-y-4">
@@ -99,12 +97,12 @@ export default function ProductsPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <div className="mesh-hero rounded-3xl p-6 sm:p-7">
-          <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">Loan products</h1>
-          <p className="mt-1 text-sm text-white/70">
-            Browse what&apos;s available and check your eligibility
-          </p>
-        </div>
+        <LoanHero
+          titleId="products-title"
+          eyebrow="Borrowing"
+          title="Loan products"
+          sub="Browse what’s available and check your eligibility"
+        />
         <div className="alert alert-error" role="alert">
           <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -125,15 +123,22 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6">
       {/* Hero Header */}
-      <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 shadow-float sm:p-7">
-        <div className="absolute right-0 top-0 h-64 w-64 -translate-y-1/2 translate-x-1/3 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
-        <div className="relative">
-          <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">Loan products</h1>
-          <p className="mt-1 text-sm text-white/70">
-            Browse what&apos;s available and check your eligibility — {products.length} product{products.length === 1 ? '' : 's'} on offer
-          </p>
-        </div>
-      </div>
+      <LoanHero
+        titleId="products-title"
+        eyebrow="Borrowing"
+        title="Loan products"
+        sub="Browse what’s available and check your eligibility."
+        chips={
+          <span className="sb-chip">
+            {products.length} product{products.length === 1 ? '' : 's'} on offer
+          </span>
+        }
+        actions={
+          <Link href="/portal/applications" className={HERO_SECONDARY_BTN}>
+            My applications
+          </Link>
+        }
+      />
 
       {/* Filters */}
       <div className="card p-4">
@@ -432,11 +437,14 @@ function ProductCard({ product }: { product: LoanProduct }) {
 
       {/* Footer */}
       <div
-        className="rounded-b-2xl px-6 py-3"
-        style={{ borderTop: '1px solid var(--surface-border)', backgroundColor: 'var(--surface-input)' }}
+        className="flex min-h-[48px] items-center justify-between gap-2 rounded-b-3xl px-6 py-3"
+        style={{ borderTop: '1px solid var(--hairline)', backgroundColor: 'var(--tile-bg)' }}
       >
-        <span className="link-arrow text-sm">
-          View details <span data-arrow aria-hidden="true">→</span>
+        <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+          Rates, terms and eligibility
+        </span>
+        <span className="sb-cta inline-flex items-center gap-1">
+          View details <span aria-hidden="true">→</span>
         </span>
       </div>
     </Link>

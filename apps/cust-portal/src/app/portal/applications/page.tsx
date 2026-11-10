@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { formatCurrency } from '@/lib/format';
 import Glyph from '@/components/ui/Glyph';
+import { LoanHero, HERO_PRIMARY_BTN, HERO_SECONDARY_BTN } from '@/components/loan/LoanHero';
+import { Zone, ZoneHeader } from '@/components/dashboard/Zone';
 import {
   applicationService,
   LoanApplication,
@@ -138,21 +140,26 @@ function applicationGlyph(productType?: string): string {
   return 'doc';
 }
 
+/* `cta` is the verb on the card's single primary action; `waiting` marks a note that is about
+   the bank, not something the customer can do, so it is never presented as a task. */
 function nextActionFor(app: LoanApplication): {
   label: string;
+  cta: string;
   tone: 'action' | 'warning' | 'quiet';
   glyph: string;
+  waiting?: boolean;
 } | null {
   if (app.status === 'DRAFT') {
-    return { label: 'Continue your draft', tone: 'action', glyph: 'doc' };
+    return { label: 'Continue your draft', cta: 'Continue', tone: 'action', glyph: 'doc' };
   }
   if (app.status === 'RETURNED' || app.lomsStatus === 'RETURNED') {
-    return { label: 'Corrections requested', tone: 'warning', glyph: 'alert' };
+    return { label: 'Corrections requested', cta: 'Review', tone: 'warning', glyph: 'alert' };
   }
   if ((app.documentsPendingCount ?? 0) > 0) {
     const count = app.documentsPendingCount ?? 0;
     return {
       label: `${count} document${count === 1 ? '' : 's'} still needed`,
+      cta: 'Upload',
       tone: 'action',
       glyph: 'doc',
     };
@@ -162,16 +169,33 @@ function nextActionFor(app: LoanApplication): {
     !app.offerAccepted &&
     new Date(app.offerValidUntil).getTime() > Date.now()
   ) {
-    return { label: 'Offer waiting for you', tone: 'action', glyph: 'sign' };
+    return { label: 'Offer waiting for you', cta: 'View offer', tone: 'action', glyph: 'sign' };
   }
   if (['PENDING_ESIGN', 'ESIGN_IN_PROGRESS'].includes(app.status)) {
-    return { label: 'Signature needed', tone: 'action', glyph: 'sign' };
+    return { label: 'Signature needed', cta: 'Sign', tone: 'action', glyph: 'sign' };
   }
   if (app.slaBreached) {
-    return { label: 'Taking longer than expected', tone: 'warning', glyph: 'clock' };
+    return {
+      label: 'Taking longer than expected',
+      cta: 'Open',
+      tone: 'warning',
+      glyph: 'clock',
+      waiting: true,
+    };
   }
   return null;
 }
+
+/* A draft opens straight into the composer it was saved from (the same resume route the
+   detail page's "Continue editing" uses); everything else opens the application. */
+function primaryHref(app: LoanApplication): string {
+  return app.status === 'DRAFT'
+    ? `/portal/applications/new?product=&resume=${app.applicationId}`
+    : `/portal/applications/${app.applicationId}`;
+}
+
+/* Funds have been paid out: from here it is a loan, not an application. */
+const FUNDED_STATUSES = ['DISBURSED', 'ACTIVE'];
 
 /* ─── Skeleton ──────────────────────────────────────────────── */
 function Skeleton({ className = '' }: { className?: string }) {
@@ -234,57 +258,107 @@ export default function ApplicationsPage() {
     COMPLETED: applications.filter(a => FILTER_GROUPS.COMPLETED?.includes(a.status)).length,
   };
 
-  const attentionCount = applications.filter(app => {
+  const attentionApps = applications.filter(app => {
     const next = nextActionFor(app);
-    return next != null && next.tone !== 'quiet';
-  }).length;
+    return next != null && next.tone !== 'quiet' && !next.waiting;
+  });
+  const attentionCount = attentionApps.length;
 
   return (
     <div className="space-y-5">
-      {/* ── Header ─────────────────────────────────────────── */}
-      <section className="mesh-hero relative overflow-hidden rounded-[32px] p-6 shadow-float sm:p-8">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-16 -top-28 h-80 w-80 rounded-full border border-white/10"
-          style={{ boxShadow: '0 0 0 40px rgba(255,255,255,.035), 0 0 0 80px rgba(255,255,255,.025)' }}
-        />
-
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
-              Credit with the bank
-            </p>
-            <h1 className="serif mt-2 text-[32px] font-medium leading-tight tracking-tight text-white sm:text-[36px]">
-              My applications
-            </h1>
-            <p className="mt-2 max-w-xl text-sm text-white/70">
-              {loading
-                ? 'Loading your applications…'
+      {/* ── Header: the dashboard's own hero ─────────────────── */}
+      <LoanHero
+        titleId="applications-title"
+        eyebrow="Borrowing"
+        title="My applications"
+        sub={
+          loading
+            ? 'Loading your applications…'
+            : error
+              ? 'We couldn’t load your applications just now.'
+              : counts.ALL === 0
+                ? 'Apply for a loan or credit product and follow every step from here.'
                 : attentionCount > 0
-                  ? `${counts.ALL} ${counts.ALL === 1 ? 'application' : 'applications'} · ${
-                      attentionCount === counts.ALL
-                        ? 'all need your attention'
-                        : `${attentionCount} need your attention`
-                    }`
-                  : `${counts.ALL} ${
-                      counts.ALL === 1 ? 'application' : 'applications'
-                    } · nothing needs you right now`}
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <span className="dash-hero-chip">Total {counts.ALL}</span>
-              <span className="dash-hero-chip">In progress {counts.ACTIVE}</span>
-              <span className="dash-hero-chip">Completed {counts.COMPLETED}</span>
-            </div>
-          </div>
-          <button
-            onClick={() => router.push('/portal/ai-assistant')}
-            className="inline-flex items-center justify-center gap-2 self-start rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#5e1f5b] shadow-lg transition-transform hover:scale-[1.02] lg:self-end"
-          >
-            <Glyph name="plus" className="h-4 w-4" strokeWidth={2.2} />
-            New application
-          </button>
-        </div>
-      </section>
+                  ? `${attentionCount} ${attentionCount === 1 ? 'needs' : 'need'} your attention`
+                  : 'Nothing needs you right now'
+        }
+        chips={
+          !loading && !error && counts.ALL > 0 ? (
+            <>
+              <span className="sb-chip">Total {counts.ALL}</span>
+              <span className="sb-chip">In progress {counts.ACTIVE}</span>
+              <span className="sb-chip">Completed {counts.COMPLETED}</span>
+            </>
+          ) : undefined
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => router.push('/portal/ai-assistant')}
+              className={HERO_PRIMARY_BTN}
+            >
+              <Glyph name="plus" className="h-4 w-4" strokeWidth={2.2} />
+              New application
+            </button>
+            <Link href="/portal/products" className={HERO_SECONDARY_BTN}>
+              Browse products
+            </Link>
+          </>
+        }
+      />
+
+      {/* ── Needs your attention: the dashboard's attention zone, scoped to borrowing ── */}
+      {!loading && !error && attentionApps.length > 0 && (
+        <Zone labelledBy="apps-attention">
+          <ZoneHeader
+            id="apps-attention"
+            title="Needs your attention"
+            sub={`${attentionApps.length} application${attentionApps.length === 1 ? '' : 's'} waiting on you`}
+          />
+          <ul className="pb-2">
+            {attentionApps.map(app => {
+              const next = nextActionFor(app)!;
+              const name =
+                app.product?.productName ||
+                LOAN_PURPOSE_LABELS[app.loanPurpose as LoanPurpose] ||
+                app.loanPurpose ||
+                'Draft application';
+              return (
+                <li key={app.applicationId}>
+                  <Link href={primaryHref(app)} className="sb-row group">
+                    <span className="sb-row-icon" aria-hidden="true">
+                      <Glyph name={next.glyph} className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                      <span
+                        className="sb-row-dot"
+                        style={{ background: next.tone === 'warning' ? 'var(--down)' : 'var(--brand)' }}
+                      />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="sr-only">
+                        {next.tone === 'warning' ? 'Action needed: ' : 'To do: '}
+                      </span>
+                      <span
+                        className="block truncate text-[15px] font-medium"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {next.label}
+                      </span>
+                      <span className="block truncate text-[13px]" style={{ color: 'var(--text-muted)' }}>
+                        {name}
+                        {app.applicationNumber ? ` · ${app.applicationNumber}` : ''}
+                      </span>
+                    </span>
+                    <span className={`sb-cta ${next.tone === 'warning' ? 'sb-cta-strong' : ''}`}>
+                      {next.cta}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </Zone>
+      )}
 
       {/* ── Toolbar: filters + search ──────────────────────── */}
       <div className="glass-panel flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
@@ -378,7 +452,9 @@ export default function ApplicationsPage() {
               >
                 <Glyph name="doc" className="h-7 w-7" strokeWidth={1.5} />
               </span>
-              <h2 className="serif mt-5 text-[26px] font-medium">Your first application starts here</h2>
+              <h2 className="mt-5 text-[22px] font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                Your first application starts here
+              </h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6" style={{ color: 'var(--text-muted)' }}>
                 Apply for a loan or credit product, share your details once, and follow every step
                 from submission to drawdown.
@@ -471,6 +547,8 @@ export default function ApplicationsPage() {
               'OFFER_REJECTED',
               'OFFER_EXPIRED',
             ].includes(app.status);
+            const funded = FUNDED_STATUSES.includes(app.status);
+            const needsYou = nextAction != null && !nextAction.waiting;
 
             return (
               <li key={app.applicationId}>
@@ -498,13 +576,13 @@ export default function ApplicationsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h2
-                            className="serif truncate text-[20px] font-medium leading-snug"
+                            className="truncate text-[17px] font-semibold leading-snug tracking-tight"
                             style={{ color: 'var(--text-primary)' }}
                           >
                             {purpose || 'Draft application'}
                           </h2>
                           <StatusBadge status={app.status} />
-                          {nextAction && (
+                          {needsYou && (
                             <span
                               className={`badge ${
                                 nextAction.tone === 'warning' ? 'badge-warning' : 'badge-primary'
@@ -513,6 +591,7 @@ export default function ApplicationsPage() {
                               Needs you
                             </span>
                           )}
+                          {funded && <span className="badge badge-success">Live loan</span>}
                         </div>
                         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
                           {app.applicationNumber || 'No reference yet'} ·{' '}
@@ -552,7 +631,14 @@ export default function ApplicationsPage() {
                     </div>
 
                     {/* Position in the customer journey, not the bank's internal workflow. */}
-                    <div className="mt-5 grid grid-cols-4 gap-1.5">
+                    <p className="sr-only">
+                      {stage.done
+                        ? 'All stages complete.'
+                        : stage.active >= 0
+                          ? `Current stage: ${PORTFOLIO_STAGES[stage.active]}, ${stage.active + 1} of ${PORTFOLIO_STAGES.length}.`
+                          : 'This application is no longer progressing.'}
+                    </p>
+                    <div className="mt-5 grid grid-cols-4 gap-1.5" aria-hidden="true">
                       {PORTFOLIO_STAGES.map((label, i) => {
                         const reached = stage.done || (stage.active >= 0 && i <= stage.active);
                         const isCurrent = !stage.done && i === stage.active;
@@ -608,7 +694,11 @@ export default function ApplicationsPage() {
                           </span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>
-                            {closed ? 'This application is closed' : 'No action needed from you'}
+                            {funded
+                              ? 'Funds paid out — this is now a live loan'
+                              : closed
+                                ? 'This application is closed'
+                                : 'No action needed from you'}
                           </span>
                         )}
                         {app.daysInCurrentStatus != null && app.status !== 'DRAFT' && (
@@ -618,11 +708,13 @@ export default function ApplicationsPage() {
                           </span>
                         )}
                       </div>
+                      {/* One primary action per card: the verb for what is needed, or a quiet "View". */}
                       <span
-                        className="inline-flex items-center gap-1 font-semibold"
-                        style={{ color: 'var(--brand-on-soft)' }}
+                        className={`sb-cta inline-flex items-center gap-1 ${
+                          needsYou && nextAction.tone === 'warning' ? 'sb-cta-strong' : ''
+                        }`}
                       >
-                        {app.status === 'DRAFT' ? 'Continue' : 'Open'}
+                        {needsYou ? nextAction.cta : 'View'}
                         <span
                           aria-hidden="true"
                           className="transition-transform duration-200 group-hover:translate-x-0.5"

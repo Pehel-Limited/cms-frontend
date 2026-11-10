@@ -11,6 +11,7 @@ import {
 } from '@/services/api/product-service';
 import { quoteService, Quote } from '@/services/api/quote-service';
 import { formatCurrency } from '@/lib/format';
+import { HERO_PRIMARY_BTN, HERO_SECONDARY_BTN } from '@/components/loan/LoanHero';
 
 /* ── SVG icon map (decorative — the container is aria-hidden) ── */
 const PRODUCT_SVG: Record<string, React.ReactNode> = {
@@ -161,7 +162,7 @@ export default function ProductDetailPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="mesh-hero rounded-3xl p-6 sm:p-8">
+        <div className="sb-hero" aria-hidden="true">
           <div className="skeleton h-4 w-24 bg-white/20" />
           <div className="skeleton mt-4 h-8 w-56 bg-white/20" />
           <div className="skeleton mt-2 h-4 w-80 bg-white/10" />
@@ -223,12 +224,7 @@ export default function ProductDetailPage() {
   return (
     <div className="space-y-6">
       {/* Hero Header */}
-      <div className="mesh-hero relative overflow-hidden rounded-3xl p-6 text-white shadow-float sm:p-8">
-        <div
-          className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-3xl"
-          aria-hidden="true"
-        />
-
+      <div className="sb-hero text-white">
         <div className="relative z-10">
           {/* Breadcrumb */}
           <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-2 text-sm text-white/70">
@@ -259,7 +255,7 @@ export default function ProductDetailPage() {
               </div>
               <div className="min-w-0">
                 <div className="mb-1 flex flex-wrap items-center gap-3">
-                  <h1 className="serif text-[28px] font-medium leading-tight tracking-tight text-white sm:text-[32px]">
+                  <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-white sm:text-[32px]">
                     {product.productName}
                   </h1>
                   {product.isFeatured && (
@@ -293,14 +289,14 @@ export default function ProductDetailPage() {
                 onClick={() =>
                   router.push(`/portal/applications/new?product=${product.productCode}`)
                 }
-                className="btn bg-white px-6 py-3 text-base text-[#7f2b7b] shadow-lg hover:bg-white/90"
+                className={HERO_PRIMARY_BTN}
               >
                 Start application
               </button>
               <button
                 onClick={handleEligibilityCheck}
                 disabled={checkingEligibility}
-                className="btn border border-white/30 bg-white/10 px-6 py-2 text-white backdrop-blur hover:bg-white/20"
+                className={HERO_SECONDARY_BTN}
               >
                 {checkingEligibility ? 'Checking…' : 'Check eligibility'}
               </button>

@@ -62,41 +62,50 @@ const BUSINESS_STEPS: { key: WizardStep; label: string }[] = [
 /* The headline for each step, kept apart from its validation. The rail carries
    position; this carries the one sentence that tells the customer what the step
    is for before they meet the fields. */
-const STEP_META: Record<WizardStep, { title: string; subtitle: string; glyph: string }> = {
+const STEP_META: Record<
+  WizardStep,
+  { title: string; subtitle: string; short: string; glyph: string }
+> = {
   product: {
     title: 'Find your fit',
     subtitle:
       'Choose the product you want to apply for. Every option shown here is open to you.',
+    short: 'Pick the product to apply for.',
     glyph: 'doc',
   },
   loan: {
     title: 'Shape the loan',
     subtitle:
       'Set the amount, term and purpose. Your indicative repayment updates from the bank as you type.',
+    short: 'Amount, term and purpose.',
     glyph: 'bank',
   },
   parties: {
     title: 'Who signs for the company',
     subtitle:
       'Confirm the people linked to your business and choose at least two authorised signatories.',
+    short: 'Choose at least two signatories.',
     glyph: 'joint',
   },
   financial: {
     title: 'Show us the numbers',
     subtitle:
       'Optional, but it helps us assess faster. Add whatever you are comfortable sharing.',
+    short: 'Optional — share what you’re comfortable with.',
     glyph: 'chart',
   },
   employment: {
     title: 'Tell us about your work',
     subtitle:
       'Optional. Add employment details if you want us to take them into account.',
+    short: 'Optional — add if you want it considered.',
     glyph: 'user',
   },
   review: {
     title: 'One last look',
     subtitle:
       'Check your answers against the bank’s figures, then accept the declarations to submit.',
+    short: 'Check your answers, then submit.',
     glyph: 'shield',
   },
 };
@@ -167,6 +176,8 @@ export default function NewApplicationPage() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savedApp, setSavedApp] = useState<LoanApplication | null>(null);
+  // Presentation only: time of the last successful manual save, announced to the customer.
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   /* A failed product load must not masquerade as "no products available" */
   const [productsError, setProductsError] = useState<string | null>(null);
@@ -556,6 +567,7 @@ export default function NewApplicationPage() {
         const created = await applicationService.create(payload);
         setSavedApp(created);
       }
+      setLastSavedAt(new Date());
     } catch (err: any) {
       setError(readableError(err.message, 'We could not save your application.'));
     } finally {
@@ -653,6 +665,7 @@ export default function NewApplicationPage() {
   }, [form.requestedAmount, form.requestedTermMonths, form.loanPurpose, selectedProduct]);
 
   const hasLoanErrors = Object.keys(loanErrors).length > 0;
+  const journeyTitle = resumeId || savedApp ? 'Continue application' : 'New application';
 
   function canGoNext(): boolean {
     switch (step) {
@@ -750,10 +763,10 @@ export default function NewApplicationPage() {
           <Glyph name="chevron" className="h-4 w-4 rotate-90" strokeWidth={2} />
         </button>
         <p
-          className="serif min-w-0 truncate text-[21px] font-medium leading-tight"
+          className="min-w-0 truncate text-[19px] font-semibold leading-tight tracking-tight"
           style={{ color: 'var(--text-primary)' }}
         >
-          New application
+          {journeyTitle}
         </p>
         {savedApp && <span className="chip ml-auto shrink-0 !py-1 !text-xs">Draft saved</span>}
       </div>
@@ -763,6 +776,7 @@ export default function NewApplicationPage() {
           steps={STEPS}
           activeIndex={stepIndex}
           onStepClick={i => goToStep(STEPS[i].key)}
+          title={journeyTitle}
           savedReference={savedApp?.applicationNumber || (savedApp ? 'Draft' : null)}
           productName={selectedProduct?.productName}
           quote={quote}
@@ -787,9 +801,9 @@ export default function NewApplicationPage() {
             </div>
           )}
 
-          <section className="glass-panel-solid overflow-hidden" aria-labelledby="step-title">
+          <section className="glass-panel-solid overflow-clip" aria-labelledby="step-title">
             <header
-              className="relative overflow-hidden border-b px-6 py-6 sm:px-8 sm:py-7"
+              className="relative overflow-hidden border-b px-4 py-4 sm:px-8 sm:py-7"
               style={{ borderColor: 'var(--hairline)' }}
             >
               <div
@@ -803,23 +817,26 @@ export default function NewApplicationPage() {
               <div className="relative flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p
-                    className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+                    className="hidden text-[11px] font-semibold uppercase tracking-[0.18em] sm:block"
                     style={{ color: 'var(--brand-on-soft)' }}
                   >
                     Step {stepNumber} of {STEPS.length} · {STEPS[stepIndex]?.label}
                   </p>
                   <h1
                     id="step-title"
-                    className="serif mt-2 text-[27px] font-medium leading-tight tracking-tight sm:text-[31px]"
+                    className="text-[22px] font-semibold leading-tight tracking-tight sm:mt-2 sm:text-[30px]"
                     style={{ color: 'var(--text-primary)' }}
                   >
                     {meta.title}
                   </h1>
                   <p
-                    className="mt-2 max-w-xl text-sm leading-6"
+                    className="mt-2 hidden max-w-xl text-sm leading-6 sm:block"
                     style={{ color: 'var(--text-secondary)' }}
                   >
                     {meta.subtitle}
+                  </p>
+                  <p className="mt-1 text-[13px] sm:hidden" style={{ color: 'var(--text-secondary)' }}>
+                    {meta.short}
                   </p>
                 </div>
                 <span
@@ -836,7 +853,7 @@ export default function NewApplicationPage() {
               </div>
             </header>
 
-            <div key={step} className="animate-slide-up px-6 py-6 sm:px-8 sm:py-7">
+            <div key={step} className="animate-slide-up px-4 py-4 sm:px-8 sm:py-7">
               {step === 'product' && (
                 <StepProduct
                   products={visibleProducts}
@@ -846,6 +863,34 @@ export default function NewApplicationPage() {
                   error={productsError}
                   onRetry={loadProducts}
                 />
+              )}
+
+              {step === 'loan' && selectedProduct && attemptedNext && hasLoanErrors && (
+                <div className="alert alert-error mb-5 items-start" role="alert">
+                  <Glyph name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">
+                      {Object.keys(loanErrors).length === 1
+                        ? 'One answer needs attention before you continue'
+                        : `${Object.keys(loanErrors).length} answers need attention before you continue`}
+                    </p>
+                    <ul className="mt-1 space-y-0.5 text-sm">
+                      {Object.entries(loanErrors).map(([name, message]) => (
+                        <li key={name}>
+                          <button
+                            type="button"
+                            className="text-left underline underline-offset-2"
+                            onClick={() =>
+                              (document.getElementsByName(name)[0] as HTMLElement | undefined)?.focus()
+                            }
+                          >
+                            {message}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               )}
 
               {step === 'loan' && selectedProduct && (
@@ -949,8 +994,19 @@ export default function NewApplicationPage() {
               )}
             </div>
 
+            {step === 'review' && (
+              <p
+                className="border-t px-4 pt-3 text-[13px] leading-5 sm:px-8 sm:pt-4"
+                style={{ borderColor: 'var(--hairline)', color: 'var(--text-secondary)' }}
+              >
+                Submitting sends your application to the bank for review. It is not a decision or an
+                offer — we&apos;ll let you know what happens next.
+              </p>
+            )}
+
+            {/* On mobile the action bar stays in reach, sitting just above the bottom navigation. */}
             <footer
-              className="flex flex-wrap items-center justify-between gap-3 border-t px-6 py-4 sm:px-8"
+              className="loan-actionbar flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 sm:gap-3 sm:px-8 sm:py-4"
               style={{
                 borderColor: 'var(--hairline)',
                 backgroundColor: 'var(--glass-bg-strong)',
@@ -972,6 +1028,11 @@ export default function NewApplicationPage() {
                 )}
                 <span className="hidden text-xs sm:block" style={{ color: 'var(--text-muted)' }}>
                   Step {stepNumber} of {STEPS.length}
+                </span>
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }} role="status" aria-live="polite">
+                  {lastSavedAt && !saving
+                    ? `Draft saved at ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : ''}
                 </span>
               </div>
 
@@ -1048,8 +1109,11 @@ function ProfileSeededNote() {
       className="mt-3 rounded-xl px-4 py-2.5 text-sm"
       style={{ background: 'var(--brand-soft)', color: 'var(--brand-on-soft)' }}
     >
-      Some of this came from the details on your account, so you did not have to type it. Change
-      anything that is out of date.
+      <span className="hidden sm:inline">
+        Some of this came from the details on your account, so you did not have to type it. Change
+        anything that is out of date.
+      </span>
+      <span className="sm:hidden">Pre-filled from your account — edit anything out of date.</span>
     </p>
   );
 }
@@ -1383,7 +1447,7 @@ function StepLoan({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* ─── The amount composer and the number it produces ───
           On desktop the persistent rail already carries the quote; repeating the
           same dark card beside the field made the step feel twice as heavy. */}
@@ -1721,12 +1785,12 @@ function StepLoan({
       {/* ─── Property Details (HOME purposes) ─────────────── */}
       {isHomePurpose && (
         <section
-          className="rounded-[24px] border p-5 sm:p-6"
+          className="rounded-[24px] border p-4 sm:p-6"
           style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
         >
           <div className="flex items-center gap-3">
             <span
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:flex"
               style={{
                 background: 'var(--brand-soft)',
                 color: 'var(--brand-on-soft)',
@@ -1850,12 +1914,12 @@ function StepLoan({
       {/* ─── Vehicle Details (VEHICLE purposes) ───────────── */}
       {isVehiclePurpose && (
         <section
-          className="rounded-[24px] border p-5 sm:p-6"
+          className="rounded-[24px] border p-4 sm:p-6"
           style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
         >
           <div className="flex items-center gap-3">
             <span
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:flex"
               style={{
                 background: 'var(--brand-soft)',
                 color: 'var(--brand-on-soft)',
@@ -2037,6 +2101,8 @@ function StatementSources({
   const analysisRef = useRef<AbortController | null>(null);
 
   const hasStatementSource = documents.length > 0 || useBankRecords;
+  // Phones only: the import panel starts as a single row; desktop always shows it.
+  const [expandedOnMobile, setExpandedOnMobile] = useState(false);
 
   useEffect(() => {
     if (!ready || !preferences.documents) return;
@@ -2186,10 +2252,10 @@ function StatementSources({
       }}
       aria-labelledby="statement-sources-title"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 p-4 sm:p-6">
         <div className="flex min-w-0 items-start gap-3">
           <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+            className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:flex"
             style={{
               background: 'var(--surface-card)',
               color: 'var(--brand-on-soft)',
@@ -2203,17 +2269,37 @@ function StatementSources({
             <h3 id="statement-sources-title" className="section-title">
               Bring your banking into the application
             </h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+            <p className="mt-1 text-[13px] sm:hidden" style={{ color: 'var(--text-secondary)' }}>
+              Fill figures from your transactions — only if you apply them.
+            </p>
+            <p className="mt-1 hidden max-w-2xl text-sm leading-6 sm:block" style={{ color: 'var(--text-secondary)' }}>
               Show us as much of your banking as you like — from us and from other banks — and
               we&apos;ll work out your monthly income, outgoings and turnover from the transaction
               lines. Nothing is entered on the form until you apply it.
             </p>
           </div>
         </div>
-        <span className="chip !py-1 !text-xs">Optional</span>
+        <span className="chip hidden !py-1 !text-xs sm:inline-flex">Optional</span>
+        {!(expandedOnMobile || hasStatementSource) && (
+          <button
+            type="button"
+            onClick={() => setExpandedOnMobile(true)}
+            className="btn btn-outline btn-sm min-h-[44px] w-full sm:hidden"
+            aria-controls="statement-sources-body"
+            aria-expanded={false}
+          >
+            Add banking <span className="font-normal opacity-70">· optional</span>
+          </button>
+        )}
       </div>
 
-      <div className="border-t p-5 sm:p-6" style={{ borderColor: 'var(--hairline)' }}>
+      <div
+        id="statement-sources-body"
+        className={`border-t p-4 sm:block sm:p-6 ${
+          expandedOnMobile || hasStatementSource ? '' : 'hidden'
+        }`}
+        style={{ borderColor: 'var(--hairline)' }}
+      >
         <label
           className="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors"
           style={{
@@ -2640,7 +2726,7 @@ function DocumentExtractionUpload({
 
   return (
     <section
-      className="mb-6 overflow-hidden rounded-[24px] border"
+      className="mb-4 overflow-hidden rounded-[24px] border sm:mb-6"
       style={{
         borderColor: 'var(--hairline-strong)',
         background:
@@ -2648,10 +2734,10 @@ function DocumentExtractionUpload({
       }}
       aria-labelledby="payslip-upload-title"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 p-4 sm:p-5">
         <div className="flex min-w-0 items-start gap-3">
           <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+            className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:flex"
             style={{
               background: 'var(--surface-card)',
               color: 'var(--brand-on-soft)',
@@ -2665,16 +2751,19 @@ function DocumentExtractionUpload({
             <h3 id="payslip-upload-title" className="section-title">
               Have a {label}?
             </h3>
-            <p className="mt-1 max-w-xl text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-              We&apos;ll read it and suggest values below for you to review — nothing is filled in
-              automatically.
+            <p className="mt-1 max-w-xl text-[13px] leading-5 sm:text-sm sm:leading-6" style={{ color: 'var(--text-secondary)' }}>
+              <span className="sm:hidden">We&apos;ll suggest values for you to review.</span>
+              <span className="hidden sm:inline">
+                We&apos;ll read it and suggest values below for you to review — nothing is filled in
+                automatically.
+              </span>
             </p>
           </div>
         </div>
         <span className="chip !py-1 !text-xs">Optional</span>
       </div>
 
-      <div className="border-t p-5" style={{ borderColor: 'var(--hairline)' }}>
+      <div className="border-t p-4 sm:p-5" style={{ borderColor: 'var(--hairline)' }}>
         <label
           className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed px-4 py-4 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
           style={{ borderColor: 'var(--hairline-strong)' }}
@@ -2812,11 +2901,7 @@ function StepFinancial({
   onApplyExtracted: (patch: Record<string, string>) => void;
 }) {
   return (
-    <div className="space-y-6">
-      <p className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-        <Glyph name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />
-        All fields on this step are optional. Anything you share helps us assess the application.
-      </p>
+    <div className="space-y-4 sm:space-y-6">
 
       {seededFromProfile.statedAnnualIncome && <ProfileSeededNote />}
 
@@ -2829,12 +2914,12 @@ function StepFinancial({
       {/* Business-specific fields */}
       {isBusiness && (
         <section
-          className="rounded-[24px] border p-5 sm:p-6"
+          className="rounded-[24px] border p-4 sm:p-6"
           style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
         >
           <div className="flex items-center gap-3">
             <span
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:flex"
               style={{
                 background: 'var(--brand-soft)',
                 color: 'var(--brand-on-soft)',
@@ -2937,12 +3022,12 @@ function StepFinancial({
           for above; these three describe a person. */}
       {showPersonalFinancials && (
         <section
-          className="rounded-[24px] border p-5 sm:p-6"
+          className="rounded-[24px] border p-4 sm:p-6"
           style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
         >
           <div className="flex items-center gap-3">
             <span
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:flex"
               style={{
                 background: 'var(--brand-soft)',
                 color: 'var(--brand-on-soft)',
@@ -3035,7 +3120,7 @@ function StepEmployment({
     seededFromProfile.jobTitle
   );
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <p className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
         <Glyph name="check" className="h-3.5 w-3.5" strokeWidth={2.4} />
         Optional. Add what you are comfortable sharing — it helps us understand your income.
@@ -3046,12 +3131,12 @@ function StepEmployment({
       <DocumentExtractionUpload documentType="PAYSLIP" onApplyExtracted={onApplyExtracted} />
 
       <section
-        className="rounded-[24px] border p-5 sm:p-6"
+        className="rounded-[24px] border p-4 sm:p-6"
         style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
       >
         <div className="flex items-center gap-3">
           <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+            className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:flex"
             style={{
               background: 'var(--brand-soft)',
               color: 'var(--brand-on-soft)',
@@ -3617,7 +3702,7 @@ function StepReview({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* The number the whole application resolves to, restated here so the customer signs
           the declarations against it rather than against a figure two steps back. */}
       <section
@@ -3692,14 +3777,14 @@ function StepReview({
 
       {/* What happens after submission — the process, not a promise about a decision. */}
       <section
-        className="rounded-[24px] border p-5 sm:p-6"
+        className="rounded-[24px] border p-4 sm:p-6"
         style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="section-title">What happens after you submit</h3>
           <span className="chip !py-1 !text-xs">You can track it here</span>
         </div>
-        <ol className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <ol className="mt-3 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-4 sm:gap-4">
           {submittedSteps.map((item, i) => (
             <li key={item.title} className="relative">
               <span
@@ -3719,7 +3804,7 @@ function StepReview({
               >
                 {item.title}
               </p>
-              <p className="mt-0.5 text-xs leading-5" style={{ color: 'var(--text-muted)' }}>
+              <p className="mt-0.5 hidden text-xs leading-5 sm:block" style={{ color: 'var(--text-muted)' }}>
                 {item.detail}
               </p>
             </li>
@@ -3783,7 +3868,7 @@ function StepReview({
 
       {/* ─── Declarations & Consent ─────────────────────── */}
       <section
-        className="rounded-[24px] border p-5 sm:p-6"
+        className="rounded-[24px] border p-4 sm:p-6"
         style={{ borderColor: 'var(--hairline-strong)', backgroundColor: 'var(--surface-card)' }}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">

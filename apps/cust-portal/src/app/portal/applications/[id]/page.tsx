@@ -251,13 +251,6 @@ export default function ApplicationDetailPage() {
   }, [params.id]);
 
   useEffect(() => {
-    if (showSuccess) {
-      const t = setTimeout(() => setShowSuccess(false), 5000);
-      return () => clearTimeout(t);
-    }
-  }, [showSuccess]);
-
-  useEffect(() => {
     const applicationId = params.id as string;
     let active = true;
     setSignatoryNames([]);
@@ -652,11 +645,24 @@ export default function ApplicationDetailPage() {
 
       {/* Success banner */}
       {showSuccess && (
-        <div className="alert alert-success mb-4 items-center" role="status">
-          <Glyph name="check" className="h-5 w-5 shrink-0" strokeWidth={2.4} />
-          <p className="text-sm font-medium">
-            Application submitted. Your relationship manager will review it.
-          </p>
+        <div className="alert alert-success mb-4 items-start" role="status">
+          <Glyph name="check" className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={2.4} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">
+              Application submitted. Your relationship manager will review it.
+            </p>
+            <p className="mt-0.5 text-[13px] opacity-80">
+              This is not a decision or an offer yet — we&apos;ll show any next step here.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSuccess(false)}
+            className="-my-2 -mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-black/5"
+            aria-label="Dismiss confirmation"
+          >
+            <span aria-hidden="true" className="text-lg leading-none">×</span>
+          </button>
         </div>
       )}
 
@@ -682,7 +688,7 @@ export default function ApplicationDetailPage() {
             </div>
 
             {/* The reference code is mostly digits, so it stays in Inter tabular
-                rather than the display serif used for word headings. */}
+                to match the dashboard's sans headings. */}
             <p
               className="mt-5 text-[10px] font-semibold uppercase tracking-[0.18em] tabular-nums"
               style={{ color: 'var(--text-muted)' }}
@@ -690,7 +696,7 @@ export default function ApplicationDetailPage() {
               Application {app.applicationNumber || 'reference not assigned'}
             </p>
             <h1
-              className="serif mt-1 text-[30px] font-medium leading-tight tracking-tight sm:text-[34px]"
+              className="mt-1 text-[26px] font-semibold leading-tight tracking-tight sm:text-[32px]"
               style={{ color: 'var(--text-primary)' }}
             >
               {app.product?.productName || purposeLabel || 'Credit application'}

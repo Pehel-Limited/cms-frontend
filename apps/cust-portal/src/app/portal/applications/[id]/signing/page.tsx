@@ -72,7 +72,10 @@ export default function SigningPage() {
 
       <div className="glass-panel-solid overflow-hidden">
         {/* Header */}
-        <header className="mesh-hero relative overflow-hidden px-6 py-6 text-white sm:px-8">
+        <header
+          className="relative overflow-hidden px-6 py-6 text-white sm:px-8"
+          style={{ background: 'var(--tile-active)' }}
+        >
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full"
@@ -83,7 +86,7 @@ export default function SigningPage() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
                 Secure signing
               </p>
-              <h1 className="serif mt-2 text-[27px] font-medium leading-tight sm:text-[31px]">
+              <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-tight sm:text-[30px]">
                 Sign your loan agreement
               </h1>
               <p className="mt-1 text-xs tabular-nums text-white/60">

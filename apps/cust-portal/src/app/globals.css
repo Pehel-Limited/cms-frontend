@@ -1634,3 +1634,196 @@
 }
 
 
+
+/* ─── SuperBank dashboard ────────────────────────────────────────
+   Mobile-first: every interactive row and action is at least 44px tall,
+   and the hero carries the balance and the verbs within thumb reach. */
+
+.sb-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 20px 20px 18px;
+  color: #fff;
+  background: var(--tile-active);
+  box-shadow: var(--tile-active-shadow);
+}
+.sb-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 100% 0%, rgb(255 255 255 / 0.22), transparent 45%),
+    radial-gradient(circle at 0% 120%, rgb(0 0 0 / 0.25), transparent 50%);
+  pointer-events: none;
+}
+@media (min-width: 640px) {
+  .sb-hero { padding: 26px 28px 24px; }
+}
+
+.sb-hero-amount {
+  margin-top: 2px;
+  font-size: clamp(30px, 9vw, 44px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.sb-hero-btn {
+  display: inline-flex;
+  height: 44px;
+  width: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+  transition: background-color 0.15s;
+}
+.sb-hero-btn:hover { background: rgb(255 255 255 / 0.24); }
+
+.sb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgb(255 255 255 / 0.13);
+  color: rgb(255 255 255 / 0.88);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.sb-chip-warn {
+  background: rgb(251 191 36 / 0.22);
+  color: #fef3c7;
+  white-space: normal;
+}
+
+/* Six verbs: a 3×2 grid on a phone so every one is visible, one row from sm up. */
+.sb-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 4px;
+}
+@media (min-width: 640px) {
+  .sb-actions { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+.sb-action {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-radius: 16px;
+  padding: 4px 2px;
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+}
+.sb-action-icon {
+  display: flex;
+  height: 48px;
+  width: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  transition: background-color 0.15s, transform 0.15s;
+}
+.sb-action:hover .sb-action-icon { background: rgb(255 255 255 / 0.26); }
+.sb-action:active .sb-action-icon { transform: scale(0.94); }
+.sb-action:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.sb-action-label {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: rgb(255 255 255 / 0.9);
+}
+
+.sb-link {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 2px;
+  border-radius: 999px;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-on-soft);
+}
+.sb-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.sb-row {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  transition: background-color 0.15s;
+}
+@media (min-width: 640px) {
+  .sb-row { padding-inline: 24px; }
+}
+a.sb-row:hover { background: rgb(15 23 42 / 0.03); }
+:is(.dark) a.sb-row:hover { background: rgb(255 255 255 / 0.04); }
+
+.sb-row-icon {
+  position: relative;
+  display: flex;
+  height: 40px;
+  width: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-on-soft);
+}
+.sb-row-dot {
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  height: 11px;
+  width: 11px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--surface-card);
+}
+
+.sb-cta {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-on-soft);
+  background: var(--brand-soft);
+}
+.sb-cta-strong {
+  color: #fff;
+  background: var(--brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-action-icon, .sb-row { transition: none; }
+}
+
+/* ── Loan journey: sticky composer action bar (mobile) ───────────────
+   Sits above the fixed mobile bottom nav (~60px + safe area); on desktop
+   the nav is gone so it docks to the viewport bottom. */
+.loan-actionbar {
+  position: sticky;
+  bottom: calc(60px + env(safe-area-inset-bottom));
+  z-index: 20;
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+@media (min-width: 1024px) {
+  .loan-actionbar { bottom: 0; }
+}
+.loan-actionbar .btn { min-height: 44px; }
+/* Keep focused fields clear of the sticky action bar and the mobile nav. */
+.glass-panel-solid:has(.loan-actionbar) :is(input, select, textarea) {
+  scroll-margin-bottom: 180px;
+}

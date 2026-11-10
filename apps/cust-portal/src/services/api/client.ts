@@ -4,6 +4,20 @@ interface RequestOptions {
   method?: string;
   body?: unknown;
   headers?: Record<string, string>;
+  /** Multipart upload; the browser sets the Content-Type boundary itself. */
+  form?: FormData;
+  /**
+   * Never run the 401 → refresh → retry cycle. Required for calls where a 401 means "wrong
+   * password", so a failed attempt is not silently repeated.
+   */
+  noRefresh?: boolean;
+}
+
+export interface ApiError {
+  status: number;
+  message: string;
+  /** Stable machine code from the BFF, when it sends one (e.g. REAUTH_FAILED). */
+  code?: string;
 }
 
 /**
@@ -53,9 +67,10 @@ class ApiClient {
     const userId = this.getUserId();
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(options.form ? {} : { 'Content-Type': 'application/json' }),
       ...options.headers,
     };
+    const payload = options.form ?? (options.body ? JSON.stringify(options.body) : undefined);
 
     if (token) headers['Authorization'] = `Bearer ${token}`;
     if (userId) headers['X-User-Id'] = userId;
@@ -65,11 +80,11 @@ class ApiClient {
     let res = await fetch(fullUrl, {
       method: options.method || 'GET',
       headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: payload,
     });
 
     // Automatic token refresh on 401
-    if (res.status === 401) {
+    if (res.status === 401 && !options.noRefresh) {
       const refreshed = await this.refreshAccessToken();
       if (refreshed) {
         const newToken = this.getAuthToken();
@@ -77,7 +92,7 @@ class ApiClient {
         res = await fetch(fullUrl, {
           method: options.method || 'GET',
           headers,
-          body: options.body ? JSON.stringify(options.body) : undefined,
+          body: payload,
         });
       } else {
         // Refresh failed → force logout
@@ -93,7 +108,8 @@ class ApiClient {
 
     if (!res.ok) {
       const error = await res.json().catch(() => ({ message: res.statusText }));
-      throw { status: res.status, message: error.message || res.statusText };
+      const failure: ApiError = { status: res.status, message: error.message || res.statusText, code: error.code };
+      throw failure;
     }
 
     if (res.status === 204) return undefined as T;
@@ -114,6 +130,15 @@ class ApiClient {
 
   post<T>(url: string, body?: unknown) {
     return this.request<T>(url, { method: 'POST', body });
+  }
+
+  /** POST where a 401 is a business answer (wrong password) and must not trigger a token refresh. */
+  postNoRefresh<T>(url: string, body?: unknown) {
+    return this.request<T>(url, { method: 'POST', body, noRefresh: true });
+  }
+
+  postForm<T>(url: string, form: FormData) {
+    return this.request<T>(url, { method: 'POST', form });
   }
 
   put<T>(url: string, body?: unknown) {

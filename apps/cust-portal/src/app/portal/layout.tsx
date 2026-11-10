@@ -225,6 +225,8 @@ const MOBILE_NAV: NavItem[] = ['/portal', '/portal/accounts', '/portal/payments'
 const PAGE_TITLES: { path: string; title: string; subtitle: string }[] = [
   { path: '/portal/accounts', title: 'Accounts', subtitle: 'Balances and account details' },
   { path: '/portal/ai-assistant', title: 'Credit Assistant', subtitle: 'Get instant answers about your finances' },
+  { path: '/portal/payments/connects', title: 'Connects', subtitle: 'People you pay, ready to send or request' },
+  { path: '/portal/payments/requests', title: 'Requests', subtitle: 'Money requested from and by you' },
   { path: '/portal/payments', title: 'Payments', subtitle: 'Transfers, payees and scheduled payments' },
   { path: '/portal/cards', title: 'Cards', subtitle: 'Details, controls and spending on your cards' },
   { path: '/portal/transactions', title: 'Transactions', subtitle: 'Search and review your activity' },

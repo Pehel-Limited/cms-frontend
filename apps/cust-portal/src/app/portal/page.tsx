@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { RequestMoneyDialog } from '@/components/payments/RequestMoneyDialog';
+import { RetailConnectsPanel } from '@/components/retail/RetailConnectsPanel';
 import { PositionCard } from '@/components/dashboard/PositionCard';
 import { AttentionCentre } from '@/components/dashboard/AttentionCentre';
 import { ComingUp } from '@/components/dashboard/Outlook';
@@ -109,6 +110,10 @@ export default function PortalDashboard() {
               onToggleHidden={toggleHidden}
               onRequest={() => setRequestOpen(true)}
             />
+          </div>
+
+          <div className="order-2">
+            <RetailConnectsPanel />
           </div>
 
           <div className="order-3">

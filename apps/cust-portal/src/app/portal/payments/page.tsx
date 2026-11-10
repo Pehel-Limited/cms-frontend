@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { RepeatPayment } from '@/components/intelligence/RepeatPayment';
 import { DotMatrix } from '@/components/banking/BankCard';
 import { PageHero } from '@/components/ui/PageHero';
+import { RetailConnectsPanel } from '@/components/retail/RetailConnectsPanel';
 import Glyph, { ACCOUNT_GLYPH, CurrencyGlyph, glyphFor, GlyphTile } from '@/components/ui/Glyph';
 import { RequestMoneyDialog, type CreatedRequest } from '@/components/payments/RequestMoneyDialog';
 import {
@@ -510,7 +511,7 @@ export default function PaymentsPage() {
     <div className="space-y-5">
       <PageHero
         title="Payments & transfers"
-        subtitle="Pay someone, settle a bill or ask to be paid. Every payment on this screen is simulated."
+        subtitle="Pay someone, settle a bill or ask to be paid. Scheduled payments below are sample data."
         meta={
           <>
             <span className="chip">Sample data</span>
@@ -525,6 +526,8 @@ export default function PaymentsPage() {
           </Link>
         }
       />
+
+      <RetailConnectsPanel />
 
       {/* ══ People first — paying a person is the most common trip ══ */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
